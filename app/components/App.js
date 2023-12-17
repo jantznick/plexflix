@@ -56,15 +56,15 @@ const App = () => {
             setHasConfigs,
             setOpenAiToken
         }}>
-            <header className="flex justify-between align-middle bg-slate-950">
+            <header className="flex px-[12.5%] py-8 justify-between align-middle bg-slate-950">
                 <img src="public/images/plexflix-logo.png" alt="PlexFlix Logo" className="h-12" />
 
-                <div className="">
+                <div className="items-center flex space-x-4 text-white">
                     {hasConfigs &&
-                        <div className="">Server IP: {plexServerIP} | Server Port: {plexServerPort}</div>
+                        <div className="">Server IP: {plexServerIP} <span class="material-symbols-outlined text-green-400">check_circle</span>| Server Port: {plexServerPort}</div>
                     }
                     {!hasConfigs &&
-                        <button className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline">Settings</button>
+                        <span class="material-symbols-outlined text-4xl hover:cursor-pointer">settings</span>
                     }
                 </div>
             </header>

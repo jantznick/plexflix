@@ -18,7 +18,7 @@ const GetPlexConfigs = () => {
     } = useContext(PlexContext)
 
     return (
-        <form onSubmit={() => setHasConfigs(true)} className="w-full mx-auto flex justify-center space-y-4 flex-wrap">
+        <form onSubmit={() => setHasConfigs(true)} className="w-3/4 mx-auto flex justify-center space-y-4 flex-wrap">
             <label htmlFor="plexServerIP" className="w-full">Enter Plex Server Local IP:</label>
             <input name="plexServerIP" type="text" onChange={e => setPlexServerIP(e.target.value)} className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline" />
 
