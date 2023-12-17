@@ -2,11 +2,11 @@
 @tailwind components;
 @tailwind utilities;
 
-@layer components {
+/* @layer components {
     .button {
         @apply border-2 border-blue-700 rounded-lg px-4 py-2
     }
-}
+} */
 
 #intersitual {
     z-index: 999;

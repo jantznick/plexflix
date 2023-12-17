@@ -3,6 +3,7 @@ import classNames from "classnames";
 var parseString = require('xml2js').parseString;
 
 import GetPlexConfigs from "./getPlexConfigs";
+import Button from "./Button";
 
 export const PlexContext = createContext();
 
@@ -31,6 +32,10 @@ const App = () => {
             });
             setPlexConnection(true);
         });
+    }
+
+    const fetchLibrary = () => {
+        console.log(document.getElementById('plexLibraries').value);
     }
 
     const getMovieRecommendations = () => {
@@ -76,12 +81,13 @@ const App = () => {
                     {plexLibraries &&
                         <>
                             <label htmlFor="plexLibraries" className="">Fetch recommendations based on a library:</label>
-                            <select name="plexLibraries">
+                            <select name="plexLibraries" id="plexLibraries" className="text-black">
                                 {plexLibraries?.map(library => {
                                         return(<option value={library.$.key} key={library.$.title}>{library.$.title}</option>)
                                     })
                                 }
                             </select>
+                            <Button clickHandler={fetchLibrary} text="Fetch" />
                         </>
                     }
                         Server IP: {plexServerIP ? plexServerIP : 'Please enter Plex Server IP in settings'} <span className={classNames(
@@ -96,9 +102,14 @@ const App = () => {
                 {showSettings &&
                     <GetPlexConfigs />
                 }
-                <button className="bg-plexYellow hover:bg-plexYellowHover text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline" onClick={getPlexLibraries}>Get Plex Libraries</button>
-                <button className="bg-plexYellow hover:bg-plexYellowHover text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline" onClick={getMovieRecommendations}>Get Movie Recommendations</button>
-
+                <Button clickHandler={getPlexLibraries} text="Get Plex Libraries" />
+                <Button clickHandler={getMovieRecommendations} text="Get Movie Recommendations" />
+                <select name="testingSelect" id="" className="">
+                    <option value="one" className="">one</option>
+                    <option value="two" className="">two</option>
+                    <option value="three" className="">three</option>
+                    <option value="four" className="">four</option>
+                </select>
             </div>
             <footer className="bg-black text-plexYellow flex justify-center items-center py-4 text-lg"><span className="material-symbols-outlined text-xl">copyright</span><span className=""> PlexFlix {new Date().getFullYear()}</span></footer>
 
