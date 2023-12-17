@@ -21,7 +21,7 @@ const App = () => {
     const [openAiToken, setOpenAiToken] = useState('');
 
     const getPlexLibraries = () => {
-        fetch(`http://${plexServerIP}:${plexServerPort}/library/sections/?X-Plex-Token=${plexServerApiToken}`, {
+        fetch(`https://${plexServerIP}:${plexServerPort}/library/sections/?X-Plex-Token=${plexServerApiToken}`, {
             method: "GET"
         }).then(response => response.text())
         .then(data => {
