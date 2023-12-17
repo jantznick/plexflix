@@ -7,3 +7,13 @@
         @apply border-2 border-blue-700 rounded-lg px-4 py-2
     }
 }
+
+#intersitual {
+    z-index: 999;
+    background: rgba(0,0,0,.75);
+    height: 100vh;
+    width: 100vw;
+    position: absolute;
+    left: 0;
+    top: 0;
+}
