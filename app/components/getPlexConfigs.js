@@ -12,23 +12,37 @@ const GetPlexConfigs = () => {
         plexServerPortDefault,
         plexServerPort,
         plexServerApiToken,
+        openAiToken,
+        tmdbToken,
+        saveSettingsInBrowser,
         setPlexServerIP,
         setPlexServerPortDefault,
         setPlexServerPort,
         setPlexServerApiToken,
-        setHasConfigs,
         setOpenAiToken,
-        setShowSettings
+        setTmdbToken,
+        setShowSettings,
+        setSaveSettingsInBrowser,
     } = useContext(PlexContext)
 
     const saveSettings = () => {
-        setHasConfigs(true)
         setShowSettings(false)
+        setSaveSettingsInBrowser(document.getElementsByName('saveSettingsInBrowser')[0].value)
+
+        if (document.getElementsByName('saveSettingsInBrowser')[0].value) {
+            localStorage.setItem('plexServerIP', plexServerIP);
+            localStorage.setItem('plexServerPortDefault', plexServerPortDefault);
+            localStorage.setItem('plexServerPort', plexServerPort);
+            localStorage.setItem('plexServerApiToken', plexServerApiToken);
+            localStorage.setItem('openAiToken', openAiToken);
+            localStorage.setItem('tmdbToken', tmdbToken);
+            localStorage.setItem('saveSettingsInBrowser', true)
+        }
     };
 
     return (
         <div id="intersitual" className="text-white flex">
-            <div className="bg-black w-1/2 m-auto p-8 flex justify-center flex-wrap">
+            <div className="bg-black w-[90%] md:w-1/2 m-auto p-8 flex justify-center flex-wrap">
                 <div className="flex justify-center w-full">
                     <div className="mr-auto"></div>
                     <div className="font-bold">Update Application API Key Settings</div>
@@ -37,21 +51,30 @@ const GetPlexConfigs = () => {
                 <div id="settings" className="">
                     <div className="w-full mx-auto my-auto flex justify-center space-y-4 flex-wrap">
                         <label htmlFor="plexServerIP" className="w-full">Enter Plex Server Local IP:</label>
-                        <Input name="plexServerIP" type="text" width="full" onChange={setPlexServerIP} />
+                        <Input name="plexServerIP" type="text" width="full" handleChange={setPlexServerIP} value={plexServerIP} />
 
                         <label htmlFor="plexServerApiToken" className="w-full">Enter Plex Server API Token:</label>
-                        <Input name="plexServerApiToken" type="text" width="full " onChange={setPlexServerApiToken} />
+                        <Input name="plexServerApiToken" type="text" width="full " handleChange={setPlexServerApiToken} value={plexServerApiToken} />
 
-                        <label htmlFor="plexServerPortToggle" className="w-1/4">Does Plex use default 32400 Port?</label>
-                        <input type="checkbox" className="w-1/4" onChange={e => setPlexServerPortDefault(!plexServerPortDefault)} name="plexServerPortToggle" id="plexServerPortToggle" checked={plexServerPortDefault}/>
+                        <div className="w-full lg:w-1/2 flex justify-start lg:justify-center items-center space-x-4">
+                            <label htmlFor="plexServerPortToggle" className="">Does Plex use default 32400 Port?</label>
+                            <input type="checkbox" className="" onChange={e => setPlexServerPortDefault(!plexServerPortDefault)} name="plexServerPortToggle" id="plexServerPortToggle" checked={plexServerPortDefault}/>
+                        </div>
 
-                        <label htmlFor="plexServerPort" className="w-1/4">Enter Plex Port:</label>
-                        <Input name="plexServerPort" type="text" width="1/4" onChange={setPlexServerPort} value={plexServerPort} disabled={plexServerPortDefault}/>
+                        <div className="w-full lg:w-1/2 flex justify-start lg:justify-center items-center space-x-4">
+                            <label htmlFor="plexServerPort" className="">Enter Plex Port:</label>
+                            <Input name="plexServerPort" type="text" width="1/2" handleChange={setPlexServerPort} value={plexServerPort} disabled={plexServerPortDefault}/>
+                        </div>
 
                         <label htmlFor="openAiApiToken" className="w-full">Enter Open AI API Token:</label>
-                        <input name="openAiApiToken" type="text" onChange={e => setOpenAiToken(e.target.value)} className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline" />
+                        <Input name="openAiApiToken" type="text" width="full" handleChange={setOpenAiToken}  value={openAiToken}/>
+
+                        <label htmlFor="tmdbToken" className="w-full">Enter TMDB API Token:</label>
+                        <Input name="tmdbToken" type="text" width="full " handleChange={setTmdbToken} value={tmdbToken} />
 
                         <div className="flex justify-end w-full">
+                            <span className="">Remember settings for future?</span>
+                            <input type="checkbox" name="saveSettingsInBrowser" checked={saveSettingsInBrowser} onChange={() => setSaveSettingsInBrowser(!saveSettingsInBrowser)}/>
                             <Button clickHandler={saveSettings} text="Save Settings" />
                         </div>
                     </div>
