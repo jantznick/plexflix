@@ -6,24 +6,27 @@ import GetPlexConfigs from "./getPlexConfigs";
 import Button from "./Button";
 import Row from "./Row";
 
+import { recomendMessages } from '../utils/openAi';
+import { plexDataToJson } from '../utils/plex';
+
 export const PlexContext = createContext();
 
 const App = () => {
 
     const [plexServerIP, setPlexServerIP] = useState(localStorage.getItem('plexServerIP') || '');
-    const [plexServerPortDefault, setPlexServerPortDefault] = useState(localStorage.getItem('plexServerPortDefault') || true);
+    const [plexServerPortDefault, setPlexServerPortDefault] = useState(localStorage.getItem('plexServerPortDefault') == 'true' || true);
     const [plexServerPort, setPlexServerPort] = useState(localStorage.getItem('plexServerPort') || '32400');
     const [plexServerApiToken, setPlexServerApiToken] = useState(localStorage.getItem('plexServerApiToken') || '');
     const [plexConnection, setPlexConnection] = useState(false);
     const [plexLibraries, setPlexLibraries] = useState([]);
+    const [media, setMedia] = useState([]);
+    const [mediaShown, setMediaShown] = useState([]);
 
     const [showSettings, setShowSettings] = useState(false);
-    const [saveSettingsInBrowser, setSaveSettingsInBrowser] = useState(localStorage.getItem('saveSettingsInBrowser') || false)
+    const [saveSettingsInBrowser, setSaveSettingsInBrowser] = useState(localStorage.getItem('saveSettingsInBrowser') == 'true' || false)
 
     const [openAiToken, setOpenAiToken] = useState(localStorage.getItem('openAiToken') || '');
     const [tmdbToken, setTmdbToken] = useState(localStorage.getItem('tmdbToken') || '');
-
-    const [rows, setRows] = useState([]);
 
     const getPlexLibraries = () => {
         fetch(`https://${plexServerIP}:${plexServerPort}/library/sections/?X-Plex-Token=${plexServerApiToken}`, {
@@ -35,6 +38,31 @@ const App = () => {
                 setPlexLibraries(x)
             });
             setPlexConnection(true);
+        });
+    }
+
+    const getPlexLibraryContent = () => {
+        const libraryId = document.getElementById('plexLibraries').value;
+        const libraryFetched = plexLibraries.filter(lib => String(lib.$.key) == String(libraryId))[0].$
+        fetch(`https://${plexServerIP}:${plexServerPort}/library/sections/${libraryId}/all?X-Plex-Token=${plexServerApiToken}`, {
+            method: "GET"
+        }).then(response => response.text())
+        .then(data => {
+            parseString(data, function (err, result) {
+                const x = result;
+                // console.log(x.MediaContainer.Video)
+                // x.MediaContainer.Video.forEach(title => {console.log(plexDataToJson(title))})
+                const newRowTitles = []
+                x.MediaContainer.Video.forEach(title => {newRowTitles.push(plexDataToJson(title))})
+                setMedia([
+                    ...media,
+                    {   mediaProvidedBy: 'plex',
+                        title: `From your Plex Library: ${libraryFetched.title}`,
+                        rowId: media.length + 1,
+                        titles: newRowTitles
+                    }
+                ])
+            });
         });
     }
 
@@ -51,12 +79,7 @@ const App = () => {
             },
             body: JSON.stringify({
                 "model": "gpt-3.5-turbo",
-                "messages": [
-                    {"role": "system", "content": "Given an array of movie names group them based on similarity, if needed, a group can be a single movie but try and group them together if possible. Then provide 5 recommendations of similar movies for each grouping. Give each group a title based on the genre of movies similar to how Netflix categorizes movies and shows." },
-                    {"role": "system", "content": "Provide data as a json array of objects with the following format: [{category: '...', given_movies: ['movie 1', 'movie 2', ...], suggested_movies: ['movie 1', 'movie 2', ...]}]"},
-                    {"role": "system", "content": "Do not provide any text outside of the given json object"},
-                    {"role": "user", "content": "['gone girl', 'the girl on the train', 'die hard', 'crazy rich asians', 'mean girls', 'my cousin vinny', 'no strings attached', 'zodiac', 'sinister' 'first wives club', 'death on the nile']"}
-                ]
+                "messages": recomendMessages(['gone girl', 'the girl on the train', 'die hard', 'crazy rich asians', 'mean girls', 'my cousin vinny', 'no strings attached', 'zodiac', 'sinister', 'first wives club', 'death on the nile'])
             })
         }).then(response => response.json())
         .then(data => {
@@ -96,17 +119,17 @@ const App = () => {
                                 }
                                 <option value='all'>All Libraries</option>
                             </select>
-                            <Button clickHandler={fetchLibrary} text="Fetch" />
+                            <Button clickHandler={getPlexLibraryContent} text="Fetch" />
                         </>
                     }
                     <div className="group relative flex">
                         <span className="material-symbols-outlined text-4xl hover:text-slate-300 hover:cursor-pointer">info</span>
-                        <span className="pointer-events-none absolute border border-gray-500 px-2 py-4 rounded-2xl top-8 lg:-top-4 lg:right-8 w-max bg-slate-100 text-black opacity-0 transition-opacity group-hover:opacity-100">
+                        <span className="pointer-events-none absolute border border-gray-500 px-2 py-4 rounded-2xl top-8 max-w-fit lg:-top-4 lg:right-8 bg-slate-100 text-black opacity-0 transition-opacity group-hover:opacity-100">
                             <div className="flex flex-col">
                                 {plexServerIP ?
                                     <>
-                                        <span>Server IP: {plexServerIP}</span>
-                                        <span>Server Port: {plexServerPort}</span>
+                                        <span className="w-max">Server IP: {plexServerIP}</span>
+                                        <span className="w-max">Server Port: {plexServerPort}</span>
                                     </>
                                     :
                                     <span>Enter Plex Server settings to get customized recommendations.</span>
@@ -126,10 +149,10 @@ const App = () => {
                 <Button clickHandler={getPlexLibraries} text="Get Plex Libraries" />
                 <Button clickHandler={getMovieRecommendations} text="Get Movie Recommendations" />
 
-                {Boolean(rows.length) &&
-                    rows?.map(row => {
-                        <Row {...row.titles} />
-                    })
+                {Boolean(media?.length) &&
+                    media.map((row, i) => 
+                        <Row {...row} key={i} />
+                    )
                 }
             </div>
             <footer className="bg-black text-plexYellow flex justify-center items-center py-4 text-lg"><span className="material-symbols-outlined text-xl">copyright</span><span className=""> PlexFlix {new Date().getFullYear()}</span></footer>

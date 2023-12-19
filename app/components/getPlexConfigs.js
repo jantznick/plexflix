@@ -25,6 +25,18 @@ const GetPlexConfigs = () => {
         setSaveSettingsInBrowser,
     } = useContext(PlexContext)
 
+    const clearBrowserSettings = () => {
+        localStorage.clear();
+        setPlexServerIP('');
+        setPlexServerPortDefault(true);
+        setPlexServerPort('32400');
+        setPlexServerApiToken('');
+        setOpenAiToken('');
+        setTmdbToken('');
+        setSaveSettingsInBrowser(false);
+        // setShowSettings(false);
+    }
+
     const saveSettings = () => {
         setShowSettings(false)
         setSaveSettingsInBrowser(document.getElementsByName('saveSettingsInBrowser')[0].value)
@@ -73,7 +85,8 @@ const GetPlexConfigs = () => {
                         <Input name="tmdbToken" type="text" width="full " handleChange={setTmdbToken} value={tmdbToken} />
 
                         <div className="flex justify-end w-full">
-                            <span className="">Remember settings for future?</span>
+                            <span className="underline text-plexYellow hover:text-plexYellowHover hover:cursor-pointer" onClick={clearBrowserSettings}>Clear saved settings</span>
+                            <span className="ml-4">Remember settings for future?</span>
                             <input type="checkbox" name="saveSettingsInBrowser" checked={saveSettingsInBrowser} onChange={() => setSaveSettingsInBrowser(!saveSettingsInBrowser)}/>
                             <Button clickHandler={saveSettings} text="Save Settings" />
                         </div>
