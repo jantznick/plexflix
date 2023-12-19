@@ -27,11 +27,22 @@ const App = () => {
     const [openAiToken, setOpenAiToken] = useState(localStorage.getItem('openAiToken') || '');
     const [tmdbToken, setTmdbToken] = useState(localStorage.getItem('tmdbToken') || '');
 
-    const [testing, setTesting] = useState();
 
     const handleFetchWatchlist = () => {
-        const hello = getPlexMostWatchlisted(plexServerApiToken)
-        hello.then(result => console.log(result))
+        const fetchResult = getPlexMostWatchlisted(plexServerApiToken)
+        fetchResult.then(result => {
+            console.log(result)
+            setMedia([
+                ...media,
+                {  
+                    mediaType: 'mixed',
+                    mediaProvidedBy: 'plex-service',
+                    title: result.MediaContainer.title,
+                    rowId: media.length + 1,
+                    titles: result.MediaContainer.Metadata
+                }
+            ])
+        })
     }
 
     return (

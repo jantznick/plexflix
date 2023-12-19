@@ -34,7 +34,7 @@ const Header = () => {
                 ...media,
                 {  
                     mediaType: data.MediaContainer.viewGroup,
-                    mediaProvidedBy: 'plex',
+                    mediaProvidedBy: 'plex-library',
                     title: `From your Plex Library: ${data.MediaContainer.title1}`,
                     rowId: media.length + 1,
                     titles: data.MediaContainer.Metadata

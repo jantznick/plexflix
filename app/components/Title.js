@@ -33,7 +33,8 @@ const Title = ({
     role,
     writer,
     backdrop_path,
-    poster_path
+    poster_path,
+    Image
 }) => {
     const {
         plexServerApiToken,
@@ -46,8 +47,11 @@ const Title = ({
         case 'chatGPT':
             imageSrc = Math.random() > 0.66 ? backdrop_path : poster_path;
             break;
-        case 'plex':
+        case 'plex-library':
             imageSrc = `https://${plexServerIP}:${plexServerPort}/library/metadata/${ratingKey}/${Math.random() > 0.33 ? 'thumb' : 'art'}?X-Plex-Token=${plexServerApiToken}`;
+            break;
+        case 'plex-service':
+            imageSrc = Math.random() > 0.50 ? thumb : Image[0].url;
             break;
         default:
             imageSrc = '';
