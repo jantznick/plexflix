@@ -1,9 +1,13 @@
 import { createContext, useState } from "react";
 import classNames from "classnames";
+var parseString = require('xml2js').parseString;
 
 import GetPlexConfigs from "./getPlexConfigs";
 import Row from "./Row";
 import Header from "./Header";
+import Button from "./Button";
+
+import { getPlexMostWatchlisted } from '../utils/plex';
 
 export const PlexContext = createContext();
 
@@ -22,6 +26,13 @@ const App = () => {
 
     const [openAiToken, setOpenAiToken] = useState(localStorage.getItem('openAiToken') || '');
     const [tmdbToken, setTmdbToken] = useState(localStorage.getItem('tmdbToken') || '');
+
+    const [testing, setTesting] = useState();
+
+    const handleFetchWatchlist = () => {
+        const hello = getPlexMostWatchlisted(plexServerApiToken)
+        hello.then(result => console.log(result))
+    }
 
     return (
         <PlexContext.Provider value={{
@@ -57,6 +68,7 @@ const App = () => {
                     )
                 }
             </div>
+            <Button clickHandler={handleFetchWatchlist} text="Fetch Plex Watchlist" />
             <footer className="bg-black text-plexYellow flex justify-center items-center py-4 text-lg"><span className="material-symbols-outlined text-xl">copyright</span><span className=""> PlexFlix {new Date().getFullYear()}</span></footer>
 
         </PlexContext.Provider>

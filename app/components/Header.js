@@ -6,9 +6,6 @@ import { PlexContext } from "./App";
 
 import Button from "./Button";
 
-import { plexDataToJson } from '../utils/plex';
-
-
 const Header = () => {
 
     const {
@@ -24,41 +21,37 @@ const Header = () => {
 
     const getPlexLibraryContent = () => {
         const libraryId = document.getElementById('plexLibraries').value;
-        const libraryFetched = plexLibraries.filter(lib => String(lib.$.key) == String(libraryId))[0].$
+        // const libraryFetched = plexLibraries.filter(lib => String(lib.key) == String(libraryId))[0].$
         fetch(`https://${plexServerIP}:${plexServerPort}/library/sections/${libraryId}/all?X-Plex-Token=${plexServerApiToken}`, {
-            method: "GET"
-        }).then(response => response.text())
+            method: "GET",
+            headers: {
+                "accept": "application/json, text/plain, */*",
+            },
+        }).then(response => response.json())
         .then(data => {
-            parseString(data, function (err, result) {
-                const x = result;
-                const newRowTitles = []
-                const mediaType = x.MediaContainer.$.viewGroup;
-                x.MediaContainer[mediaType == 'show' ? 'Directory' : 'Video'].forEach(title => {
-                    newRowTitles.push(plexDataToJson(title));
-                })
-                setMedia([
-                    ...media,
-                    {  
-                        mediaType: mediaType,
-                        mediaProvidedBy: 'plex',
-                        title: `From your Plex Library: ${libraryFetched.title}`,
-                        rowId: media.length + 1,
-                        titles: newRowTitles
-                    }
-                ])
-            });
+            console.log(data)
+            setMedia([
+                ...media,
+                {  
+                    mediaType: data.MediaContainer.viewGroup,
+                    mediaProvidedBy: 'plex',
+                    title: `From your Plex Library: ${data.MediaContainer.title1}`,
+                    rowId: media.length + 1,
+                    titles: data.MediaContainer.Metadata
+                }
+            ])
         });
     }
 
     const getPlexLibraries = () => {
         fetch(`https://${plexServerIP}:${plexServerPort}/library/sections/?X-Plex-Token=${plexServerApiToken}`, {
-            method: "GET"
-        }).then(response => response.text())
-        .then(data => {
-            parseString(data, function (err, result) {
-                const x = result.MediaContainer.Directory;
-                setPlexLibraries(x);
-            });
+            method: "GET",
+            headers: {
+                "accept": "application/json, text/plain, */*",
+            },
+        }).then(response => response.json())
+        .then(json => {
+            setPlexLibraries(json.MediaContainer.Directory)
         });
     }
 
@@ -72,7 +65,7 @@ const Header = () => {
                         <label htmlFor="plexLibraries" className="">Fetch recommendations based on a library:</label>
                         <select name="plexLibraries" id="plexLibraries" className="text-black">
                             {plexLibraries?.map(library => {
-                                    return(<option value={library.$.key} key={library.$.title}>{library.$.title}</option>)
+                                    return(<option value={library.key} key={library.title}>{library.title}</option>)
                                 })
                             }
                             <option value='all'>All Libraries</option>
