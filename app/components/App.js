@@ -50,12 +50,15 @@ const App = () => {
             parseString(data, function (err, result) {
                 const x = result;
                 const newRowTitles = []
-                x.MediaContainer.Video.forEach(title => {
+                const mediaType = x.MediaContainer.$.viewGroup;
+                x.MediaContainer[mediaType == 'show' ? 'Directory' : 'Video'].forEach(title => {
                     newRowTitles.push(plexDataToJson(title));
                 })
                 setMedia([
                     ...media,
-                    {   mediaProvidedBy: 'plex',
+                    {  
+                        mediaType: mediaType,
+                        mediaProvidedBy: 'plex',
                         title: `From your Plex Library: ${libraryFetched.title}`,
                         rowId: media.length + 1,
                         titles: newRowTitles

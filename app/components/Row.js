@@ -7,16 +7,17 @@ import { PlexContext } from "./App";
 
 import { recomendMessages } from '../utils/openAi';
 
-const Row = ({ title, titles, mediaProvidedBy }) => {
+const Row = ({ title, titles, mediaProvidedBy, mediaType }) => {
 
 	const {
 		openAiToken,
 		tmdbToken,
 		setMedia,
-		media
+		media,
 	} = useContext(PlexContext)
 
 	const [isLoadingRecommendations, setIsLoadingRecommendations] = useState(false);
+	const mediaTitle = mediaType == 'show' ? 'Show' : 'Movie'
 
 	const getMovieRecommendations = () => {
 		setIsLoadingRecommendations(true);
@@ -35,10 +36,11 @@ const Row = ({ title, titles, mediaProvidedBy }) => {
 			.then(data => {
 				const stopReason = data.choices[0].finish_reason;
 				const recommendations = JSON.parse(data.choices[0].message.content);
+				console.log(recommendations)
 				if (stopReason === 'stop') {
 					const eachPromises = recommendations.map(recommendation => {
 						const promises = recommendation.suggested_movies.map(movie => {
-							return fetch(`https://api.themoviedb.org/3/search/movie?query=${movie}&include_adult=false&language=en-US&page=1&api_key=${tmdbToken}`, {
+							return fetch(`https://api.themoviedb.org/3/search/${mediaType == 'show' ? 'tv' : 'movie'}?query=${movie}&include_adult=false&language=en-US&page=1&api_key=${tmdbToken}`, {
 								method: "GET",
 								headers: {
 									accept: 'application/json'
@@ -49,11 +51,11 @@ const Row = ({ title, titles, mediaProvidedBy }) => {
 							const newTitles = []
 							values.map(title => {
 								newTitles.push({
-									title: title.results[0].original_title,
+									title: title.results[0]?.[mediaType == 'show' ? 'original_name' : 'original_title'],
 									tagline: '',
-									year: title.results[0].release_date.substr(0, 4),
-									poster_path: `https://image.tmdb.org/t/p/original${title.results[0].poster_path}`,
-									backdrop_path: `https://image.tmdb.org/t/p/original${title.results[0].backdrop_path}`
+									year: title.results[0]?.[mediaType == 'show' ? 'first_air_date' : 'release_date'].substr(0, 4),
+									poster_path: `https://image.tmdb.org/t/p/original${title.results[0]?.poster_path}`,
+									backdrop_path: `https://image.tmdb.org/t/p/original${title.results[0]?.backdrop_path}`
 								})
 							})
 							return {
@@ -78,11 +80,11 @@ const Row = ({ title, titles, mediaProvidedBy }) => {
 	return (
 		<div className="text-white">
 			<div className="py-4">
-				<span className="text-3xl mr-4">{title}</span>{mediaProvidedBy === 'plex' && <Button clickHandler={getMovieRecommendations} text={isLoadingRecommendations ? "Loading recommendations..." : "Get Movie Recommendations"} />}
+				<span className="text-3xl mr-4">{title}</span>{mediaProvidedBy === 'plex' && <Button clickHandler={getMovieRecommendations} text={isLoadingRecommendations ? "Loading recommendations..." : `Get ${mediaTitle} Recommendations`} />}
 			</div>
-			<div id="media-tray" className="flex overflow-scroll h-80 space-x-4">
-				{titles.map(title =>
-					<Title {...title} mediaProvidedBy={mediaProvidedBy} />
+			<div id="media-tray" className="flex overflow-scroll h-80 space-x-4 scrollbar-hide">
+				{titles.map((title, i) =>
+					<Title {...title} mediaProvidedBy={mediaProvidedBy} key={i} />
 				)}
 			</div>
 		</div>
