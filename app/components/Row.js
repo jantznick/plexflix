@@ -80,7 +80,7 @@ const Row = ({ title, titles, mediaProvidedBy, mediaType }) => {
 	return (
 		<div className="text-white">
 			<div className="py-4">
-				<span className="text-3xl mr-4">{title}</span>{mediaProvidedBy === 'plex' && <Button clickHandler={getMovieRecommendations} text={isLoadingRecommendations ? "Loading recommendations..." : `Get ${mediaTitle} Recommendations`} />}
+				<span className="text-3xl mr-4">{title}</span>{mediaProvidedBy === 'plex-library' && <Button clickHandler={getMovieRecommendations} text={isLoadingRecommendations ? "Loading recommendations..." : `Get ${mediaTitle} Recommendations`} />}
 			</div>
 			<div id="media-tray" className="flex overflow-scroll h-80 space-x-4 scrollbar-hide">
 				{titles.map((title, i) =>

@@ -68,7 +68,7 @@ const App = () => {
             setMedia
         }}>
             <Header />
-            <div id="body" className="bg-black grow px-[12.5%]">
+            <div id="body" className="bg-black grow px-[12.5%] pb-8">
                 {showSettings &&
                     <GetPlexConfigs />
                 }
