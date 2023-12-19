@@ -33,3 +33,15 @@ export const plexDataToJson = (title) => {
         }
     )
 }
+
+export const getPlexMostWatchlisted = (plexToken) => {
+    fetch(`https://discover.provider.plex.tv/hubs/sections/home/top_watchlisted?X-Plex-Token=${plexToken}&X-Plex-Language=en`, {
+        method: "GET"
+    }).then(response => response.text())
+    .then(data => {
+        parseString(data, function (err, result) {
+            console.log(result);
+            return result
+        });
+    });
+}
