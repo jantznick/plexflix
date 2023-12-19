@@ -13,6 +13,19 @@ const media = [
                 // All the data that is known about a movie
             }, // More and more titles
         ]
+    },
+    // Recommended row:
+    {
+        mediaProvidedBy: 'chatGPT',
+        title: 'Recommended for You - ${genre}',
+        rowId: '',
+        titles: [
+            // minimum title data:
+            title: '',
+            tagline: '',
+            year: '',
+            // some sort of background picture
+        ]
     }
     // More and more row
 ]

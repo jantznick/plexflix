@@ -3,6 +3,7 @@ import { useContext } from "react";
 import { PlexContext } from "./App";
 
 const Title = ({
+    mediaProvidedBy,
     addedAt,
     art,
     audienceRating,
@@ -30,7 +31,9 @@ const Title = ({
     genre,
     media,
     role,
-    writer
+    writer,
+    backdrop_path,
+    poster_path
 }) => {
     const {
         plexServerApiToken,
@@ -38,9 +41,22 @@ const Title = ({
         plexServerPort,
     } = useContext(PlexContext)
 
+    let imageSrc;
+    switch(mediaProvidedBy){
+        case 'chatGPT':
+            imageSrc = backdrop_path;
+            break;
+        case 'plex':
+            imageSrc = `https://${plexServerIP}:${plexServerPort}/library/metadata/${ratingKey}/thumb?X-Plex-Token=${plexServerApiToken}`;
+            break;
+        default:
+            imageSrc = '';
+            break;
+    }
+
     return (
         <div className="individual-title relative group hover:cursor-pointer">
-            <img src={`https://${plexServerIP}:${plexServerPort}/library/metadata/${ratingKey}/${Math.random() > .25 ? 'thumb' : 'art'}/${updatedAt}?X-Plex-Token=${plexServerApiToken}`} alt="" className="backgrond-image h-full max-w-[unset] transition-all group-hover:brightness-50" />
+            <img src={imageSrc} alt="" className="backgrond-image h-full max-w-[unset] transition-all group-hover:brightness-50" />
             <div className="bottom-title-overlay absolute bottom-0 left-0 flex flex-col justify-center w-full bg-white text-black px-1 py-3 opacity-90 transition-all scale-y-0 origin-bottom group-hover:scale-100">
                 <div className="title-overlay-header">
                     <span className="movie-title font-bold mr-4 text-3xl">{title}</span><span className="movie-year">{year}</span>

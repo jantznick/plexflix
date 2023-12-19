@@ -24,12 +24,12 @@ export const plexDataToJson = (title) => {
             updatedAt: title.$.updatedAt,
             viewCount: title.$.viewCount,
             year: title.$.year,
-            country: title.Country.map(country => country.$.tag),
-            director: title.Director.map(director => director.$.tag),
-            genre: title.Genre.map(genre => genre.$.tag),
-            media: title.Media.flatMap(media => [media.$, media.Part[0].$]),
-            role: title.Role.map(role => role.$.tag),
-            writer: title.Writer.map(writer => writer.$.tag)
+            country: title.Country?.map(country => country.$.tag),
+            director: title.Director?.map(director => director.$.tag),
+            genre: title.Genre?.map(genre => genre.$.tag),
+            media: title.Media?.flatMap(media => [media.$, media.Part[0].$]),
+            role: title.Role?.map(role => role.$.tag),
+            writer: title.Writer?.map(writer => writer.$.tag)
         }
     )
 }

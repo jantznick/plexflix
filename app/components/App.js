@@ -6,7 +6,6 @@ import GetPlexConfigs from "./getPlexConfigs";
 import Button from "./Button";
 import Row from "./Row";
 
-import { recomendMessages } from '../utils/openAi';
 import { plexDataToJson } from '../utils/plex';
 
 export const PlexContext = createContext();
@@ -34,8 +33,9 @@ const App = () => {
         }).then(response => response.text())
         .then(data => {
             parseString(data, function (err, result) {
-                const x = result.MediaContainer.Directory
-                setPlexLibraries(x)
+                console.log(result);
+                const x = result.MediaContainer.Directory;
+                setPlexLibraries(x);
             });
             setPlexConnection(true);
         });
@@ -50,10 +50,14 @@ const App = () => {
         .then(data => {
             parseString(data, function (err, result) {
                 const x = result;
+                console.log(x);
                 // console.log(x.MediaContainer.Video)
                 // x.MediaContainer.Video.forEach(title => {console.log(plexDataToJson(title))})
                 const newRowTitles = []
-                x.MediaContainer.Video.forEach(title => {newRowTitles.push(plexDataToJson(title))})
+                x.MediaContainer.Video.forEach(title => {
+                    console.log(title);
+                    newRowTitles.push(plexDataToJson(title));
+                })
                 setMedia([
                     ...media,
                     {   mediaProvidedBy: 'plex',
@@ -70,23 +74,6 @@ const App = () => {
         console.log(document.getElementById('plexLibraries').value);
     }
 
-    const getMovieRecommendations = () => {
-        fetch('https://api.openai.com/v1/chat/completions', {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-                "Authorization": `Bearer ${openAiToken}`
-            },
-            body: JSON.stringify({
-                "model": "gpt-3.5-turbo",
-                "messages": recomendMessages(['gone girl', 'the girl on the train', 'die hard', 'crazy rich asians', 'mean girls', 'my cousin vinny', 'no strings attached', 'zodiac', 'sinister', 'first wives club', 'death on the nile'])
-            })
-        }).then(response => response.json())
-        .then(data => {
-            console.log(data);
-        });
-    }
-
     return (
         <PlexContext.Provider value={{
             plexServerIP,
@@ -96,6 +83,7 @@ const App = () => {
             openAiToken,
             tmdbToken,
             saveSettingsInBrowser,
+            media,
             setPlexServerIP,
             setPlexServerPortDefault,
             setPlexServerPort,
@@ -103,13 +91,14 @@ const App = () => {
             setOpenAiToken,
             setShowSettings,
             setTmdbToken,
-            setSaveSettingsInBrowser
+            setSaveSettingsInBrowser,
+            setMedia
         }}>
             <header className="flex flex-wrap px-[12.5%] py-8 justify-between align-middle bg-black">
                 <img src="public/images/plexflix-logo.png" alt="PlexFlix Logo" className="md:w-1/4" />
 
                 <div className="items-center flex justify-center w-full md:w-auto space-x-4 text-white">
-                    {Boolean(plexLibraries.length) &&
+                    {Boolean(plexLibraries.length) ?
                         <>
                             <label htmlFor="plexLibraries" className="">Fetch recommendations based on a library:</label>
                             <select name="plexLibraries" id="plexLibraries" className="text-black">
@@ -121,6 +110,8 @@ const App = () => {
                             </select>
                             <Button clickHandler={getPlexLibraryContent} text="Fetch" />
                         </>
+                        :
+                        <Button clickHandler={getPlexLibraries} text="Get Plex Libraries" />
                     }
                     <div className="group relative flex">
                         <span className="material-symbols-outlined text-4xl hover:text-slate-300 hover:cursor-pointer">info</span>
@@ -146,8 +137,6 @@ const App = () => {
                 {showSettings &&
                     <GetPlexConfigs />
                 }
-                <Button clickHandler={getPlexLibraries} text="Get Plex Libraries" />
-                <Button clickHandler={getMovieRecommendations} text="Get Movie Recommendations" />
 
                 {Boolean(media?.length) &&
                     media.map((row, i) => 
