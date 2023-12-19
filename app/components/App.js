@@ -33,7 +33,6 @@ const App = () => {
         }).then(response => response.text())
         .then(data => {
             parseString(data, function (err, result) {
-                console.log(result);
                 const x = result.MediaContainer.Directory;
                 setPlexLibraries(x);
             });
@@ -50,12 +49,8 @@ const App = () => {
         .then(data => {
             parseString(data, function (err, result) {
                 const x = result;
-                console.log(x);
-                // console.log(x.MediaContainer.Video)
-                // x.MediaContainer.Video.forEach(title => {console.log(plexDataToJson(title))})
                 const newRowTitles = []
                 x.MediaContainer.Video.forEach(title => {
-                    console.log(title);
                     newRowTitles.push(plexDataToJson(title));
                 })
                 setMedia([
@@ -68,10 +63,6 @@ const App = () => {
                 ])
             });
         });
-    }
-
-    const fetchLibrary = () => {
-        console.log(document.getElementById('plexLibraries').value);
     }
 
     return (

@@ -21,7 +21,6 @@ const Row = ({ title, titles, mediaProvidedBy }) => {
 	const getMovieRecommendations = () => {
 		setIsLoadingRecommendations(true);
 		const titlesArray = titles.map(title => title.title);
-		// console.log(titlesArray);
 		fetch('https://api.openai.com/v1/chat/completions', {
 			method: "POST",
 			headers: {
@@ -36,13 +35,8 @@ const Row = ({ title, titles, mediaProvidedBy }) => {
 			.then(data => {
 				const stopReason = data.choices[0].finish_reason;
 				const recommendations = JSON.parse(data.choices[0].message.content);
-				console.log(recommendations);
 				if (stopReason === 'stop') {
-					console.log('gonna loop through recommendations and add to media now')
-
-					const newMedia = [];
-					recommendations.forEach(recommendation => {
-						console.log(`looping through recommendation ${recommendation.category}`)
+					const eachPromises = recommendations.map(recommendation => {
 						const promises = recommendation.suggested_movies.map(movie => {
 							return fetch(`https://api.themoviedb.org/3/search/movie?query=${movie}&include_adult=false&language=en-US&page=1&api_key=${tmdbToken}`, {
 								method: "GET",
@@ -51,8 +45,7 @@ const Row = ({ title, titles, mediaProvidedBy }) => {
 								}
 							}).then(res => res.json());
 						})
-						Promise.all(promises).then(values => {
-							console.log(values);
+						return Promise.all(promises).then(values => {
 							const newTitles = []
 							values.map(title => {
 								newTitles.push({
@@ -63,51 +56,20 @@ const Row = ({ title, titles, mediaProvidedBy }) => {
 									backdrop_path: `https://image.tmdb.org/t/p/original${title.results[0].backdrop_path}`
 								})
 							})
-							newMedia.push({
+							return {
 								mediaProvidedBy: 'chatGPT',
 								title: `${recommendation.category} - Because you watched ${recommendation.given_movies[0]}`,
 								rowId: media.length + 1,
 								titles: newTitles
-							})
+							}
 						})
-						// console.log(`looping through recommendation ${recommendation.category}`)
-						// const newRow = {}
-						// newRow.mediaProvidedBy = 'chatGPT';
-						// newRow.title = `${recommendation.category} - Because you watched ${recommendation.given_movies[0]}`;
-						// newRow.rowId = media.length + 1;
-						// const newRowTitles = [];
-						// recommendation.suggested_movies.forEach(movie => {
-						// 	console.log(movie);
-						// 	fetch(`https://api.themoviedb.org/3/search/movie?query=${movie}&include_adult=false&language=en-US&page=1&api_key=${tmdbToken}`, {
-						// 		method: "GET",
-						// 		headers: {
-						// 			accept: 'application/json'
-						// 		}
-						// 	}).then(response => response.json())
-						// 	.then(json => {
-						// 		console.log(json);
-						// 		const movieData = json.results[0]
-						// 		newRowTitles.push({
-						// 			title: movieData.original_title,
-						// 			tagline: '',
-						// 			year: movieData.release_date.substr(0, 4),
-						// 			poster_path: `https://image.tmdb.org/t/p/original${movieData.poster_path}`,
-						// 			backdrop_path: `https://image.tmdb.org/t/p/original${movieData.backdrop_path}`
-						// 		})
-						// 	})
-						// })
-						// newRow.titles = newRowTitles;
-						// console.log(`setting media ${JSON.stringify(newRow)}`)
-						// setMedia([
-						// 	...media,
-						// 	newRow
-						// ])
 					})
-					console.log(newMedia);
-					setMedia([
-						...media,
-						...newMedia
-					])
+					Promise.all(eachPromises).then(values => {
+						setMedia([
+							...media,
+							...values
+						])
+					})
 				}
 			});
 		setIsLoadingRecommendations(false);
