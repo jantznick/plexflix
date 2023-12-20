@@ -1,4 +1,4 @@
-import { createContext, useState } from "react";
+import { createContext, useState, useEffect, useRef } from "react";
 import classNames from "classnames";
 var parseString = require('xml2js').parseString;
 
@@ -15,17 +15,44 @@ import {
     services,
     serviceTypes
 } from '../utils/plex';
+import { seedMedia } from "../utils/seedMedia";
 
 export const PlexContext = createContext();
 
+const useOnScreen = (ref) => {
+    const [isOnScreen, setIsOnScreen] = useState(false);
+    const observerRef = useRef(null);
+
+    useEffect(() => {
+        observerRef.current = new IntersectionObserver(([entry]) => {
+            if (entry.isIntersecting) {
+                console.log('on screen');
+            }
+            setIsOnScreen(entry.isIntersecting)
+        });
+    }, []);
+
+    useEffect(() => {
+        observerRef.current.observe(ref.current);
+
+        return () => {
+            observerRef.current.disconnect();
+        };
+    }, [ref]);
+
+    return isOnScreen;
+}
+
 const App = () => {
+    const triggerRef = useRef(null);
+    const isOnScreen = useOnScreen(triggerRef);
 
     const [plexServerIP, setPlexServerIP] = useState(localStorage.getItem('plexServerIP') || '');
     const [plexServerPortDefault, setPlexServerPortDefault] = useState(localStorage.getItem('plexServerPortDefault') == 'true' || true);
     const [plexServerPort, setPlexServerPort] = useState(localStorage.getItem('plexServerPort') || '32400');
     const [plexServerApiToken, setPlexServerApiToken] = useState(localStorage.getItem('plexServerApiToken') || '');
     const [plexLibraries, setPlexLibraries] = useState([]);
-    const [media, setMedia] = useState([]);
+    const [media, setMedia] = useState(seedMedia);
     const [mediaShown, setMediaShown] = useState([]);
 
     const [showSettings, setShowSettings] = useState(false);
@@ -37,10 +64,9 @@ const App = () => {
     const handleFetchWatchlist = () => {
         const fetchResult = getPlexMostWatchlisted(plexServerApiToken)
         fetchResult.then(result => {
-            console.log(result)
             setMedia([
                 ...media,
-                {  
+                {
                     mediaType: 'mixed',
                     mediaProvidedBy: 'plex-service',
                     title: `Plex: ${result.MediaContainer.title}`,
@@ -60,7 +86,7 @@ const App = () => {
             fetchResult.then(result => {
                 setMedia([
                     ...media,
-                    {  
+                    {
                         mediaType: 'mixed',
                         mediaProvidedBy: 'plex-service',
                         title: `From ${service.name}: ${result.MediaContainer.title}`,
@@ -79,10 +105,10 @@ const App = () => {
         fetchResult.then(result => {
             setMedia([
                 ...media,
-                {  
+                {
                     mediaType: 'mixed',
                     mediaProvidedBy: 'plex-service',
-                    title: `${(randomServiceType.slug == 'watchlist' ? `${service.name}: ` : '' )}${result.MediaContainer.title}`,
+                    title: `${(randomServiceType.slug == 'watchlist' ? `${service.name}: ` : '')}${result.MediaContainer.title}`,
                     rowId: media.length + 1,
                     titles: result.MediaContainer.Metadata
                 }
@@ -91,7 +117,13 @@ const App = () => {
     }
 
     const fetchRandomPlaylist = () => {
-        [handleRandomPlexlist, handleRandomPlexlistServiceType][Math.floor(Math.random() * 2)]()
+        console.log('fetching playlist');
+        [handleRandomPlexlist, handleRandomPlexlistServiceType][Math.floor(Math.random() * 2)]();
+    }
+
+
+    if (isOnScreen) {
+        setTimeout(fetchRandomPlaylist, 1000)
     }
 
     return (
@@ -123,12 +155,12 @@ const App = () => {
                 }
 
                 {Boolean(media?.length) &&
-                    media.map((row, i) => 
+                    media.map((row, i) =>
                         <Row {...row} key={i} />
                     )
                 }
 
-                <div className="flex justify-center mt-8">
+                <div id="reloadTrigger" ref={triggerRef} className="flex justify-center mt-8">
                     <Button clickHandler={handleFetchWatchlist} text="Fetch Plex Trending Watchlist" />
                     <Button clickHandler={fetchRandomPlaylist} text="Fetch Random Playlist" classes="ml-8" />
                 </div>

@@ -55,7 +55,6 @@ export const getPlexMostWatchlisted = (plexToken) => {
         },
     }).then(response => response.json())
     .then(data => {
-        console.log(data)
         return data
     });
 }
@@ -68,7 +67,6 @@ export const getPlexServiceGenres = (plexToken, service, genre) => {
         },
     }).then(response => response.json())
     .then(data => {
-        console.log(data)
         return data
     })
 }
@@ -81,18 +79,6 @@ export const getPlexServiceRankings = (plexToken, service, type) => {
         },
     }).then(response => response.json())
     .then(data => {
-        console.log(data)
         return data
     })
 }
-
-// https://discover.provider.plex.tv/library/platforms/disney-plus/${types}?X-Plex-Token=zv7Sx92aZ2KnLYze6Z8W
-// types:
-// ['exclusives', 'trend', 'recently-released', 'platform-popular', 'watchlist']
-
-// ~~~~~~~~~~~~~~~~~~~~~~
-
-// https://discover.provider.plex.tv/library/platforms/disney-plus/genre-popular-${genre}?X-Plex-Token=zv7Sx92aZ2KnLYze6Z8W
-// genres:
-// ['comedy', 'animation', 'family', 'action', 'adventure', 'crime', 'documentary', 'drama', 'fantasy', romance', 'thriller']
-// probably any plex genre
