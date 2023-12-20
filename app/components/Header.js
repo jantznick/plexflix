@@ -14,6 +14,7 @@ const Header = () => {
         plexServerIP,
         plexServerPort,
         plexServerApiToken,
+        showSettings,
         setPlexLibraries,
         setShowSettings,
         setMedia
