@@ -45,13 +45,13 @@ const Title = ({
     let imageSrc;
     switch(mediaProvidedBy){
         case 'chatGPT':
-            imageSrc = Math.random() > 0.66 ? backdrop_path : poster_path;
+            imageSrc = backdrop_path;
             break;
         case 'plex-library':
-            imageSrc = `https://${plexServerIP}:${plexServerPort}/library/metadata/${ratingKey}/${Math.random() > 0.33 ? 'thumb' : 'art'}?X-Plex-Token=${plexServerApiToken}`;
+            imageSrc = `https://${plexServerIP}:${plexServerPort}/library/metadata/${ratingKey}/thumb?X-Plex-Token=${plexServerApiToken}`;
             break;
         case 'plex-service':
-            imageSrc = Math.random() > 0.50 ? thumb : Image[0].url;
+            imageSrc = thumb;
             break;
         default:
             imageSrc = '';

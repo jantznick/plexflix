@@ -54,6 +54,7 @@ const App = () => {
     const [plexLibraries, setPlexLibraries] = useState([]);
     const [media, setMedia] = useState(seedMedia);
     const [mediaShown, setMediaShown] = useState([]);
+    const [autoLoad, setAutoLoad] = useState(false);
 
     const [showSettings, setShowSettings] = useState(false);
     const [saveSettingsInBrowser, setSaveSettingsInBrowser] = useState(localStorage.getItem('saveSettingsInBrowser') == 'true' || false)
@@ -123,7 +124,7 @@ const App = () => {
 
 
     if (isOnScreen) {
-        setTimeout(fetchRandomPlaylist, 1000)
+        fetchRandomPlaylist()
     }
 
     return (
@@ -137,6 +138,8 @@ const App = () => {
             tmdbToken,
             saveSettingsInBrowser,
             media,
+            autoLoad,
+            setAutoLoad,
             setPlexServerIP,
             setPlexServerPortDefault,
             setPlexServerPort,
