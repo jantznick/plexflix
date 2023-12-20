@@ -610,6 +610,10 @@ video {
   margin-left: 1rem;
 }
 
+.ml-8 {
+  margin-left: 2rem;
+}
+
 .ml-auto {
   margin-left: auto;
 }
@@ -620,6 +624,10 @@ video {
 
 .mr-auto {
   margin-right: auto;
+}
+
+.mt-8 {
+  margin-top: 2rem;
 }
 
 .flex {
@@ -814,6 +822,10 @@ video {
 
 .py-8 {
   padding-top: 2rem;
+  padding-bottom: 2rem;
+}
+
+.pb-8 {
   padding-bottom: 2rem;
 }
 

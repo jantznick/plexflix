@@ -69,7 +69,6 @@ const Header = () => {
                                     return(<option value={library.key} key={library.title}>{library.title}</option>)
                                 })
                             }
-                            <option value='all'>All Libraries</option>
                         </select>
                         <Button clickHandler={getPlexLibraryContent} text="Fetch" />
                     </>
