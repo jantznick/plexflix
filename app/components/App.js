@@ -61,6 +61,7 @@ const App = () => {
     const [openAiToken, setOpenAiToken] = useState(localStorage.getItem('openAiToken') || '');
     const [tmdbToken, setTmdbToken] = useState(localStorage.getItem('tmdbToken') || '');
 
+    // TODO: add this plex most watchlisted thing back in
     const handleFetchWatchlist = () => {
         const fetchResult = getPlexMostWatchlisted(plexServerApiToken)
         fetchResult.then(result => {
@@ -123,7 +124,7 @@ const App = () => {
 
 
     if (isOnScreen) {
-        fetchRandomPlaylist()
+        // fetchRandomPlaylist()
     }
 
     return (
@@ -167,11 +168,9 @@ const App = () => {
                 }
 
                 <div id="reloadTrigger" ref={triggerRef} className="flex justify-center mt-8">
-                    <Button clickHandler={handleFetchWatchlist} text="Fetch Plex Trending Watchlist" />
-                    <Button clickHandler={fetchRandomPlaylist} text="Fetch Random Playlist" classes="ml-8" />
                 </div>
             </div>
-            <footer className="bg-black text-plexYellow flex justify-center items-center py-4 text-lg"><span className="material-symbols-outlined text-xl">copyright</span><span className=""> PlexFlix {new Date().getFullYear()}</span></footer>
+            <footer className="bg-black fixed w-full bottom-0 text-plexYellow flex justify-center items-center py-4 text-lg"><span className="material-symbols-outlined text-xl">copyright</span><span className=""> PlexFlix {new Date().getFullYear()}</span><a className="ml-8 flex items-center" href="https://github.com/jantznick/plexflix" target="_blank">Github<span className="material-symbols-outlined ml-1">open_in_new</span></a></footer>
 
         </PlexContext.Provider>
     )

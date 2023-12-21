@@ -88,7 +88,7 @@ const Title = ({
             )}><span className="material-symbols-outlined">{recommendationsList.includes(title) ? 'shadow_minus' : 'library_add'}</span></div>
             <div className="bottom-title-overlay absolute bottom-0 left-0 flex flex-col justify-center w-full bg-white text-black px-1 py-3 opacity-90 transition-all scale-y-0 origin-bottom group-hover:scale-100">
                 <div className="title-overlay-header">
-                    <span className="movie-title font-bold mr-4 text-3xl">{title}</span><span className="movie-year">{year}</span>
+                    <span className="movie-title font-bold mr-4 text-2xl">{title}</span><span className="movie-year">{year}</span>
                 </div>
                 <div className="title-overlay-description">
                     {tagline}
