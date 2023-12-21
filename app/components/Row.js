@@ -29,7 +29,7 @@ const Row = ({ title, titles, mediaProvidedBy, mediaType }) => {
 				"Authorization": `Bearer ${openAiToken}`
 			},
 			body: JSON.stringify({
-				"model": "gpt-3.5-turbo",
+				"model": "gpt-4-1106-preview",
 				"messages": recomendMessages(titlesArray)
 			})
 		}).then(response => response.json())
