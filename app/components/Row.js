@@ -5,7 +5,7 @@ import Button from "./Button";
 
 import { PlexContext } from "./App";
 
-import { recomendMessages } from '../utils/openAi';
+import { fetchChatGptRecommendations } from '../utils/openAi';
 
 const Row = ({ title, titles, mediaProvidedBy, mediaType }) => {
 
@@ -22,58 +22,48 @@ const Row = ({ title, titles, mediaProvidedBy, mediaType }) => {
 	const getMovieRecommendations = () => {
 		setIsLoadingRecommendations(true);
 		const titlesArray = titles.map(title => title.title);
-		fetch('https://api.openai.com/v1/chat/completions', {
-			method: "POST",
-			headers: {
-				"Content-Type": "application/json",
-				"Authorization": `Bearer ${openAiToken}`
-			},
-			body: JSON.stringify({
-				"model": "gpt-4-1106-preview",
-				"messages": recomendMessages(titlesArray)
-			})
-		}).then(response => response.json())
-			.then(data => {
-				const stopReason = data.choices[0].finish_reason;
-				const recommendations = JSON.parse(data.choices[0].message.content);
-				console.log(recommendations)
-				if (stopReason === 'stop') {
-					const eachPromises = recommendations.map(recommendation => {
-						const promises = recommendation.suggested_movies.map(movie => {
-							return fetch(`https://api.themoviedb.org/3/search/${mediaType == 'show' ? 'tv' : 'movie'}?query=${movie}&include_adult=false&language=en-US&page=1&api_key=${tmdbToken}`, {
-								method: "GET",
-								headers: {
-									accept: 'application/json'
-								}
-							}).then(res => res.json());
-						})
-						return Promise.all(promises).then(values => {
-							const newTitles = []
-							values.map(title => {
-								newTitles.push({
-									title: title.results[0]?.[mediaType == 'show' ? 'original_name' : 'original_title'],
-									tagline: '',
-									year: title.results[0]?.[mediaType == 'show' ? 'first_air_date' : 'release_date'].substr(0, 4),
-									poster_path: `https://image.tmdb.org/t/p/original${title.results[0]?.poster_path}`,
-									backdrop_path: `https://image.tmdb.org/t/p/original${title.results[0]?.backdrop_path}`
-								})
-							})
-							return {
-								mediaProvidedBy: 'chatGPT',
-								title: `${recommendation.category} - Because you watched ${recommendation.given_movies[0]}`,
-								rowId: media.length + 1,
-								titles: newTitles
+		const fetchedRecommendations = fetchChatGptRecommendations(openAiToken, titlesArray);
+		fetchedRecommendations.then(data => {
+			const stopReason = data.choices[0].finish_reason;
+			const recommendations = JSON.parse(data.choices[0].message.content);
+			console.log(recommendations)
+			if (stopReason === 'stop') {
+				const eachPromises = recommendations.map(recommendation => {
+					const promises = recommendation.suggested_movies.map(movie => {
+						return fetch(`https://api.themoviedb.org/3/search/${mediaType == 'show' ? 'tv' : 'movie'}?query=${movie}&include_adult=false&language=en-US&page=1&api_key=${tmdbToken}`, {
+							method: "GET",
+							headers: {
+								accept: 'application/json'
 							}
+						}).then(res => res.json());
+					})
+					return Promise.all(promises).then(values => {
+						const newTitles = []
+						values.map(title => {
+							newTitles.push({
+								title: title.results[0]?.[mediaType == 'show' ? 'original_name' : 'original_title'],
+								tagline: '',
+								year: title.results[0]?.[mediaType == 'show' ? 'first_air_date' : 'release_date'].substr(0, 4),
+								poster_path: `https://image.tmdb.org/t/p/original${title.results[0]?.poster_path}`,
+								backdrop_path: `https://image.tmdb.org/t/p/original${title.results[0]?.backdrop_path}`
+							})
 						})
+						return {
+							mediaProvidedBy: 'chatGPT',
+							title: `${recommendation.category} - Because you watched ${recommendation.given_movies[0]}`,
+							rowId: media.length + 1,
+							titles: newTitles
+						}
 					})
-					Promise.all(eachPromises).then(values => {
-						setMedia([
-							...media,
-							...values
-						])
-					})
-				}
-			});
+				})
+				Promise.all(eachPromises).then(values => {
+					setMedia([
+						...media,
+						...values
+					])
+				})
+			}
+		});
 		setIsLoadingRecommendations(false);
 	}
 
