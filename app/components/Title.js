@@ -48,7 +48,7 @@ const Title = ({
     let imageSrc;
     switch(mediaProvidedBy){
         case 'chatGPT':
-            imageSrc = backdrop_path;
+            imageSrc = poster_path;
             break;
         case 'plex-library':
             imageSrc = `https://${plexServerIP}:${plexServerPort}/library/metadata/${ratingKey}/thumb?X-Plex-Token=${plexServerApiToken}`;
