@@ -124,7 +124,7 @@ const App = () => {
 
 
     if (isOnScreen) {
-        // fetchRandomPlaylist()
+        fetchRandomPlaylist()
     }
 
     return (
