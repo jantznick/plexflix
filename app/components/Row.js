@@ -33,10 +33,11 @@ const Row = ({ title, titles, mediaProvidedBy, mediaType, rowId, marginPad }) =>
 		const fetchedRecommendations = fetchChatGptRecommendations(openAiToken, titlesArray);
 		fetchedRecommendations.then(data => {
 			const stopReason = data.choices[0].finish_reason;
-			const recommendations = JSON.parse(data.choices[0].message.content);
+			const recommendations = data.choices[0].message.content.replace('```json','').replace('```','');
 			console.log(recommendations)
+			const jsonRecs = JSON.parse(recommendations.replace('```json','').replace('```',''))
 			if (stopReason === 'stop') {
-				const eachPromises = recommendations.map(recommendation => {
+				const eachPromises = jsonRecs.map(recommendation => {
 					const promises = recommendation.suggested_movies.map(movie => {
 						return fetch(`https://api.themoviedb.org/3/search/${mediaType == 'show' ? 'tv' : 'movie'}?query=${movie}&include_adult=false&language=en-US&page=1&api_key=${tmdbToken}`, {
 							method: "GET",
