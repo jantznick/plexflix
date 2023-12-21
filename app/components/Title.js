@@ -35,14 +35,17 @@ const Title = ({
     writer,
     backdrop_path,
     poster_path,
-    Image
+    Image,
+    imagesLoaded,
+    setImagesLoaded
 }) => {
     const {
         plexServerApiToken,
         plexServerIP,
         plexServerPort,
-        setRecommendationsList,
-        recommendationsList
+        recommendationsList,
+        plexTitles,
+        setRecommendationsList
     } = useContext(PlexContext)
 
     let imageSrc;
@@ -67,12 +70,25 @@ const Title = ({
                 ...recommendationsList,
                 title
             ])
+        } else {
+            setRecommendationsList([...recommendationsList.filter(item => item != title)])
         }
     }
 
+    const handleImageLoad = () => {
+        setImagesLoaded(imagesLoaded + 1);
+    }
+
     return (
-        <div className="individual-title relative group hover:cursor-pointer">
-            <img src={imageSrc} alt="" className="backgrond-image h-full max-w-[unset] transition-all group-hover:brightness-50" />
+        <div className={classNames(
+            "individual-title",
+            "relative",
+            "group",
+            {"border-2": plexTitles.includes(title)},
+            "border-plexYellow",
+            "hover:cursor-pointer"
+        )}>
+            <img src={imageSrc} alt="" onLoad={handleImageLoad} className="backgrond-image h-full max-w-[unset] transition-all group-hover:brightness-50" />
             <div onClick={addToList} className={classNames(
                 "absolute",
                 "top-2",
@@ -81,7 +97,7 @@ const Title = ({
                 "pb-1",
                 "rounded-md",
                 "text-black",
-                "bg-plexYellow",
+                "bg-plexYellowTransparent",
                 "hover:bg-plexYellowHover",
                 "hover:cursor-pointer",
                 {"bg-gray-300": recommendationsList.includes(title)}

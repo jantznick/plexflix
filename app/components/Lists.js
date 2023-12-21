@@ -47,7 +47,8 @@ const Lists = () => {
 							mediaProvidedBy: 'chatGPT',
 							title: `${recommendation.category} - Because you liked ${recommendation.given_movies[0]}`,
 							rowId: media.length + 1,
-							titles: newTitles
+							titles: newTitles,
+							marginPad: Math.floor(Math.random() * 3) * 65
 						}
 					})
 				})

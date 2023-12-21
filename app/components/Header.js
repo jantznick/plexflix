@@ -13,16 +13,20 @@ const Header = () => {
         plexServerPort,
         plexServerApiToken,
         showSettings,
+        plexTitles,
         recommendationsList,
         setPlexLibraries,
         setInterstitial,
         setInterstitialSlug,
-        setMedia
+        setMedia,
+        setPlexTitles
 	} = useContext(PlexContext)
+
+    const [separateByGenre, setSeparateByGenre] = useState(false);
 
     const getPlexLibraryContent = () => {
         const libraryId = document.getElementById('plexLibraries').value;
-        // const libraryFetched = plexLibraries.filter(lib => String(lib.key) == String(libraryId))[0].$
+        const libraryFetched = plexLibraries.filter(lib => String(lib.key) == String(libraryId))[0].$
         fetch(`https://${plexServerIP}:${plexServerPort}/library/sections/${libraryId}/all?X-Plex-Token=${plexServerApiToken}`, {
             method: "GET",
             headers: {
@@ -30,6 +34,7 @@ const Header = () => {
             },
         }).then(response => response.json())
         .then(data => {
+            // TODO: Switch this to the same big promise thing in Lists.js
             console.log(data)
             setMedia([
                 ...media,
@@ -38,9 +43,33 @@ const Header = () => {
                     mediaProvidedBy: 'plex-library',
                     title: `From your Plex Library: ${data.MediaContainer.title1}`,
                     rowId: media.length + 1,
-                    titles: data.MediaContainer.Metadata
+                    titles: data.MediaContainer.Metadata,
+                    marginPad: Math.floor(Math.random() * 3) * 65
                 }
             ])
+            const titles = data.MediaContainer.Metadata.map((title) => title.title)
+            setPlexTitles([
+                ...plexTitles,
+                ...titles
+            ])
+            const unwatchedTitles = data.MediaContainer.Metadata.filter((title) => !title.lastViewedAt)
+            console.log(unwatchedTitles);
+            // setMedia([
+            //     ...media,
+            //     {  
+            //         mediaType: data.MediaContainer.viewGroup,
+            //         mediaProvidedBy: 'plex-library',
+            //         title: `Unwatched in your Plex Library: ${data.MediaContainer.title1}`,
+            //         rowId: media.length + 1,
+            //         titles: unwatchedTitles,
+            //         marginPad: Math.floor(Math.random() * 3) * 65
+            //     }
+            // ])
+            if (separateByGenre) {
+                const genres = [];
+                const titles = data.MediaContainer.Metadata;
+
+            }
         });
     }
 
@@ -74,7 +103,8 @@ const Header = () => {
                 {Boolean(recommendationsList.length) && <div  onClick={handleOpenLists} className="text-plexYellow transition-all hover:tracking-widest hover:cursor-pointer hover:text-plexYellowHover hover:font-bold">View Lists ({recommendationsList.length})</div>}
                 {Boolean(plexLibraries.length) ?
                     <>
-                        <label htmlFor="plexLibraries" className="">Fetch recommendations based on a library:</label>
+                        {/* <label htmlFor="genreSeparate" className="">Separate by Genre?</label>
+                        <input type="checkbox" name="genreSeparate" id="genreSeparate" className="" onChange={e => setSeparateByGenre(!separateByGenre)}  checked={separateByGenre}/> */}
                         <select name="plexLibraries" id="plexLibraries" className="text-black">
                             {plexLibraries?.map(library => {
                                     return(<option value={library.key} key={library.title}>{library.title}</option>)

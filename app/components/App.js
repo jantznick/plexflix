@@ -25,6 +25,8 @@ const useOnScreen = (ref) => {
     useEffect(() => {
         observerRef.current = new IntersectionObserver(([entry]) => {
             setIsOnScreen(entry.isIntersecting)
+        }, {
+            rootMargin: "100px"
         });
     }, []);
 
@@ -52,6 +54,7 @@ const App = () => {
     const [mediaShown, setMediaShown] = useState([]);
     const [autoLoad, setAutoLoad] = useState(false);
     const [recommendationsList, setRecommendationsList] = useState([]);
+    const [plexTitles, setPlexTitles] = useState([]);
 
     const [showSettings, setShowSettings] = useState(false);
     const [interstitial, setInterstitial] = useState(false)
@@ -72,7 +75,8 @@ const App = () => {
                     mediaProvidedBy: 'plex-service',
                     title: `Plex: ${result.MediaContainer.title}`,
                     rowId: media.length + 1,
-                    titles: result.MediaContainer.Metadata
+                    titles: result.MediaContainer.Metadata,
+                    marginPad: Math.floor(Math.random() * 3) * 65
                 }
             ])
         })
@@ -92,7 +96,8 @@ const App = () => {
                         mediaProvidedBy: 'plex-service',
                         title: `From ${service.name}: ${result.MediaContainer.title}`,
                         rowId: media.length + 1,
-                        titles: result.MediaContainer.Metadata
+                        titles: result.MediaContainer.Metadata,
+                        marginPad: Math.floor(Math.random() * 3) * 65
                     }
                 ])
             })
@@ -111,7 +116,8 @@ const App = () => {
                     mediaProvidedBy: 'plex-service',
                     title: `${(randomServiceType.slug == 'watchlist' ? `${service.name}: ` : '')}${result.MediaContainer.title}`,
                     rowId: media.length + 1,
-                    titles: result.MediaContainer.Metadata
+                    titles: result.MediaContainer.Metadata,
+                    marginPad: Math.floor(Math.random() * 3) * 65
                 }
             ])
         })
@@ -140,6 +146,8 @@ const App = () => {
             media,
             autoLoad,
             recommendationsList,
+            plexTitles,
+            setPlexTitles,
             setAutoLoad,
             setPlexServerIP,
             setPlexServerPortDefault,
@@ -156,7 +164,7 @@ const App = () => {
             setRecommendationsList
         }}>
             <Header />
-            <div id="body" className="bg-black grow px-[12.5%] pb-8">
+            <div id="body" className="bg-black grow pb-8">
                 {interstitial &&
                     <Interstitial slug={interstitialSlug} />
                 }

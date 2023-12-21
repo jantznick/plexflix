@@ -9,8 +9,9 @@ module.exports = {
         },
         extend: {
             colors: {
-                plexYellow: '#e6ab01',
-                plexYellowHover: '#f4cc53'
+                plexYellow: 'rgba(230,171,1,1)',
+                plexYellowTransparent: 'rgba(230,171,1,.75)',
+                plexYellowHover: 'rgba(244,204,83,1)'
             }
         },
     },

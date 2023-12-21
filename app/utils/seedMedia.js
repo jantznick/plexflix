@@ -4,6 +4,7 @@ export const seedMedia = [
       "mediaProvidedBy": "plex-service",
       "title": "Trending on Disney+",
       "rowId": 1,
+      "marginPad": 190,
       "titles": [
         {
           "art": "https://image.tmdb.org/t/p/original/nI8uQAU8KFXYIIRz6jdL0pmC3eL.jpg",
@@ -1371,6 +1372,7 @@ export const seedMedia = [
       "mediaProvidedBy": "plex-service",
       "title": "Recently Released on Apple TV+",
       "rowId": 2,
+      "marginPad": 35,
       "titles": [
         {
           "art": "https://image.tmdb.org/t/p/original/r9oTasGQofvkQY5vlUXglneF64Z.jpg",
@@ -2452,6 +2454,7 @@ export const seedMedia = [
       "mediaProvidedBy": "plex-service",
       "title": "From Amazon Prime Video: Fan Favorites in Comedy",
       "rowId": 3,
+      "marginPad": 175,
       "titles": [
         {
           "art": "https://image.tmdb.org/t/p/original/7phJs83wVbH1ifyPD6jTPVgutig.jpg",
