@@ -592,6 +592,22 @@ video {
   top: 2rem;
 }
 
+.right-0 {
+  right: 0px;
+}
+
+.top-0 {
+  top: 0px;
+}
+
+.right-2 {
+  right: 0.5rem;
+}
+
+.top-2 {
+  top: 0.5rem;
+}
+
 .m-auto {
   margin: auto;
 }
@@ -628,6 +644,18 @@ video {
 
 .mt-8 {
   margin-top: 2rem;
+}
+
+.mb-4 {
+  margin-bottom: 1rem;
+}
+
+.mb-8 {
+  margin-bottom: 2rem;
+}
+
+.mb-2 {
+  margin-bottom: 0.5rem;
 }
 
 .flex {
@@ -678,6 +706,10 @@ video {
 
 .origin-bottom {
   transform-origin: bottom;
+}
+
+.origin-center {
+  transform-origin: center;
 }
 
 .scale-y-0 {
@@ -747,6 +779,10 @@ video {
   border-radius: 1rem;
 }
 
+.rounded-md {
+  border-radius: 0.375rem;
+}
+
 .border {
   border-width: 1px;
 }
@@ -776,8 +812,27 @@ video {
   background-color: rgb(255 255 255 / var(--tw-bg-opacity));
 }
 
+.bg-plexYellowHover {
+  --tw-bg-opacity: 1;
+  background-color: rgb(244 204 83 / var(--tw-bg-opacity));
+}
+
+.bg-gray-500 {
+  --tw-bg-opacity: 1;
+  background-color: rgb(107 114 128 / var(--tw-bg-opacity));
+}
+
+.bg-gray-300 {
+  --tw-bg-opacity: 1;
+  background-color: rgb(209 213 219 / var(--tw-bg-opacity));
+}
+
 .p-8 {
   padding: 2rem;
+}
+
+.p-2 {
+  padding: 0.5rem;
 }
 
 .px-1 {
@@ -829,6 +884,10 @@ video {
   padding-bottom: 2rem;
 }
 
+.pb-1 {
+  padding-bottom: 0.25rem;
+}
+
 .align-middle {
   vertical-align: middle;
 }
@@ -859,6 +918,10 @@ video {
 
 .leading-tight {
   line-height: 1.25;
+}
+
+.tracking-wide {
+  letter-spacing: 0.025em;
 }
 
 .text-black {
@@ -921,7 +984,7 @@ video {
     }
 } */
 
-#intersitual {
+#interstitial {
   z-index: 999;
   background: rgb(209 206 206 / 57%);
   height: 100vh;
@@ -946,6 +1009,16 @@ video {
   /* Firefox */
 }
 
+.odd\:border-gray-500:nth-child(odd) {
+  --tw-border-opacity: 1;
+  border-color: rgb(107 114 128 / var(--tw-border-opacity));
+}
+
+.even\:border-gray-400:nth-child(even) {
+  --tw-border-opacity: 1;
+  border-color: rgb(156 163 175 / var(--tw-border-opacity));
+}
+
 .hover\:cursor-pointer:hover {
   cursor: pointer;
 }
@@ -953,6 +1026,19 @@ video {
 .hover\:bg-plexYellowHover:hover {
   --tw-bg-opacity: 1;
   background-color: rgb(244 204 83 / var(--tw-bg-opacity));
+}
+
+.hover\:bg-plexYellow:hover {
+  --tw-bg-opacity: 1;
+  background-color: rgb(230 171 1 / var(--tw-bg-opacity));
+}
+
+.hover\:font-bold:hover {
+  font-weight: 700;
+}
+
+.hover\:tracking-widest:hover {
+  letter-spacing: 0.1em;
 }
 
 .hover\:text-plexYellowHover:hover {

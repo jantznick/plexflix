@@ -1,7 +1,5 @@
 import { useContext, useState } from "react";
 
-var parseString = require('xml2js').parseString;
-
 import { PlexContext } from "./App";
 
 import Button from "./Button";
@@ -15,8 +13,10 @@ const Header = () => {
         plexServerPort,
         plexServerApiToken,
         showSettings,
+        recommendationsList,
         setPlexLibraries,
-        setShowSettings,
+        setInterstitial,
+        setInterstitialSlug,
         setMedia
 	} = useContext(PlexContext)
 
@@ -56,11 +56,22 @@ const Header = () => {
         });
     }
 
+    const handleOpenConfigs = () => {
+        setInterstitialSlug('configs');
+        setInterstitial(true);
+    }
+
+    const handleOpenLists = () => {
+        setInterstitialSlug('lists');
+        setInterstitial(true);
+    }
+
     return (
         <header className="flex flex-wrap px-[12.5%] py-8 justify-between align-middle bg-black">
             <img src="public/images/plexflix-logo.png" alt="PlexFlix Logo" className="md:w-1/4" />
 
             <div className="items-center flex justify-center w-full md:w-auto space-x-4 text-white">
+                {Boolean(recommendationsList.length) && <div  onClick={handleOpenLists} className="text-plexYellow transition-all hover:tracking-widest hover:cursor-pointer hover:text-plexYellowHover hover:font-bold">View Lists ({recommendationsList.length})</div>}
                 {Boolean(plexLibraries.length) ?
                     <>
                         <label htmlFor="plexLibraries" className="">Fetch recommendations based on a library:</label>
@@ -91,7 +102,7 @@ const Header = () => {
                     </span>
                 </div>
 
-                <span className="material-symbols-outlined text-4xl hover:cursor-pointer" onClick={() => setShowSettings(!showSettings)}>settings</span>
+                <span className="material-symbols-outlined text-4xl hover:cursor-pointer" onClick={handleOpenConfigs}>settings</span>
 
             </div>
         </header>

@@ -1,4 +1,5 @@
 import { useContext } from "react";
+import classNames from "classnames";
 
 import { PlexContext } from "./App";
 
@@ -40,6 +41,8 @@ const Title = ({
         plexServerApiToken,
         plexServerIP,
         plexServerPort,
+        setRecommendationsList,
+        recommendationsList
     } = useContext(PlexContext)
 
     let imageSrc;
@@ -58,9 +61,31 @@ const Title = ({
             break;
     }
 
+    const addToList = () => {
+        if (!recommendationsList.includes(title)) {
+            setRecommendationsList([
+                ...recommendationsList,
+                title
+            ])
+        }
+    }
+
     return (
         <div className="individual-title relative group hover:cursor-pointer">
             <img src={imageSrc} alt="" className="backgrond-image h-full max-w-[unset] transition-all group-hover:brightness-50" />
+            <div onClick={addToList} className={classNames(
+                "absolute",
+                "top-2",
+                "right-2",
+                "p-2",
+                "pb-1",
+                "rounded-md",
+                "text-black",
+                "bg-plexYellow",
+                "hover:bg-plexYellowHover",
+                "hover:cursor-pointer",
+                {"bg-gray-300": recommendationsList.includes(title)}
+            )}><span className="material-symbols-outlined">{recommendationsList.includes(title) ? 'shadow_minus' : 'library_add'}</span></div>
             <div className="bottom-title-overlay absolute bottom-0 left-0 flex flex-col justify-center w-full bg-white text-black px-1 py-3 opacity-90 transition-all scale-y-0 origin-bottom group-hover:scale-100">
                 <div className="title-overlay-header">
                     <span className="movie-title font-bold mr-4 text-3xl">{title}</span><span className="movie-year">{year}</span>

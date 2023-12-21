@@ -1,8 +1,7 @@
 import { createContext, useState, useEffect, useRef } from "react";
 import classNames from "classnames";
-var parseString = require('xml2js').parseString;
 
-import GetPlexConfigs from "./getPlexConfigs";
+import Interstitial from "./Interstitial";
 import Row from "./Row";
 import Header from "./Header";
 import Button from "./Button";
@@ -25,9 +24,6 @@ const useOnScreen = (ref) => {
 
     useEffect(() => {
         observerRef.current = new IntersectionObserver(([entry]) => {
-            if (entry.isIntersecting) {
-                console.log('on screen');
-            }
             setIsOnScreen(entry.isIntersecting)
         });
     }, []);
@@ -55,8 +51,11 @@ const App = () => {
     const [media, setMedia] = useState(seedMedia);
     const [mediaShown, setMediaShown] = useState([]);
     const [autoLoad, setAutoLoad] = useState(false);
+    const [recommendationsList, setRecommendationsList] = useState([]);
 
     const [showSettings, setShowSettings] = useState(false);
+    const [interstitial, setInterstitial] = useState(false)
+    const [interstitialSlug, setInterstitialSlug] = useState('');
     const [saveSettingsInBrowser, setSaveSettingsInBrowser] = useState(localStorage.getItem('saveSettingsInBrowser') == 'true' || false)
 
     const [openAiToken, setOpenAiToken] = useState(localStorage.getItem('openAiToken') || '');
@@ -139,6 +138,7 @@ const App = () => {
             saveSettingsInBrowser,
             media,
             autoLoad,
+            recommendationsList,
             setAutoLoad,
             setPlexServerIP,
             setPlexServerPortDefault,
@@ -149,12 +149,15 @@ const App = () => {
             setShowSettings,
             setTmdbToken,
             setSaveSettingsInBrowser,
-            setMedia
+            setMedia,
+            setInterstitial,
+            setInterstitialSlug,
+            setRecommendationsList
         }}>
             <Header />
             <div id="body" className="bg-black grow px-[12.5%] pb-8">
-                {showSettings &&
-                    <GetPlexConfigs />
+                {interstitial &&
+                    <Interstitial slug={interstitialSlug} />
                 }
 
                 {Boolean(media?.length) &&
