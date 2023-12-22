@@ -1,8 +1,11 @@
 import { useContext, useState, useEffect } from "react";
+import classNames from "classnames";
 
 import { PlexContext } from "./App";
 
 import Button from "./Button";
+
+import { searchTmdb } from '../utils/tmdb';
 
 const Header = () => {
 
@@ -14,6 +17,7 @@ const Header = () => {
         plexServerApiToken,
         showSettings,
         plexTitles,
+        tmdbToken,
         recommendationsList,
         setPlexLibraries,
         setInterstitial,
@@ -21,10 +25,14 @@ const Header = () => {
         setMedia,
         setPlexTitles,
         setUnwatchedPlexTitles,
+        setRecommendationsList,
         unwatchedPlexTitles
 	} = useContext(PlexContext)
 
     const [separateByGenre, setSeparateByGenre] = useState(false);
+    const [searchTerm, setSearchTerm] = useState('');
+    const [searchDropDown, setSearchDropDown] = useState([]);
+    const [searchType, setSearchType] = useState('movie');
 
     const getPlexLibraryContent = () => {
         const libraryId = document.getElementById('plexLibraries').value;
@@ -92,11 +100,87 @@ const Header = () => {
         setInterstitial(true);
     }
 
+    const handleSearchChange = (e) => {
+        setSearchTerm(e.target.value);
+        if (e.target.value.length > 5){
+            // TODO: Fix this isn't quite ready to handle the return value being tv shows called 'name' but movies called 'title'
+            searchTmdb(tmdbToken, e.target.value, 'movie').then(data => {
+                setSearchDropDown(data.results)
+            })
+        }
+    }
+
+    const addToList = (title) => {
+        if (!recommendationsList.includes(title)) {
+            setRecommendationsList([
+                ...recommendationsList,
+                title
+            ])
+        } else {
+            setRecommendationsList([...recommendationsList.filter(item => item != title)])
+        }
+    }
+
+    const switchSearchType = () => {
+        setSearchType(searchType == 'movie' ? 'tv' : 'movie')
+    }
+
     return (
         <header className="flex flex-wrap px-[12.5%] py-8 justify-between align-middle bg-black">
             <img src="public/images/plexflix-logo.png" alt="PlexFlix Logo" className="md:w-1/4" />
 
             <div className="items-center flex justify-center w-full md:w-auto space-x-4 text-white">
+                <form action="" className={classNames(
+                    "flex",
+                    "bg-white",
+                    "rounded-t-md",
+                    "rounded-br-md",
+                    "text-black",
+                    "items-center",
+                    {"rounded-bl-md": !searchDropDown.length}
+                )}>
+                    <div onClick={switchSearchType} className="p-2 border-r-2 border-gray-400 hover:cursor-pointer">{searchType == 'movie' ? 'Movie' : 'TV Show'}</div>
+                    <div id="searchInput" className="flex flex-col relative">
+                        <div id="searchBox" className="p-2">
+                            <input type="text" name="searchTerm" onChange={handleSearchChange} placeholder="Search..." value={searchTerm} className="transition-all focus-visible:outline-none min-w-[25vw]" />
+                        </div>
+                        <div id="dropDown" className={classNames(
+                            "absolute",
+                            "bg-white",
+                            "w-full",
+                            "overflow-scroll",
+                            "z-50",
+                            "max-h-32",
+                            "top-10",
+                            "rounded-b-md",
+                            "transition-all",
+                            "origin-top",
+                            "scrollbar-hide",
+                            {"scale-y-0": !searchDropDown.length},
+                        )}>
+                            {searchDropDown.length &&
+                                searchDropDown.map((result, i) =>
+                                    <div id={`dropDownOption${i}`} key={i} className="p-2 pr-8 relative odd:bg-gray-200">
+                                        {result.title}
+                                        <div onClick={() => addToList(result.title)} className={classNames(
+                                            "absolute",
+                                            "right-4",
+                                            "top-2",
+                                            "rounded-sm",
+                                            "text-black",
+                                            "hover:cursor-pointer"
+                                        )}>
+                                            <span className="material-symbols-outlined px-1">
+                                                {recommendationsList.includes(result.title) ? 'shadow_minus' : 'library_add'}
+                                            </span>
+                                        </div>
+                                    </div>
+                                )
+                            }
+                        </div>
+                    </div>
+                    <span className="material-symbols-outlined px-2 hover:cursor-pointer">search</span>
+                </form>
                 {Boolean(recommendationsList.length) && <div  onClick={handleOpenLists} className="text-plexYellow transition-all hover:tracking-widest hover:cursor-pointer hover:text-plexYellowHover hover:font-bold">View Lists ({recommendationsList.length})</div>}
                 {Boolean(plexLibraries.length) ?
                     <>
