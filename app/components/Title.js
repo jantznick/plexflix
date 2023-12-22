@@ -89,7 +89,7 @@ const Title = ({
     }
 
     return (
-        <div onClick={handleChooseTitle} className={classNames(
+        <div className={classNames(
             "individual-title",
             "relative",
             "group",

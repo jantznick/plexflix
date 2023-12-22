@@ -109,10 +109,12 @@ const Lists = () => {
     return (
         <>
             <div className="flex justify-center w-full items-center mb-8">
-                <div onClick={handleClearList}className="mr-auto text-plexYellow hover:cursor-pointer hover:text-plexYellowHover">Clear recommendations list</div>
+                <div onClick={handleClearList} className="mr-auto text-plexYellow hover:cursor-pointer hover:text-plexYellowHover">Clear recommendations list</div>
                 <div className="">Your Recommendations List</div>
-                <Button clickHandler={submitMatchesList} text={'Find Similar Owned Movies'} classes="ml-auto"/>
-                <Button clickHandler={submitRecommendationsList} text={'Submit List'} classes="ml-auto"/>
+				<div className="ml-auto flex flex-col items-end text-plexYellow hover:cursor-pointer hover:text-plexYellowHover">
+					<span onClick={submitMatchesList} className="">Find Similar Owned Movies</span>
+					<span onClick={submitRecommendationsList} className="">Find Similar Movies</span>
+				</div>
             </div>
             <div className="flex flex-wrap justify-center w-full">
                 {recommendationsList.map((rec, i) =>
