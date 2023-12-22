@@ -1,4 +1,4 @@
-import { useContext, useState } from "react";
+import { useContext, useState, useEffect } from "react";
 
 import { PlexContext } from "./App";
 
@@ -19,7 +19,9 @@ const Header = () => {
         setInterstitial,
         setInterstitialSlug,
         setMedia,
-        setPlexTitles
+        setPlexTitles,
+        setUnwatchedPlexTitles,
+        unwatchedPlexTitles
 	} = useContext(PlexContext)
 
     const [separateByGenre, setSeparateByGenre] = useState(false);
@@ -34,7 +36,7 @@ const Header = () => {
             },
         }).then(response => response.json())
         .then(data => {
-            // TODO: Switch this to the same big promise thing in Lists.js
+            // TODO: Switch this to the same big promise thing in Lists.js so we can set unwatched titles and watched titles and eventually sort genres
             console.log(data)
             setMedia([
                 ...media,
@@ -53,18 +55,13 @@ const Header = () => {
                 ...titles
             ])
             const unwatchedTitles = data.MediaContainer.Metadata.filter((title) => !title.lastViewedAt)
+            const unwatchedNames = unwatchedTitles.map((title) => title.title);
+            setUnwatchedPlexTitles([
+                ...unwatchedPlexTitles,
+                ...unwatchedNames
+            ])
+            const watchedTitles = data.MediaContainer.Metadata.filter((title) => title.lastViewedAt)
             console.log(unwatchedTitles);
-            // setMedia([
-            //     ...media,
-            //     {  
-            //         mediaType: data.MediaContainer.viewGroup,
-            //         mediaProvidedBy: 'plex-library',
-            //         title: `Unwatched in your Plex Library: ${data.MediaContainer.title1}`,
-            //         rowId: media.length + 1,
-            //         titles: unwatchedTitles,
-            //         marginPad: Math.floor(Math.random() * 3) * 65
-            //     }
-            // ])
             if (separateByGenre) {
                 const genres = [];
                 const titles = data.MediaContainer.Metadata;

@@ -4,14 +4,18 @@ import { PlexContext } from "./App";
 
 import Configs from "./Configs";
 import Lists from "./Lists";
+import TitlePage from "./TitlePage";
 
 const Interstitial = ({slug}) => {
 
     const {
+        activeTitle,
         setInterstitial,
+        setActiveTitle
     } = useContext(PlexContext)
 
     const handleClose = () => {
+        setActiveTitle({});
         setInterstitial(false);
     }
 
@@ -24,6 +28,10 @@ const Interstitial = ({slug}) => {
         case 'lists':
             title = 'Your Lists';
             children = <Lists />;
+            break;
+        case 'title-page':
+            title = 'Movie Details';
+            children = <TitlePage {...activeTitle} />
             break;
     }
 

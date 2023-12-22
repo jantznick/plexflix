@@ -55,6 +55,8 @@ const App = () => {
     const [autoLoad, setAutoLoad] = useState(false);
     const [recommendationsList, setRecommendationsList] = useState([]);
     const [plexTitles, setPlexTitles] = useState([]);
+    const [unwatchedPlexTitles, setUnwatchedPlexTitles] = useState([])
+    const [activeTitle, setActiveTitle] = useState({});
 
     const [showSettings, setShowSettings] = useState(false);
     const [interstitial, setInterstitial] = useState(false)
@@ -128,7 +130,6 @@ const App = () => {
         [handleRandomPlexlist, handleRandomPlexlistServiceType][Math.floor(Math.random() * 2)]();
     }
 
-
     if (isOnScreen) {
         fetchRandomPlaylist()
     }
@@ -147,6 +148,8 @@ const App = () => {
             autoLoad,
             recommendationsList,
             plexTitles,
+            unwatchedPlexTitles,
+            activeTitle,
             setPlexTitles,
             setAutoLoad,
             setPlexServerIP,
@@ -161,7 +164,9 @@ const App = () => {
             setMedia,
             setInterstitial,
             setInterstitialSlug,
-            setRecommendationsList
+            setRecommendationsList,
+            setUnwatchedPlexTitles,
+            setActiveTitle
         }}>
             <Header />
             <div id="body" className="bg-black grow pb-8">

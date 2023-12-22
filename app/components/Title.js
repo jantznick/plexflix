@@ -12,12 +12,14 @@ const Title = ({
     contentRating,
     duration,
     guid,
+    titleKey,
     lastViewedAt,
     originallyAvailableAt,
     primaryExtraKey,
     rating,
     ratingImage,
     ratingKey,
+    rowKey,
     studio,
     summary,
     tagline,
@@ -35,9 +37,7 @@ const Title = ({
     writer,
     backdrop_path,
     poster_path,
-    Image,
-    imagesLoaded,
-    setImagesLoaded
+    Image
 }) => {
     const {
         plexServerApiToken,
@@ -45,7 +45,12 @@ const Title = ({
         plexServerPort,
         recommendationsList,
         plexTitles,
-        setRecommendationsList
+        media:allMedia,
+        unwatchedPlexTitles,
+        setRecommendationsList,
+        setActiveTitle,
+        setInterstitial,
+        setInterstitialSlug
     } = useContext(PlexContext)
 
     let imageSrc;
@@ -75,20 +80,31 @@ const Title = ({
         }
     }
 
-    const handleImageLoad = () => {
-        setImagesLoaded(imagesLoaded + 1);
+    const handleChooseTitle = () => {
+        console.log(title)
+        console.log(allMedia[rowKey-1].titles[titleKey])
+        setActiveTitle(allMedia[rowKey-1].titles[titleKey])
+        setInterstitialSlug('title-page');
+        setInterstitial(true);
     }
 
     return (
-        <div className={classNames(
+        <div onClick={handleChooseTitle} className={classNames(
             "individual-title",
             "relative",
             "group",
+            {"unwatched": unwatchedPlexTitles.includes(title)},
             {"border-2": plexTitles.includes(title)},
             "border-plexYellow",
             "hover:cursor-pointer"
         )}>
-            <img src={imageSrc} alt="" onLoad={handleImageLoad} className="backgrond-image h-full max-w-[unset] transition-all group-hover:brightness-50" />
+            <img src={imageSrc} alt="" className={classNames(
+                "backgrond-image",
+                "h-full",
+                "max-w-[unset]",
+                "transition-all",
+                "group-hover:brightness-50")}
+            />
             <div onClick={addToList} className={classNames(
                 "absolute",
                 "top-2",
