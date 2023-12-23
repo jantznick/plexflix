@@ -41,6 +41,7 @@ const Configs = () => {
         setInterstitial,
         setShowSettings,
         setSaveSettingsInBrowser,
+        setToast
     } = useContext(PlexContext)
 
     const [showPlexSettings, setShowPlexSettings] = useState(false);
@@ -59,6 +60,13 @@ const Configs = () => {
         setTmdbToken('');
         setSaveSettingsInBrowser(false);
         // setShowSettings(false);
+        setTimeout(() => {
+            setInterstitial(false);
+            window.document.getElementsByTagName('body')[0].style.overflowY = '';
+            setToast({
+                text: 'Browser Settings Removed'
+            })
+        }, 175)
     }
 
     const saveSettings = () => {
@@ -85,6 +93,9 @@ const Configs = () => {
         setTimeout(() => {
             setInterstitial(false);
             window.document.getElementsByTagName('body')[0].style.overflowY = '';
+            setToast({
+                text: 'Settings Saved!'
+            })
         }, 175)
     };
 

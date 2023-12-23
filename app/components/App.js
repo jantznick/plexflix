@@ -5,6 +5,7 @@ import Interstitial from "./Interstitial";
 import Row from "./Row";
 import Header from "./Header";
 import Button from "./Button";
+import Toast from "./Toast";
 
 import {
     getPlexMostWatchlisted,
@@ -65,6 +66,7 @@ const App = () => {
     const [plexTitles, setPlexTitles] = useState([]);
     const [unwatchedPlexTitles, setUnwatchedPlexTitles] = useState([])
     const [activeTitle, setActiveTitle] = useState({});
+    const [toast, setToast] = useState({});
 
     const [showSettings, setShowSettings] = useState(false);
     const [interstitial, setInterstitial] = useState(false)
@@ -165,6 +167,8 @@ const App = () => {
             plexTitles,
             unwatchedPlexTitles,
             activeTitle,
+            toast,
+            setToast,
             setPlexTitles,
             setAutoLoad,
             setPlexServerIP,
@@ -191,6 +195,9 @@ const App = () => {
             setUnwatchedPlexTitles,
             setActiveTitle
         }}>
+            {toast.text &&
+                <Toast />
+            }
             <Header />
             <div id="body" className="bg-black grow pb-8">
                 {interstitial &&

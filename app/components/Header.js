@@ -26,7 +26,8 @@ const Header = () => {
         setPlexTitles,
         setUnwatchedPlexTitles,
         setRecommendationsList,
-        unwatchedPlexTitles
+        unwatchedPlexTitles,
+        setToast
 	} = useContext(PlexContext)
 
     const [separateByGenre, setSeparateByGenre] = useState(false);
@@ -106,11 +107,16 @@ const Header = () => {
     const handleSearchChange = (e) => {
         setSearchTerm(e.target.value);
         if (e.target.value.length > 5){
-            // TODO: Fix this isn't quite ready to handle the return value being tv shows called 'name' but movies called 'title'
-            searchTmdb(tmdbToken, e.target.value, searchType).then(data => {
-                setSearchDropDown(data.results);
-                setShowSearchDropDown(true);
-            })
+            if (!tmdbToken) {
+                setToast({
+                    text: 'Visit settings to enter a TMDB API Key to be able to use search'
+                })
+            } else {
+                searchTmdb(tmdbToken, e.target.value, searchType).then(data => {
+                    setSearchDropDown(data.results);
+                    setShowSearchDropDown(true);
+                })
+            }
         } else if (e.target.value.length < 5) {
             setSearchDropDown([])
             setShowSearchDropDown(false)
