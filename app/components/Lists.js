@@ -56,6 +56,7 @@ const Lists = () => {
 						...values
 					])
                     setInterstitial(false)
+					window.document.getElementsByTagName('body')[0].style.overflowY = '';
 				})
 			}
 		});
@@ -97,6 +98,7 @@ const Lists = () => {
 						}
 					])
                     setInterstitial(false)
+					window.document.getElementsByTagName('body')[0].style.overflowY = '';
 				})
 			}
 		});
@@ -108,12 +110,12 @@ const Lists = () => {
 
     return (
         <>
-            <div className="flex justify-center w-full items-center mb-8">
-                <div onClick={handleClearList} className="mr-auto text-plexYellow hover:cursor-pointer hover:text-plexYellowHover">Clear recommendations list</div>
+            <div className="flex flex-col md:flex-row justify-center w-full items-center mb-8">
+                <div onClick={handleClearList} className="md:mr-auto text-link">Clear recommendations list</div>
                 <div className="">Your Recommendations List</div>
-				<div className="ml-auto flex flex-col items-end text-plexYellow hover:cursor-pointer hover:text-plexYellowHover">
-					<span onClick={submitMatchesList} className="">Find Similar Owned Movies</span>
-					<span onClick={submitRecommendationsList} className="">Find Similar Movies</span>
+				<div className="md:ml-auto flex flex-col md:items-end items-center">
+					<span onClick={submitMatchesList} className="text-link">Find Similar Owned Movies</span>
+					<span onClick={submitRecommendationsList} className="text-link">Find Similar Movies</span>
 				</div>
             </div>
             <div className="flex flex-wrap justify-center w-full">

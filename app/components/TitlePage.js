@@ -58,7 +58,7 @@ const TitlePage = ({
     return (
         <>
             <div className="">{title}</div>
-            <div className="flex flex-wrap overflow-scroll">
+            <div className="flex flex-wrap overflow-scroll scrollbar-hide">
                 <div className="w-1/2">
                     <img src={thumb} className="w-3/4 mx-auto" alt="" />
                 </div>

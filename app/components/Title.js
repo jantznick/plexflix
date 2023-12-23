@@ -81,11 +81,10 @@ const Title = ({
     }
 
     const handleChooseTitle = () => {
-        console.log(title)
-        console.log(allMedia[rowKey-1].titles[titleKey])
         setActiveTitle(allMedia[rowKey-1].titles[titleKey])
         setInterstitialSlug('title-page');
         setInterstitial(true);
+        window.document.getElementsByTagName('body')[0].style.overflowY = 'hidden';
     }
 
     return (
@@ -98,13 +97,6 @@ const Title = ({
             "border-plexYellow",
             "hover:cursor-pointer"
         )}>
-            <img src={imageSrc} alt="" className={classNames(
-                "backgrond-image",
-                "h-full",
-                "max-w-[unset]",
-                "transition-all",
-                "group-hover:brightness-50")}
-            />
             <div onClick={addToList} className={classNames(
                 "absolute",
                 "top-2",
@@ -116,9 +108,21 @@ const Title = ({
                 "bg-plexYellowTransparent",
                 "hover:bg-plexYellowHover",
                 "hover:cursor-pointer",
+                "z-50",
                 {"bg-gray-300": recommendationsList.includes(title)}
-            )}><span className="material-symbols-outlined">{recommendationsList.includes(title) ? 'shadow_minus' : 'library_add'}</span></div>
-            <div className="bottom-title-overlay absolute bottom-0 left-0 flex flex-col justify-center w-full bg-white text-black px-1 py-3 opacity-90 transition-all scale-y-0 origin-bottom group-hover:scale-100">
+            )}>
+                <span className="material-symbols-outlined">
+                    {recommendationsList.includes(title) ? 'shadow_minus' : 'library_add'}
+                </span>
+            </div>
+            <img src={imageSrc} alt="" onClick={handleChooseTitle} className={classNames(
+                "backgrond-image",
+                "h-full",
+                "max-w-[unset]",
+                "transition-all",
+                "group-hover:brightness-50")}
+            />
+            <div onClick={handleChooseTitle} className="bottom-title-overlay absolute bottom-0 left-0 flex flex-col justify-center w-full bg-white text-black px-1 py-3 opacity-90 transition-all scale-y-0 origin-bottom group-hover:scale-100">
                 <div className="title-overlay-header">
                     <span className="movie-title font-bold mr-4 text-2xl">{title}</span><span className="movie-year">{year}</span>
                 </div>

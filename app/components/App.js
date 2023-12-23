@@ -49,6 +49,14 @@ const App = () => {
     const [plexServerPortDefault, setPlexServerPortDefault] = useState(localStorage.getItem('plexServerPortDefault') == 'true' || true);
     const [plexServerPort, setPlexServerPort] = useState(localStorage.getItem('plexServerPort') || '32400');
     const [plexServerApiToken, setPlexServerApiToken] = useState(localStorage.getItem('plexServerApiToken') || '');
+    const [radarrServerIP, setRadarrServerIP] = useState(localStorage.getItem('radarrServerIP') || '');
+    const [radarrServerPortDefault, setRadarrServerPortDefault] = useState(localStorage.getItem('radarrServerPortDefault') == 'true' || true);
+    const [radarrServerPort, setRadarrServerPort] = useState(localStorage.getItem('radarrServerPort') || '7878');
+    const [radarrServerApiToken, setRadarrServerApiToken] = useState(localStorage.getItem('radarrServerApiToken') || '');
+    const [sonarrServerIP, setSonarrServerIP] = useState(localStorage.getItem('sonarrServerIP') || '');
+    const [sonarrServerPortDefault, setSonarrServerPortDefault] = useState(localStorage.getItem('sonarrServerPortDefault') == 'true' || true);
+    const [sonarrServerPort, setSonarrServerPort] = useState(localStorage.getItem('sonarrServerPort') || '8989');
+    const [sonarrServerApiToken, setSonarrServerApiToken] = useState(localStorage.getItem('sonarrServerApiToken') || '');
     const [plexLibraries, setPlexLibraries] = useState([]);
     const [media, setMedia] = useState(seedMedia);
     const [mediaShown, setMediaShown] = useState([]);
@@ -126,7 +134,6 @@ const App = () => {
     }
 
     const fetchRandomPlaylist = () => {
-        console.log('fetching playlist');
         [handleRandomPlexlist, handleRandomPlexlistServiceType][Math.floor(Math.random() * 2)]();
     }
 
@@ -140,6 +147,14 @@ const App = () => {
             plexServerPortDefault,
             plexServerPort,
             plexServerApiToken,
+            radarrServerIP,
+            radarrServerPortDefault,
+            radarrServerPort,
+            radarrServerApiToken,
+            sonarrServerIP,
+            sonarrServerPortDefault,
+            sonarrServerPort,
+            sonarrServerApiToken,
             plexLibraries,
             openAiToken,
             tmdbToken,
@@ -156,6 +171,14 @@ const App = () => {
             setPlexServerPortDefault,
             setPlexServerPort,
             setPlexServerApiToken,
+            setRadarrServerIP,
+            setRadarrServerPortDefault,
+            setRadarrServerPort,
+            setRadarrServerApiToken,
+            setSonarrServerIP,
+            setSonarrServerPortDefault,
+            setSonarrServerPort,
+            setSonarrServerApiToken,
             setPlexLibraries,
             setOpenAiToken,
             setShowSettings,

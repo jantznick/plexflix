@@ -2,11 +2,15 @@
 @tailwind components;
 @tailwind utilities;
 
-/* @layer components {
-    .button {
-        @apply border-2 border-blue-700 rounded-lg px-4 py-2
+@layer components {
+    .text-link {
+        @apply underline text-plexYellow hover:text-plexYellowHover hover:cursor-pointer
     }
-} */
+
+    .settings-header {
+        @apply text-plexYellow border-b-plexYellow border-b-2 w-full pb-1 flex justify-between text-2xl
+    }
+}
 
 #interstitial {
     z-index: 999;
@@ -25,8 +29,10 @@
 
 /* For IE, Edge and Firefox */
 .scrollbar-hide {
-    -ms-overflow-style: none;  /* IE and Edge */
-    scrollbar-width: none;  /* Firefox */
+    -ms-overflow-style: none;
+    /* IE and Edge */
+    scrollbar-width: none;
+    /* Firefox */
 }
 
 .unwatched::after {
@@ -35,8 +41,14 @@
     height: 0;
     border-style: solid;
     border-width: 0 0 3.5rem 3.5rem;
-    border-color: transparent transparent transparent rgba(230,171,1,1);
+    border-color: transparent transparent transparent rgba(230, 171, 1, 1);
     left: 0;
     top: 0;
     position: absolute;
-  }
+}
+
+#settings label {
+    display: block;
+    margin-top: 1rem;
+    margin-bottom: .25rem;
+}
