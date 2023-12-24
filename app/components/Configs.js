@@ -176,7 +176,7 @@ const Configs = () => {
                             <Input name="tmdbToken" type="text" width="full " handleChange={setTmdbToken} value={tmdbToken} />
                         </div>
                     }
-{/* 
+                    
                     <div id="radarrSettings" onClick={() => setShowRadarrSettings(!showRadarrSettings)} className="settings-header">
                         Radarr Settings
                         <span className={classNames(
@@ -239,7 +239,7 @@ const Configs = () => {
                                 <Input name="sonarrServerPort" type="text" width="1/2" handleChange={setSonarrServerPort} value={sonarrServerPort} disabled={sonarrServerPortDefault}/>
                             </div>
                         </div>
-                    } */}
+                    }
 
 
                     <div className="flex flex-wrap justify-center md:justify-end w-full">

@@ -634,8 +634,16 @@ video {
   top: 0.5rem;
 }
 
+.top-4 {
+  top: 1rem;
+}
+
 .top-8 {
   top: 2rem;
+}
+
+.top-16 {
+  top: 4rem;
 }
 
 .z-50 {
@@ -644,6 +652,10 @@ video {
 
 .z-\[60\] {
   z-index: 60;
+}
+
+.z-\[61\] {
+  z-index: 61;
 }
 
 .m-auto {

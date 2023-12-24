@@ -213,7 +213,7 @@ const App = () => {
                 <div id="reloadTrigger" ref={triggerRef} className="flex justify-center mt-8">
                 </div>
             </div>
-            <footer className="bg-black fixed w-full bottom-0 text-plexYellow flex justify-center items-center py-4 text-lg"><span className="material-symbols-outlined text-xl">copyright</span><span className=""> PlexFlix {new Date().getFullYear()}</span><a className="ml-8 flex items-center" href="https://github.com/jantznick/plexflix" target="_blank">Github<span className="material-symbols-outlined ml-1">open_in_new</span></a></footer>
+            <footer className="bg-black z-[61] fixed w-full bottom-0 text-plexYellow flex justify-center items-center py-4 text-lg"><span className="material-symbols-outlined text-xl">copyright</span><span className=""> PlexFlix {new Date().getFullYear()}</span><a className="ml-8 flex items-center" href="https://github.com/jantznick/plexflix" target="_blank">Github<span className="material-symbols-outlined ml-1">open_in_new</span></a></footer>
 
         </PlexContext.Provider>
     )

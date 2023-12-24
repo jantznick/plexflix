@@ -3,6 +3,9 @@ import classNames from "classnames";
 
 import { PlexContext } from "./App";
 
+import { addMovieToRadarr, addShowToSonarr } from '../utils/torrents';
+import { searchTmdb, tmdbExternalIds } from '../utils/tmdb';
+
 const Title = ({
     mediaProvidedBy,
     addedAt,
@@ -12,7 +15,9 @@ const Title = ({
     contentRating,
     duration,
     guid,
+    tmdbId,
     titleKey,
+    mediaType,
     lastViewedAt,
     originallyAvailableAt,
     primaryExtraKey,
@@ -46,11 +51,19 @@ const Title = ({
         recommendationsList,
         plexTitles,
         media:allMedia,
+        tmdbToken,
+        radarrServerApiToken,
+        radarrServerIP,
+        radarrServerPort,
+        sonarrServerApiToken,
+        sonarrServerIP,
+        sonarrServerPort,
         unwatchedPlexTitles,
         setRecommendationsList,
         setActiveTitle,
         setInterstitial,
-        setInterstitialSlug
+        setInterstitialSlug,
+        setToast
     } = useContext(PlexContext)
 
     let imageSrc;
@@ -87,6 +100,52 @@ const Title = ({
         window.document.getElementsByTagName('body')[0].style.overflowY = 'hidden';
     }
 
+    const usedMediaType = (mediaType ? mediaType : (type == 'movie' ? 'movie' : 'tv'))
+
+    const handleDownload = () => {
+        if (tmdbId && usedMediaType == 'movie') {
+            const addToRadarrResult = addMovieToRadarr(radarrServerApiToken, radarrServerIP, radarrServerPort, tmdbId, title)
+            addToRadarrResult.then(result => {
+                console.log(result)
+                setToast({
+                    text: `Added movie ${title}`
+                })
+            })
+        } else {
+            searchTmdb(tmdbToken, title, usedMediaType).then(data => {
+                if (usedMediaType == 'movie') {
+                    const addToRadarrResult = addMovieToRadarr(radarrServerApiToken, radarrServerIP, radarrServerPort, data.results[0].id, title)
+                    addToRadarrResult.then(result => {
+                        console.log(result)
+                        if (result.monitored) {
+                            setToast({
+                                text: `Added movie ${title}`
+                            })
+                        }
+                    })
+                } else {
+                    console.log(usedMediaType);
+                    console.log(data);
+                    tmdbExternalIds(tmdbToken, data.results[0].id).then(data => {
+                        if (data.tvdb_id) {
+                            const addToSonarrResult = addShowToSonarr(sonarrServerApiToken, sonarrServerIP, sonarrServerPort, title, data.tvdb_id)
+                            addToSonarrResult.then(result => {
+                                console.log(result)
+                                setToast({
+                                    text: `Added TV Show ${title}`
+                                })
+                            })
+                        } else {
+                            setToast({
+                                text: `Error adding ${title}, not TVDB ID found`
+                            })
+                        }
+                    })
+                }
+            })
+        }
+    }
+
     return (
         <div className={classNames(
             "individual-title",
@@ -114,6 +173,21 @@ const Title = ({
                 <span className="material-symbols-outlined">
                     {recommendationsList.includes(title) ? 'shadow_minus' : 'library_add'}
                 </span>
+            </div>
+            <div onClick={handleDownload} className={classNames(
+                "absolute",
+                "top-16",
+                "right-2",
+                "p-2",
+                "pb-1",
+                "rounded-md",
+                "text-black",
+                "bg-plexYellowTransparent",
+                "hover:bg-plexYellowHover",
+                "hover:cursor-pointer",
+                "z-50",
+            )}>
+                <span className="material-symbols-outlined">download</span>
             </div>
             <img src={imageSrc} alt="" onClick={handleChooseTitle} className={classNames(
                 "backgrond-image",
