@@ -191,7 +191,8 @@ const Title = ({
             </div>
             <img src={imageSrc} alt="" onClick={handleChooseTitle} className={classNames(
                 "backgrond-image",
-                "h-full",
+                "h-60",
+                "lg:h-80",
                 "max-w-[unset]",
                 "transition-all",
                 "group-hover:brightness-50")}

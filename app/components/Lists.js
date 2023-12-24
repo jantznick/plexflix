@@ -117,10 +117,10 @@ const Lists = () => {
 
     return (
         <>
-            <div className="flex flex-col md:flex-row justify-center w-full items-center mb-8">
-                <div onClick={handleClearList} className="md:mr-auto text-link">Clear recommendations list</div>
+            <div className="flex flex-col lg:flex-row justify-center w-full items-center mb-8">
+                <div onClick={handleClearList} className="lg:mr-auto text-link">Clear recommendations list</div>
                 <div className="">Your Recommendations List</div>
-				<div className="md:ml-auto flex flex-col md:items-end items-center">
+				<div className="lg:ml-auto flex flex-col lg:items-end items-center">
 					<span onClick={submitMatchesList} className="text-link">Find Similar Owned Movies</span>
 					<span onClick={submitRecommendationsList} className="text-link">Find Similar Movies</span>
 				</div>

@@ -38,7 +38,7 @@ const Interstitial = ({slug}) => {
 
     return (
         <div id="interstitial" className="text-white flex" style={{top: window.scrollY + 'px'}}>
-            <div className="bg-black w-[90%] md:w-1/2 m-auto max-h-[75vh] overflow-scroll p-8 flex justify-center flex-wrap">
+            <div className="bg-black w-[90%] lg:w-1/2 m-auto max-h-[75vh] overflow-scroll p-8 flex justify-center flex-wrap">
                 <div className="flex justify-center w-full mb-4">
                     <div className="mr-auto"></div>
                     <div className="font-bold">{title}</div>

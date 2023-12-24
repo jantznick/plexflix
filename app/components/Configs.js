@@ -242,11 +242,11 @@ const Configs = () => {
                     }
 
 
-                    <div className="flex flex-wrap justify-center md:justify-end w-full">
+                    <div className="flex flex-wrap justify-center lg:justify-end w-full">
                         <span className="text-link" onClick={clearBrowserSettings}>Clear saved settings</span>
                         <span className="ml-4">Remember settings for future?</span>
                         <input type="checkbox" name="saveSettingsInBrowser" checked={saveSettingsInBrowser} onChange={() => setSaveSettingsInBrowser(!saveSettingsInBrowser)}/>
-                        <Button clickHandler={saveSettings} classes={'grow md:grow-0 mt-2 md:mt-0'} text="Save Settings" />
+                        <Button clickHandler={saveSettings} classes={'grow lg:grow-0 mt-2 lg:mt-0'} text="Save Settings" />
                     </div>
                 </div>
             </div>
