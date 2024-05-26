@@ -5,6 +5,7 @@ import { PlexContext } from "./App";
 import Configs from "./Configs";
 import Lists from "./Lists";
 import TitlePage from "./TitlePage";
+import SearchResults from "./SearchResults";
 
 const Interstitial = ({slug}) => {
 
@@ -34,11 +35,15 @@ const Interstitial = ({slug}) => {
             title = 'Movie Details';
             children = <TitlePage {...activeTitle} />
             break;
+        case 'search-page':
+            title = 'Search Results';
+            children = <SearchResults />
+            break;
     }
 
     return (
         <div id="interstitial" className="text-white flex" style={{top: window.scrollY + 'px'}}>
-            <div className="bg-black w-[90%] lg:w-1/2 m-auto max-h-[75vh] overflow-scroll p-8 flex justify-center flex-wrap">
+            <div className="bg-black w-[90%] lg:w-1/2 m-auto max-h-[75vh] overflow-scroll p-8 flex justify-center flex-wrap scrollbar-hide">
                 <div className="flex justify-center w-full mb-4">
                     <div className="mr-auto"></div>
                     <div className="font-bold">{title}</div>

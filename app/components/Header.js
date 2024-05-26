@@ -123,6 +123,13 @@ const Header = () => {
         }
     }
 
+    const handleSearchSubmit = (e) => {
+        e.preventDefault();
+        setInterstitialSlug('search-page');
+        setInterstitial(true);
+        window.document.getElementsByTagName('body')[0].style.overflowY = 'hidden';
+    }
+
     const addToList = (title) => {
         if (!recommendationsList.includes(title)) {
             setRecommendationsList([
@@ -143,7 +150,7 @@ const Header = () => {
             <img src="public/images/plexflix-logo.png" alt="PlexFlix Logo" className="lg:w-1/4" />
 
             <div className="items-center flex justify-center flex-wrap w-full lg:w-auto space-x-4 text-white">
-                <form action="" className={classNames(
+                <form onSubmit={handleSearchSubmit} className={classNames(
                     "flex",
                     "bg-white",
                     "rounded-t-md",
@@ -197,13 +204,11 @@ const Header = () => {
                             }
                         </div>
                     </div>
-                    <span className="material-symbols-outlined px-2 hover:cursor-pointer">search</span>
+                    <span onClick={handleSearchSubmit} className="material-symbols-outlined px-2 hover:cursor-pointer">search</span>
                 </form>
                 {Boolean(recommendationsList.length) && <div  onClick={handleOpenLists} className="text-link mb-2 lg:mb-0">View Lists ({recommendationsList.length})</div>}
                 {Boolean(plexLibraries.length) ?
                     <>
-                        {/* <label htmlFor="genreSeparate" className="">Separate by Genre?</label>
-                        <input type="checkbox" name="genreSeparate" id="genreSeparate" className="" onChange={e => setSeparateByGenre(!separateByGenre)}  checked={separateByGenre}/> */}
                         <select name="plexLibraries" id="plexLibraries" className="text-black">
                             {plexLibraries?.map(library => {
                                     return(<option value={library.key} key={library.title}>{library.title}</option>)
