@@ -7,6 +7,10 @@
         <field id="height" type="float" onChange="onSizeChange" />
         <field id="rowIndex" type="integer" onChange="onRowIndexChange" />
         <field id="index" type="integer" />
+        <!-- Set by the owning grid/list; without these the ring stays lit on the
+             selected poster even when the toolbar or sidebar holds focus -->
+        <field id="gridHasFocus" type="boolean" value="true" onChange="onOwnerFocusChange" />
+        <field id="rowListHasFocus" type="boolean" value="true" onChange="onOwnerFocusChange" />
     </interface>
 
     <script type="text/brightscript" uri="PosterItem.brs" />

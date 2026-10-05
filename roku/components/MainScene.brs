@@ -185,8 +185,8 @@ sub onLibraryAllClosed()
     if m.libraryBrowseScreen <> invalid then
         m.libraryBrowseScreen.visible = true
         m.libraryBrowseScreen.suspended = false
-        m.libraryBrowseScreen.refocus = true
         m.libraryBrowseScreen.setFocus(true)
+        m.libraryBrowseScreen.refocus = true
     else if m.libraryHubSource <> invalid then
         showLibraryBrowse(m.libraryHubSource)
     end if
@@ -478,21 +478,23 @@ sub onVideoClosed()
 end sub
 
 sub restoreSectionFocus()
+    ' setFocus first, then refocus: a screen's refocus handler may hand focus to
+    ' one of its own buttons, and setFocus on the screen would take it straight back
     if m.section = "library" and m.libraryAllScreen <> invalid then
-        m.libraryAllScreen.refocus = true
         m.libraryAllScreen.setFocus(true)
+        m.libraryAllScreen.refocus = true
     else if m.section = "library" and m.libraryBrowseScreen <> invalid then
-        m.libraryBrowseScreen.refocus = true
         m.libraryBrowseScreen.setFocus(true)
+        m.libraryBrowseScreen.refocus = true
     else if m.section = "livetv" and m.liveTvScreen <> invalid then
-        m.liveTvScreen.refocus = true
         m.liveTvScreen.setFocus(true)
+        m.liveTvScreen.refocus = true
     else if m.section = "sports" and m.sportsScreen <> invalid then
-        m.sportsScreen.refocus = true
         m.sportsScreen.setFocus(true)
+        m.sportsScreen.refocus = true
     else if m.homeScreen <> invalid then
-        m.homeScreen.refocus = true
         m.homeScreen.setFocus(true)
+        m.homeScreen.refocus = true
     else
         showHome()
     end if

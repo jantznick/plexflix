@@ -145,10 +145,26 @@ sub refreshProgress()
 end sub
 
 sub onFocusPercentChange()
+    refreshFocusVisual()
+end sub
+
+sub onOwnerFocusChange()
+    refreshFocusVisual()
+end sub
+
+sub refreshFocusVisual()
     fp = m.top.focusPercent
     if fp = invalid then fp = 0
-    setFocused(fp > 0.5)
+    setFocused(fp > 0.5 and ownerHasFocus())
 end sub
+
+function ownerHasFocus() as Boolean
+    ' A grid keeps focusPercent on its selected item even when the remote has
+    ' moved on to a toolbar or the sidebar, so the ring has to follow the owner
+    if m.top.gridHasFocus = false then return false
+    if m.top.rowListHasFocus = false then return false
+    return true
+end function
 
 sub setFocused(focused as Boolean)
     if m.focusGlow <> invalid then m.focusGlow.visible = focused
