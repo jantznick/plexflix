@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<component name="LiveTvScreen" extends="Group">
+    <interface>
+        <field id="config" type="assocarray" onChange="onConfigReady" />
+        <field id="selectedItem" type="assocarray" />
+        <field id="loadingMessage" type="string" />
+        <field id="openMenu" type="boolean" alwaysNotify="true" />
+        <field id="refocus" type="boolean" alwaysNotify="true" onChange="onRefocus" />
+    </interface>
+
+    <script type="text/brightscript" uri="LiveTvScreen.brs" />
+    <script type="text/brightscript" uri="pkg:/source/Fonts.brs" />
+
+    <children>
+        <Rectangle width="1920" height="1080" color="0x07070B" />
+
+        <Group translation="[96, 64]">
+            <Label width="1200" height="56" text="Live TV" color="0xFFFFFF">
+                <Font role="font" uri="pkg:/fonts/Outfit-Bold.ttf" size="44" />
+            </Label>
+            <Label id="statusLabel" translation="[0, 58]" width="1500" height="36" text="Loading Live TV..." color="0x777780">
+                <Font role="font" uri="pkg:/fonts/Outfit-Regular.ttf" size="20" />
+            </Label>
+
+            <ShimmerRow id="shimmer" translation="[0, 120]" />
+
+            <ShelfRowList
+                id="liveRows"
+                translation="[0, 120]"
+                itemComponentName="EpisodeItem"
+                numRows="6"
+                rowItemSize="[[300, 170]]"
+                rowItemSpacing="[[24, 0]]"
+                itemSize="[1728, 250]"
+                itemSpacing="[0, 28]"
+                showRowLabel="[true]"
+                rowLabelOffset="[[0, 8]]"
+                rowFocusAnimationStyle="fixedFocus"
+                focusXOffset="[0]"
+                drawFocusFeedback="false"
+                visible="false"
+            />
+        </Group>
+    </children>
+</component>

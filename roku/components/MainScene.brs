@@ -17,6 +17,7 @@ sub init()
     m.sportsScreen = invalid
     m.sportsDetailScreen = invalid
     m.castDetailScreen = invalid
+    m.liveTvScreen = invalid
     m.section = "home"
     m.navExpanded = false
     m.activeLibraryId = ""
@@ -57,6 +58,7 @@ sub clearScreens()
     m.sportsScreen = invalid
     m.sportsDetailScreen = invalid
     m.castDetailScreen = invalid
+    m.liveTvScreen = invalid
 end sub
 
 sub onNavSelected()
@@ -69,6 +71,8 @@ sub onNavSelected()
     setNavExpanded(false)
     if section = "home" then
         showHome()
+    else if section = "livetv" then
+        showLiveTv()
     else if section = "sports" then
         showSports()
     end if
@@ -119,6 +123,31 @@ sub onLibraryBrowseClosed()
     showHome()
 end sub
 
+sub showLiveTv()
+    clearScreens()
+    m.sideNav.active = "livetv"
+    m.liveTvScreen = createObject("roSGNode", "LiveTvScreen")
+    m.liveTvScreen.config = m.config
+    m.liveTvScreen.observeField("selectedItem", "onLiveTvSelected")
+    m.liveTvScreen.observeField("loadingMessage", "onSoftLoading")
+    m.liveTvScreen.observeField("openMenu", "onOpenMenu")
+    m.screens.appendChild(m.liveTvScreen)
+    m.liveTvScreen.setFocus(true)
+end sub
+
+sub onLiveTvSelected()
+    item = m.liveTvScreen.selectedItem
+    if item = invalid then return
+    mediaType = asString(item.mediaType)
+    if mediaType = "recording" or (asString(item.ratingKey) <> "" and mediaType <> "livetv") then
+        ' Completed recordings behave like normal library media
+        if mediaType = "recording" then item.mediaType = "episode"
+        showVideo(item)
+        return
+    end if
+    showVideo(item)
+end sub
+
 sub showSports()
     clearScreens()
     m.sideNav.active = "sports"
@@ -135,6 +164,7 @@ sub onSoftLoading()
     msg = ""
     if m.homeScreen <> invalid then msg = m.homeScreen.loadingMessage
     if m.libraryBrowseScreen <> invalid and (msg = invalid or msg = "") then msg = m.libraryBrowseScreen.loadingMessage
+    if m.liveTvScreen <> invalid and (msg = invalid or msg = "") then msg = m.liveTvScreen.loadingMessage
     if m.sportsScreen <> invalid and (msg = invalid or msg = "") then msg = m.sportsScreen.loadingMessage
     if msg = invalid then msg = ""
     setLoading(msg <> "", msg)
@@ -356,6 +386,9 @@ sub restoreSectionFocus()
     if m.section = "library" and m.libraryBrowseScreen <> invalid then
         m.libraryBrowseScreen.refocus = true
         m.libraryBrowseScreen.setFocus(true)
+    else if m.section = "livetv" and m.liveTvScreen <> invalid then
+        m.liveTvScreen.refocus = true
+        m.liveTvScreen.setFocus(true)
     else if m.section = "sports" and m.sportsScreen <> invalid then
         m.sportsScreen.refocus = true
         m.sportsScreen.setFocus(true)

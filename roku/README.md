@@ -7,8 +7,9 @@ This is intentionally a **design/UX shell** on top of existing Plex data. Creden
 ## What you get
 
 - Dark Netflix-like home: billboard hero + horizontal shelves
-- **Collapsible sidebar** (Left to open): Home, your **Libraries** listed inline, Live Sports
+- **Collapsible sidebar** (Left to open): Home, your **Libraries**, **Live TV**, Live Sports
 - Selecting a library in the sidebar opens that library’s shelves
+- **Live TV / DVR**: On Now, Channels, Guide, Recordings (tunes via Plex DVR → HLS)
 - **Continue Watching**, **Recently Added**, Plex home hubs, and library shelves
 - Continue Watching episodes open the parent show with that episode focused
 - Title detail screen (Cast + More Like This)

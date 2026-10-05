@@ -21,6 +21,18 @@ sub onContentSet()
         return
     end if
 
+    ' Live TV channels: tune DVR then play session HLS
+    if mediaType = "livetv" then
+        m.statusLabel.text = "Tuning " + valueOrEmpty(item.title) + "..."
+        m.task = createObject("roSGNode", "PlexTask")
+        m.task.config = cfg
+        m.task.action = "tuneLiveChannel"
+        m.task.item = item
+        m.task.observeField("response", "onStreamReady")
+        m.task.control = "RUN"
+        return
+    end if
+
     m.task = createObject("roSGNode", "PlexTask")
     m.task.config = cfg
     m.task.action = "streamUrl"

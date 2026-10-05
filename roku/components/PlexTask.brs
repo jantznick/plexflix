@@ -23,6 +23,10 @@ sub exec()
         m.top.response = resolveEpisodeShow(cfg, m.top.item)
     else if action = "personDetail" then
         m.top.response = fetchPersonDetail(cfg, m.top.item)
+    else if action = "liveTv" then
+        m.top.response = fetchLiveTv(cfg)
+    else if action = "tuneLiveChannel" then
+        m.top.response = tuneLiveChannel(cfg, m.top.item)
     else if action = "sportsFeed" then
         m.top.response = fetchSportsFeed(cfg)
     else if action = "streamUrl" then
@@ -106,6 +110,62 @@ function plexGet(cfg as Object, path as String) as Object
                 return { ok: false, error: "Could not parse Plex JSON for " + path }
             end if
             return { ok: true, json: parsed }
+        end if
+    end while
+end function
+
+function plexPost(cfg as Object, path as String, body = "" as String) as Object
+    url = cfg.baseUrl + path
+    if path.Instr("?") > 0 then
+        url = url + "&X-Plex-Token=" + cfg.token
+    else
+        url = url + "?X-Plex-Token=" + cfg.token
+    end if
+
+    request = CreateObject("roUrlTransfer")
+    port = CreateObject("roMessagePort")
+    request.SetMessagePort(port)
+    request.SetUrl(url)
+    request.SetRequest("POST")
+    request.EnableEncodings(true)
+    request.RetainBodyOnError(true)
+    request.AddHeader("Accept", "application/json")
+    request.AddHeader("Content-Type", "application/x-www-form-urlencoded")
+    request.AddHeader("X-Plex-Token", cfg.token)
+    request.AddHeader("X-Plex-Product", cfg.product)
+    request.AddHeader("X-Plex-Version", cfg.version)
+    request.AddHeader("X-Plex-Client-Identifier", cfg.clientId)
+    request.AddHeader("X-Plex-Platform", "Roku")
+    request.AddHeader("X-Plex-Device", "Roku")
+    request.AddHeader("X-Plex-Provides", "player")
+
+    if Left(cfg.baseUrl, 8) = "https://" then
+        request.SetCertificatesFile("common:/certs/ca-bundle.crt")
+        request.InitClientCertificates()
+    end if
+
+    if not request.AsyncPostFromString(body) then
+        return { ok: false, error: "Failed to start POST " + path }
+    end if
+
+    while true
+        msg = wait(20000, port)
+        if msg = invalid then
+            request.AsyncCancel()
+            return { ok: false, error: "Timed out on POST " + path }
+        end if
+        if type(msg) = "roUrlEvent" then
+            code = msg.GetResponseCode()
+            respBody = msg.GetString()
+            if code < 200 or code >= 300 then
+                return { ok: false, error: "Plex HTTP " + safeToStr(code) + " for POST " + path }
+            end if
+            parsed = ParseJson(respBody)
+            if parsed = invalid then
+                ' Some tune responses are sparse; still return body for session parsing
+                return { ok: true, json: invalid, body: respBody }
+            end if
+            return { ok: true, json: parsed, body: respBody }
         end if
     end while
 end function
@@ -747,6 +807,340 @@ function httpGetJson(url as String) as Object
             return ParseJson(body)
         end if
     end while
+end function
+
+function fetchLiveTv(cfg as Object) as Object
+    rows = []
+    errors = []
+
+    dvrId = ""
+    dvrs = plexGet(cfg, "/livetv/dvrs")
+    if dvrs.ok = true then
+        dvrId = firstDvrId(dvrs.json)
+    else if dvrs.error <> invalid then
+        errors.push(dvrs.error)
+    end if
+
+    ' On Now from EPG provider hubs when available
+    onNow = fetchLiveTvWatchNow(cfg)
+    if onNow.count() > 0 then
+        rows.push({ title: "On Now", items: onNow })
+    end if
+
+    ' All channels from DVR
+    if dvrId <> "" then
+        channelsResult = plexGet(cfg, "/livetv/dvrs/" + dvrId + "/channels")
+        if channelsResult.ok = true then
+            channels = mapLiveTvChannels(cfg, channelsResult.json, dvrId)
+            if channels.count() > 0 then rows.push({ title: "Channels", items: channels })
+        else if channelsResult.error <> invalid then
+            errors.push(channelsResult.error)
+        end if
+
+        guideResult = plexGet(cfg, "/livetv/dvrs/" + dvrId + "/guide")
+        if guideResult.ok = true then
+            guideItems = mapLiveTvGuide(cfg, guideResult.json, dvrId)
+            if guideItems.count() > 0 then rows.push({ title: "Guide", items: guideItems })
+        end if
+    end if
+
+    ' Completed DVR recordings
+    recordingsResult = plexGet(cfg, "/livetv/recordings")
+    if recordingsResult.ok = true then
+        recordings = collectMetadata(cfg, recordingsResult.json)
+        if recordings.count() > 0 then
+            for each rec in recordings
+                rec.mediaType = "recording"
+            end for
+            rows.push({ title: "Recordings", items: recordings })
+        end if
+    else if recordingsResult.error <> invalid then
+        errors.push(recordingsResult.error)
+    end if
+
+    if rows.count() = 0 then
+        err = "No Live TV / DVR content found"
+        if dvrId = "" then err = "No DVR configured on this Plex server"
+        if errors.count() > 0 then err = errors[0]
+        return { ok: false, error: err }
+    end if
+
+    return { ok: true, rows: rows, dvrId: dvrId }
+end function
+
+function firstDvrId(json as Object) as String
+    if json = invalid or json.MediaContainer = invalid then return ""
+    list = json.MediaContainer.Dvr
+    if list = invalid then list = json.MediaContainer.Directory
+    if list = invalid then list = json.MediaContainer.Metadata
+    if list = invalid then return ""
+    if GetInterface(list, "ifArray") = invalid then list = [list]
+    if list.count() = 0 then return ""
+    dvr = list[0]
+    id = safeToStr(dvr.key)
+    if id = "" then id = safeToStr(dvr.ratingKey)
+    if id = "" then id = safeToStr(dvr.uuid)
+    ' key may be a path like /livetv/dvrs/1
+    marker = "/livetv/dvrs/"
+    idx = Instr(1, id, marker)
+    if idx > 0 then id = Mid(id, idx + Len(marker))
+    return id
+end function
+
+function fetchLiveTvWatchNow(cfg as Object) as Object
+    items = []
+    providers = plexGet(cfg, "/media/providers")
+    if providers.ok <> true or providers.json = invalid then return items
+    container = providers.json.MediaContainer
+    if container = invalid then return items
+    list = container.MediaProvider
+    if list = invalid then list = container.Provider
+    if list = invalid then return items
+    if GetInterface(list, "ifArray") = invalid then list = [list]
+
+    for each provider in list
+        ident = safeToStr(provider.identifier)
+        if ident = "" then ident = safeToStr(provider.id)
+        lowerIdent = LCase(ident)
+        isEpg = (Instr(1, lowerIdent, "epg") > 0) or (Instr(1, lowerIdent, "livetv") > 0)
+        if isEpg then
+            featurePath = ""
+            features = provider.Feature
+            if features = invalid then features = provider.Directory
+            if features <> invalid then
+                if GetInterface(features, "ifArray") = invalid then features = [features]
+                for each feat in features
+                    key = safeToStr(feat.key)
+                    if Instr(1, LCase(key), "watchnow") > 0 then
+                        featurePath = key
+                        exit for
+                    end if
+                end for
+            end if
+            if featurePath = "" then
+                featurePath = "/" + ident + "/watchnow/all"
+            end if
+            if Left(featurePath, 1) <> "/" then featurePath = "/" + featurePath
+            nowResult = plexGet(cfg, featurePath)
+            if nowResult.ok = true then
+                mapped = mapLiveTvGuide(cfg, nowResult.json, "")
+                if mapped.count() = 0 then mapped = collectMetadata(cfg, nowResult.json)
+                for each it in mapped
+                    mt = safeToStr(it.mediaType)
+                    if mt = "" or mt = "movie" or mt = "episode" then it.mediaType = "livetv"
+                    if safeToStr(it.channelId) = "" and safeToStr(it.key) <> "" then it.channelId = safeToStr(it.key)
+                    items.push(it)
+                end for
+            end if
+            if items.count() > 0 then return items
+        end if
+    end for
+    return items
+end function
+
+function mapLiveTvChannels(cfg as Object, json as Object, dvrId as String) as Object
+    items = []
+    if json = invalid or json.MediaContainer = invalid then return items
+    list = json.MediaContainer.Channel
+    if list = invalid then list = json.MediaContainer.Directory
+    if list = invalid then list = json.MediaContainer.Metadata
+    if list = invalid then list = json.MediaContainer.Video
+    if list = invalid then return items
+    if GetInterface(list, "ifArray") = invalid then list = [list]
+
+    for each ch in list
+        channelId = firstString(ch, ["channelIdentifier", "channelId", "identifier", "tag", "key", "ratingKey"])
+        callSign = firstString(ch, ["callSign", "title", "name", "label"])
+        channelNum = firstString(ch, ["channelNumber", "channel", "index", "number"])
+        title = callSign
+        if channelNum <> "" and callSign <> "" then
+            title = channelNum + "  " + callSign
+        else if channelNum <> "" then
+            title = "Ch " + channelNum
+        end if
+        if title = "" then title = "Channel"
+
+        thumb = ""
+        if ch.thumb <> invalid then thumb = safeToStr(ch.thumb)
+        if thumb = "" and ch.art <> invalid then thumb = safeToStr(ch.art)
+
+        ' Prefer channel number / identifier for tune path
+        tuneId = channelId
+        if channelNum <> "" then tuneId = channelNum
+        if tuneId = "" then tuneId = safeToStr(ch.key)
+
+        items.push({
+            title: title,
+            description: callSign,
+            mediaType: "livetv",
+            ratingKey: safeToStr(ch.ratingKey),
+            key: safeToStr(ch.key),
+            channelId: tuneId,
+            dvrId: dvrId,
+            hdPosterUrl: imageUrl(cfg, thumb, 480, 270),
+            hdBackdropUrl: imageUrl(cfg, thumb, 1280, 720),
+            duration: 0,
+            viewOffset: 0,
+            year: "",
+            rating: "",
+            contentRating: ""
+        })
+    end for
+    return items
+end function
+
+function mapLiveTvGuide(cfg as Object, json as Object, dvrId as String) as Object
+    items = []
+    if json = invalid then return items
+
+    ' Guide can be Metadata list or nested GridChannel → Video/Metadata
+    container = json.MediaContainer
+    if container = invalid then return items
+
+    list = container.Metadata
+    if list = invalid then list = container.Video
+    if list = invalid then list = container.Directory
+    if list = invalid then list = container.Channel
+    if list = invalid then list = container.GridChannel
+    if list = invalid then return items
+    if GetInterface(list, "ifArray") = invalid then list = [list]
+
+    for each entry in list
+        ' Nested airings under a channel node
+        airings = entry.Video
+        if airings = invalid then airings = entry.Metadata
+        if airings <> invalid then
+            if GetInterface(airings, "ifArray") = invalid then airings = [airings]
+            channelNum = firstString(entry, ["channelNumber", "channelIdentifier", "channel", "title"])
+            for each air in airings
+                items.push(guideAiringToItem(cfg, air, dvrId, channelNum))
+            end for
+        else
+            items.push(guideAiringToItem(cfg, entry, dvrId, ""))
+        end if
+        if items.count() >= 40 then exit for
+    end for
+    return items
+end function
+
+function guideAiringToItem(cfg as Object, air as Object, dvrId as String, channelHint as String) as Object
+    title = firstString(air, ["title", "grandparentTitle", "name"])
+    if title = "" then title = "On Now"
+    channelId = firstString(air, ["channelIdentifier", "channelId", "channelNumber", "channel"])
+    if channelId = "" then channelId = channelHint
+    channelLabel = firstString(air, ["channelTitle", "callSign", "channelIdentifier"])
+    if channelLabel = "" then channelLabel = channelHint
+    summary = firstString(air, ["summary", "description", "tagline"])
+    desc = channelLabel
+    if summary <> "" and desc <> "" then
+        desc = channelLabel + " · " + summary
+    else if summary <> "" then
+        desc = summary
+    end if
+
+    thumb = ""
+    if air.thumb <> invalid then thumb = safeToStr(air.thumb)
+    if thumb = "" and air.grandparentThumb <> invalid then thumb = safeToStr(air.grandparentThumb)
+    if thumb = "" and air.art <> invalid then thumb = safeToStr(air.art)
+
+    mediaType = safeToStr(air.type)
+    if mediaType = "" then mediaType = "livetv"
+    ' Airings without a plex library key still tune by channel
+    if mediaType <> "recording" then mediaType = "livetv"
+
+    return {
+        title: title,
+        description: desc,
+        mediaType: mediaType,
+        ratingKey: safeToStr(air.ratingKey),
+        key: safeToStr(air.key),
+        channelId: channelId,
+        dvrId: dvrId,
+        hdPosterUrl: imageUrl(cfg, thumb, 480, 270),
+        hdBackdropUrl: imageUrl(cfg, thumb, 1280, 720),
+        duration: 0,
+        viewOffset: 0,
+        year: "",
+        rating: "",
+        contentRating: ""
+    }
+end function
+
+function tuneLiveChannel(cfg as Object, item as Object) as Object
+    if item = invalid then return { ok: false, error: "No channel" }
+
+    dvrId = safeToStr(item.dvrId)
+    channelId = safeToStr(item.channelId)
+    if channelId = "" then channelId = safeToStr(item.key)
+    if channelId = "" then channelId = safeToStr(item.ratingKey)
+
+    if dvrId = "" then
+        dvrs = plexGet(cfg, "/livetv/dvrs")
+        if dvrs.ok = true then dvrId = firstDvrId(dvrs.json)
+    end if
+    if dvrId = "" then return { ok: false, error: "No DVR available to tune" }
+    if channelId = "" then return { ok: false, error: "Missing channel id" }
+
+    path = "/livetv/dvrs/" + dvrId + "/channels/" + requestEncode(channelId) + "/tune"
+    result = plexPost(cfg, path, "")
+    if result.ok <> true then return result
+
+    sessionId = extractLiveSessionId(result.json, result.body)
+    if sessionId = "" then
+        return { ok: false, error: "Tuned, but no Live TV session id was returned" }
+    end if
+
+    consumerId = safeToStr(cfg.clientId)
+    if consumerId = "" then consumerId = "plexflix-roku"
+    url = cfg.baseUrl + "/livetv/sessions/" + sessionId + "/" + requestEncode(consumerId) + "/index.m3u8?X-Plex-Token=" + cfg.token
+    return { ok: true, url: url, sessionId: sessionId }
+end function
+
+function extractLiveSessionId(json as Object, body as String) as String
+    if json <> invalid and json.MediaContainer <> invalid then
+        mc = json.MediaContainer
+        for each keyName in ["Session", "Metadata", "Video", "Directory"]
+            node = invalid
+            if keyName = "Session" then node = mc.Session
+            if keyName = "Metadata" then node = mc.Metadata
+            if keyName = "Video" then node = mc.Video
+            if keyName = "Directory" then node = mc.Directory
+            if node <> invalid then
+                if GetInterface(node, "ifArray") = invalid then node = [node]
+                if node.count() > 0 then
+                    entry = node[0]
+                    id = firstString(entry, ["sessionKey", "session", "ratingKey", "key", "id"])
+                    if id <> "" then
+                        marker = "/livetv/sessions/"
+                        idx = Instr(1, id, marker)
+                        if idx > 0 then return Mid(id, idx + Len(marker))
+                        ' key might include slash suffixes
+                        slash = Instr(1, id, "/")
+                        if slash > 0 then id = Left(id, slash - 1)
+                        return id
+                    end if
+                end if
+            end if
+        end for
+        if mc.sessionKey <> invalid then return safeToStr(mc.sessionKey)
+    end if
+
+    ' Fallback: scrape session id from raw body
+    if body <> invalid and body <> "" then
+        marker = "/livetv/sessions/"
+        idx = Instr(1, body, marker)
+        if idx > 0 then
+            rest = Mid(body, idx + Len(marker))
+            out = ""
+            for i = 1 to Len(rest)
+                ch = Mid(rest, i, 1)
+                if ch = "/" or ch = """" or ch = "'" or ch = "<" or ch = " " or ch = "&" then exit for
+                out = out + ch
+            end for
+            return out
+        end if
+    end if
+    return ""
 end function
 
 function fetchSportsFeed(cfg as Object) as Object

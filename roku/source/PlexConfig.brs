@@ -12,7 +12,7 @@ function GetPlexConfig() as Object
         clientId: "plexflix-roku-mvp-001",
 
         product: "PlexFlix",
-        version: "0.3.8",
+        version: "0.3.9",
 
         ' How many items to request per row
         rowSize: 36,
