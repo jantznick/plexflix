@@ -1,2 +1,5 @@
 node_modules/*
-roku/dist/roku/scripts/__pycache__/
+roku/dist/
+roku/scripts/__pycache__/
+**/__pycache__/
+*.pyc
