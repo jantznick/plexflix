@@ -468,9 +468,38 @@ function buildHome(cfg as Object) as Object
     end if
 
     shuffleHomeRows(root)
+    stampRowStagger(root)
 
     return { ok: true, content: root }
 end function
+
+sub stampRowStagger(root as Object)
+    ' Put stagger on each item so PosterItem does not depend on RowList.rowIndex
+    ' (brs-desktop / some firmwares never set rowIndex on item components).
+    if root = invalid then return
+    for i = 0 to root.getChildCount() - 1
+        row = root.getChild(i)
+        if row <> invalid then
+            stagger = 0
+            if (i MOD 2) = 1 then stagger = 86
+            for j = 0 to row.getChildCount() - 1
+                child = row.getChild(j)
+                if child <> invalid then
+                    if child.staggerX = invalid then
+                        child.addFields({ staggerX: stagger, shelfIndex: i })
+                    else
+                        child.staggerX = stagger
+                        if child.shelfIndex = invalid then
+                            child.addFields({ shelfIndex: i })
+                        else
+                            child.shelfIndex = i
+                        end if
+                    end if
+                end if
+            end for
+        end if
+    end for
+end sub
 
 sub shuffleHomeRows(root as Object)
     count = root.getChildCount()
