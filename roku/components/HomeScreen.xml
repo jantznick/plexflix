@@ -47,12 +47,6 @@
                 </Group>
             </Group>
 
-            <!-- Peek strip: posters start at +half-tile so they never share columns with the row below -->
-            <Group id="peekStrip" translation="[96, 0]" visible="false" clippingRect="[-96, 0, 1920, 140]">
-                <Group id="peekPosters" translation="[0, -100]" />
-            </Group>
-
-            <!-- Clip TOP of the RowList so fixedFocus can't show an aligned previous shelf -->
             <Group id="rowsClip" translation="[0, 720]" clippingRect="[0, 0, 1920, 960]">
                 <ShelfRowList
                     id="rowList"
@@ -66,6 +60,7 @@
                     showRowLabel="[true]"
                     rowLabelOffset="[[0, 4]]"
                     rowFocusAnimationStyle="fixedFocus"
+                    vertFocusAnimationStyle="floatingFocus"
                     focusXOffset="[0]"
                     drawFocusFeedback="false"
                 />

@@ -52,6 +52,7 @@
                 showRowLabel="[true]"
                 rowLabelOffset="[[0, 8]]"
                 rowFocusAnimationStyle="fixedFocus"
+                vertFocusAnimationStyle="floatingFocus"
                 focusXOffset="[0]"
                 drawFocusFeedback="false"
             />

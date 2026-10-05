@@ -9,22 +9,20 @@ sub init()
     m.heroSummary = m.top.findNode("heroSummary")
     m.rowList = m.top.findNode("rowList")
     m.rowsClip = m.top.findNode("rowsClip")
-    m.peekStrip = m.top.findNode("peekStrip")
-    m.peekPosters = m.top.findNode("peekPosters")
     m.homeAnim = m.top.findNode("homeAnim")
     m.billboardMove = m.top.findNode("billboardMove")
     m.billboardFade = m.top.findNode("billboardFade")
     m.rowsMove = m.top.findNode("rowsMove")
 
-    ' Active shelf is ALWAYS the RowList focus slot — never the peek strip.
-    ' rowsClip clips away RowList's native previous-row peek (which was aligned + moved).
+    ' Shelves use floatingFocus, so the shelves above and below the focused one
+    ' are really on screen; Up and Down move the highlight between them and only
+    ' scroll once it would leave the visible rows.
     m.expandedRowY = 720
     m.collapsedRowY = 130
     m.rowsX = 96
     m.heroHideY = -920
     m.isCollapsed = false
     m.currentRow = -1
-    m.tileStep = 172
 
     if m.heroArt <> invalid then
         m.heroArt.loadDisplayMode = "scaleToZoom"
@@ -54,7 +52,6 @@ sub init()
     m.focusPoll.observeField("fire", "onFocusPoll")
     m.focusPoll.control = "start"
 
-    hidePeek()
     m.top.observeField("config", "onConfigReady")
     m.top.setFocus(true)
 end sub
@@ -146,70 +143,8 @@ sub applyFocusedRow(force as Boolean)
     if item = invalid then return
 
     m.currentRow = rowIndex
-    if rowChanged then
-        setBrowseMode(rowIndex > 0)
-        updatePeek(rowIndex)
-    end if
+    if rowChanged then setBrowseMode(rowIndex > 0)
     updateHeroContent(item)
-end sub
-
-sub hidePeek()
-    if m.peekStrip <> invalid then m.peekStrip.visible = false
-    clearPeekPosters()
-end sub
-
-sub clearPeekPosters()
-    if m.peekPosters = invalid then return
-    while m.peekPosters.getChildCount() > 0
-        m.peekPosters.removeChildIndex(0)
-    end while
-end sub
-
-sub updatePeek(rowIndex as Integer)
-    ' Peek = previous shelf only. Never focusable.
-    if rowIndex < 1 or m.isCollapsed <> true then
-        hidePeek()
-        return
-    end if
-
-    prev = m.rowList.content.getChild(rowIndex - 1)
-    if prev = invalid then
-        hidePeek()
-        return
-    end if
-
-    clearPeekPosters()
-
-    ' Peek only: half-tile left overhang so it doesn't line up with the focused shelf.
-    ' (Whole-shelf stagger is not used — it pulls the focused poster off-screen.)
-    stagger = -86
-
-    maxN = 10
-    drawn = 0
-    x = stagger
-    for i = 0 to prev.getChildCount() - 1
-        if drawn >= maxN then exit for
-        it = prev.getChild(i)
-        if it <> invalid then
-            p = createObject("roSGNode", "Poster")
-            p.width = 150
-            p.height = 225
-            p.loadDisplayMode = "scaleToZoom"
-            p.loadWidth = 300
-            p.loadHeight = 450
-            p.opacity = 0.55
-            uri = ""
-            if it.hdPosterUrl <> invalid then uri = it.hdPosterUrl
-            if uri <> "" then p.uri = uri else p.uri = "pkg:/images/poster_placeholder.png"
-            p.translation = [x, 0]
-            m.peekPosters.appendChild(p)
-            x = x + m.tileStep
-            drawn = drawn + 1
-        end if
-    end for
-
-    m.peekRow = rowIndex
-    m.peekStrip.visible = true
 end sub
 
 sub setBrowseMode(collapsed as Boolean)
@@ -221,7 +156,6 @@ sub setBrowseMode(collapsed as Boolean)
         m.pendingHero = [0, 0]
         m.pendingRows = [0, m.expandedRowY]
         m.pendingOpacity = 1.0
-        hidePeek()
     end if
 
     m.isCollapsed = collapsed
@@ -249,7 +183,6 @@ sub applyBrowseModeSnap()
         m.billboard.visible = true
         m.heroCopy.visible = true
         m.billboard.opacity = 1.0
-        hidePeek()
     end if
 end sub
 
@@ -363,7 +296,6 @@ end sub
 sub onEscapeUp()
     if m.isCollapsed then
         setBrowseMode(false)
-        hidePeek()
         if m.rowList.content <> invalid and m.rowList.content.getChildCount() > 0 then
             m.rowList.jumpToRowItem = [0, 0]
         end if
