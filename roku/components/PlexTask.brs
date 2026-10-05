@@ -479,7 +479,8 @@ function shuffleArray(list as Object) as Object
     end for
     n = arr.count()
     for i = n - 1 to 1 step -1
-        j = Int(Rnd() * (i + 1))
+        ' Rnd(0) → float in [0,1); Rnd(n) → int 1..n
+        j = Int(Rnd(0) * (i + 1))
         tmp = arr[i]
         arr[i] = arr[j]
         arr[j] = tmp
