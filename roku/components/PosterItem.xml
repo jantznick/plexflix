@@ -12,7 +12,6 @@
     <script type="text/brightscript" uri="PosterItem.brs" />
 
     <children>
-        <!-- Shifted as a unit for odd-row half-tile stagger -->
         <Group id="visual">
             <Rectangle
                 id="shadow"
