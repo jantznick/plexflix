@@ -1,0 +1,128 @@
+sub init()
+    m.video = m.top.findNode("video")
+    m.statusLabel = m.top.findNode("statusLabel")
+    m.video.observeField("state", "onVideoState")
+end sub
+
+sub onContentSet()
+    item = m.top.content
+    cfg = m.top.config
+    if item = invalid or cfg = invalid then return
+
+    m.statusLabel.text = "Preparing " + valueOrEmpty(item.title) + "..."
+
+    ' Live sports / direct URLs skip Plex transcoder
+    mediaType = valueOrEmpty(item.mediaType)
+    directUrl = ""
+    if item.streamUrl <> invalid then directUrl = valueOrEmpty(item.streamUrl)
+    if directUrl = "" and mediaType = "sport" then directUrl = valueOrEmpty(item.key)
+    if directUrl <> "" and Left(directUrl, 4) = "http" then
+        playDirect(directUrl, item)
+        return
+    end if
+
+    ' Live TV channels: tune DVR then play session HLS
+    if mediaType = "livetv" then
+        m.statusLabel.text = "Tuning " + valueOrEmpty(item.title) + "..."
+        m.task = createObject("roSGNode", "PlexTask")
+        m.task.config = cfg
+        m.task.action = "tuneLiveChannel"
+        m.task.item = item
+        m.task.observeField("response", "onStreamReady")
+        m.task.control = "RUN"
+        return
+    end if
+
+    m.task = createObject("roSGNode", "PlexTask")
+    m.task.config = cfg
+    m.task.action = "streamUrl"
+    m.task.item = item
+    m.task.observeField("response", "onStreamReady")
+    m.task.control = "RUN"
+end sub
+
+sub playDirect(url as String, item as Object)
+    contentNode = createObject("roSGNode", "ContentNode")
+    contentNode.url = url
+    contentNode.title = valueOrEmpty(item.title)
+    lowerUrl = LCase(url)
+    if Right(lowerUrl, 5) = ".m3u8" or Instr(1, lowerUrl, "m3u8") > 0 then
+        contentNode.streamFormat = "hls"
+    else if Right(lowerUrl, 4) = ".mpd" then
+        contentNode.streamFormat = "dash"
+    else
+        contentNode.streamFormat = "mp4"
+    end if
+    m.video.content = contentNode
+    m.video.control = "play"
+    m.statusLabel.visible = false
+    m.video.setFocus(true)
+end sub
+
+sub onStreamReady()
+    response = m.task.response
+    if response = invalid or response.ok <> true or response.url = invalid or response.url = "" then
+        err = "Playback failed"
+        if response <> invalid and response.error <> invalid then err = response.error
+        m.statusLabel.text = err
+        return
+    end if
+
+    item = m.top.content
+    contentNode = createObject("roSGNode", "ContentNode")
+    contentNode.url = response.url
+    contentNode.title = valueOrEmpty(item.title)
+    contentNode.streamFormat = "hls"
+    if item.duration <> invalid then contentNode.length = Int(item.duration / 1000)
+    if item.viewOffset <> invalid and item.viewOffset > 0 then
+        contentNode.playStart = Int(item.viewOffset / 1000)
+    end if
+
+    m.video.content = contentNode
+    m.video.control = "play"
+    m.statusLabel.visible = false
+    m.video.setFocus(true)
+end sub
+
+sub onVideoState()
+    state = m.video.state
+    if state = "error"
+        m.statusLabel.visible = true
+        m.statusLabel.text = "Video error — try another title or check Plex transcoder"
+    else if state = "finished"
+        m.top.closed = true
+    end if
+end sub
+
+sub onCloseRequested()
+    if m.top.close = true then
+        stopAndClose()
+    end if
+end sub
+
+sub stopAndClose()
+    if m.video <> invalid then m.video.control = "stop"
+    m.top.closed = true
+end sub
+
+function onKeyEvent(key as String, press as Boolean) as Boolean
+    if not press then return false
+    if key = "back"
+        stopAndClose()
+        return true
+    end if
+    return false
+end function
+
+function valueOrEmpty(value as Dynamic) as String
+    if value = invalid then return ""
+    valueType = type(value)
+    if valueType = "String" or valueType = "roString" then return value
+    if valueType = "Integer" or valueType = "roInt" or valueType = "roInteger" or valueType = "LongInteger" then
+        return StrI(value).Trim()
+    end if
+    if valueType = "Float" or valueType = "Double" or valueType = "roFloat" or valueType = "roDouble" then
+        return Str(value).Trim()
+    end if
+    return ""
+end function

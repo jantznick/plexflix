@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!--
+  A real focusable button. Painting a Group and calling setFocus() on an
+  ancestor of a grid does not move focus off the grid, so OK keeps opening
+  whatever the grid had selected. Buttons have to be their own focus target.
+-->
+<component name="FocusButton" extends="Group">
+    <interface>
+        <field id="text" type="string" onChange="onTextChange" />
+        <field id="buttonWidth" type="float" value="200" onChange="onSizeChange" />
+        <field id="buttonHeight" type="float" value="48" onChange="onSizeChange" />
+        <field id="fontSize" type="float" value="22" onChange="onTextChange" />
+        <!-- Unfocused accent buttons paint red instead of grey -->
+        <field id="accent" type="boolean" value="false" onChange="onPaint" />
+        <field id="selected" type="boolean" alwaysNotify="true" />
+    </interface>
+
+    <script type="text/brightscript" uri="FocusButton.brs" />
+    <script type="text/brightscript" uri="pkg:/source/Fonts.brs" />
+
+    <children>
+        <Rectangle id="bg" width="200" height="48" color="0x2A2A32" />
+        <Label id="label" width="200" height="48" horizAlign="center" vertAlign="center" text="" color="0xFFFFFF" />
+    </children>
+</component>

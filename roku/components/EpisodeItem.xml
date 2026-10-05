@@ -1,0 +1,90 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<component name="EpisodeItem" extends="Group">
+    <interface>
+        <field id="itemContent" type="node" onChange="onContentChange" />
+        <field id="focusPercent" type="float" onChange="onFocusPercentChange" />
+        <field id="width" type="float" onChange="onSizeChange" />
+        <field id="height" type="float" onChange="onSizeChange" />
+    </interface>
+
+    <script type="text/brightscript" uri="EpisodeItem.brs" />
+
+    <children>
+        <Rectangle
+            id="shadow"
+            width="336"
+            height="192"
+            translation="[10, 10]"
+            color="0x000000"
+            opacity="0.4"
+        />
+        <Poster
+            id="still"
+            width="320"
+            height="180"
+            loadDisplayMode="scaleToZoom"
+            failedBitmapUri="pkg:/images/poster_placeholder.png"
+            loadingBitmapUri="pkg:/images/poster_placeholder.png"
+            uri="pkg:/images/poster_placeholder.png"
+            opacity="0.78"
+        />
+        <Rectangle
+            id="titleScrim"
+            width="320"
+            height="52"
+            translation="[0, 128]"
+            color="0x000000"
+            opacity="0.7"
+        />
+        <Label
+            id="titleLabel"
+            translation="[12, 136]"
+            width="296"
+            height="40"
+            color="0xFFFFFF"
+            wrap="true"
+            maxLines="2"
+        >
+            <Font role="font" uri="pkg:/fonts/Outfit-Medium.ttf" size="18" />
+        </Label>
+
+        <Rectangle id="focusGlow" width="336" height="196" translation="[-8, -8]" color="0x3B82F6" opacity="0.35" visible="false" />
+        <Rectangle id="ringT" width="336" height="4" translation="[-8, -8]" color="0xFFFFFF" visible="false" />
+        <Rectangle id="ringB" width="336" height="4" translation="[-8, 184]" color="0xFFFFFF" visible="false" />
+        <Rectangle id="ringL" width="4" height="196" translation="[-8, -8]" color="0xFFFFFF" visible="false" />
+        <Rectangle id="ringR" width="4" height="196" translation="[324, -8]" color="0xFFFFFF" visible="false" />
+        <Poster
+            id="focusRing"
+            width="336"
+            height="196"
+            translation="[-8, -8]"
+            loadDisplayMode="scaleToFill"
+            uri="pkg:/images/focus_ring_wide.png"
+            visible="false"
+        />
+        <Rectangle
+            id="focusAccent"
+            width="336"
+            height="5"
+            translation="[-8, 180]"
+            color="0xE50914"
+            visible="false"
+        />
+        <Rectangle
+            id="progressBg"
+            width="320"
+            height="4"
+            translation="[0, 176]"
+            color="0x404040"
+            visible="false"
+        />
+        <Rectangle
+            id="progressFg"
+            width="0"
+            height="4"
+            translation="[0, 176]"
+            color="0xE50914"
+            visible="false"
+        />
+    </children>
+</component>

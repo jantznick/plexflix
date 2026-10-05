@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<component name="SportsScreen" extends="Group">
+    <interface>
+        <field id="config" type="assocarray" onChange="onConfigReady" />
+        <field id="selectedItem" type="assocarray" />
+        <field id="loadingMessage" type="string" />
+        <field id="openMenu" type="boolean" alwaysNotify="true" />
+        <field id="refocus" type="boolean" alwaysNotify="true" onChange="onRefocus" />
+    </interface>
+
+    <script type="text/brightscript" uri="SportsScreen.brs" />
+    <script type="text/brightscript" uri="pkg:/source/Fonts.brs" />
+
+    <children>
+        <Rectangle width="1920" height="1080" color="0x0A0E18" />
+
+        <Rectangle width="1920" height="56" color="0x121A2A" />
+        <Label translation="[96, 12]" width="500" height="36" text="LIVE SPORTS GUIDE" color="0xE50914">
+            <Font role="font" uri="pkg:/fonts/Outfit-Bold.ttf" size="24" />
+        </Label>
+        <Label id="clockLabel" translation="[1400, 14]" width="420" height="32" horizAlign="right" text="" color="0xA8B0C0">
+            <Font role="font" uri="pkg:/fonts/Outfit-Medium.ttf" size="18" />
+        </Label>
+
+        <Group translation="[96, 72]">
+            <Label id="eventTitle" width="900" height="52" color="0xFFFFFF" wrap="true" maxLines="2" text="Select a game">
+                <Font role="font" uri="pkg:/fonts/Outfit-Bold.ttf" size="34" />
+            </Label>
+            <Label id="eventMeta" translation="[0, 56]" width="900" height="28" color="0x8FA0B8" text="">
+                <Font role="font" uri="pkg:/fonts/Outfit-Medium.ttf" size="18" />
+            </Label>
+            <Label id="eventSummary" translation="[0, 90]" width="900" height="80" color="0xC5CCD8" wrap="true" maxLines="3" lineSpacing="3" text="">
+                <Font role="font" uri="pkg:/fonts/Outfit-Regular.ttf" size="18" />
+            </Label>
+            <Label id="statusLabel" translation="[0, 190]" width="900" height="32" text="" color="0x778099">
+                <Font role="font" uri="pkg:/fonts/Outfit-Regular.ttf" size="16" />
+            </Label>
+
+            <!-- height=250, width=250*(16/9)=444 -->
+            <Rectangle id="previewBg" translation="[1020, 0]" width="444" height="250" color="0x111820" />
+            <Poster
+                id="previewArt"
+                translation="[1020, 0]"
+                width="444"
+                height="250"
+                loadDisplayMode="scaleToZoom"
+                loadWidth="1280"
+                loadHeight="720"
+                uri="pkg:/images/poster_placeholder.png"
+                opacity="0.5"
+            />
+        </Group>
+
+        <Rectangle translation="[0, 350]" width="1920" height="36" color="0x1A2438" />
+        <Label translation="[120, 356]" width="320" height="28" text="LEAGUE" color="0x8FA0B8">
+            <Font role="font" uri="pkg:/fonts/Outfit-SemiBold.ttf" size="14" />
+        </Label>
+        <Label translation="[392, 356]" width="780" height="28" text="EVENT" color="0xE8EEF8">
+            <Font role="font" uri="pkg:/fonts/Outfit-SemiBold.ttf" size="14" />
+        </Label>
+        <Label translation="[1212, 356]" width="400" height="28" text="STREAMS" color="0x8FA0B8">
+            <Font role="font" uri="pkg:/fonts/Outfit-SemiBold.ttf" size="14" />
+        </Label>
+
+        <EscapeMarkupList
+            id="guideList"
+            translation="[72, 392]"
+            itemComponentName="GuideRowItem"
+            itemSize="[1776, 40]"
+            itemSpacing="[0, 2]"
+            numRows="15"
+            vertFocusAnimationStyle="floatingFocus"
+            drawFocusFeedback="false"
+        />
+    </children>
+</component>

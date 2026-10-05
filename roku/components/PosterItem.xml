@@ -1,0 +1,110 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<component name="PosterItem" extends="Group">
+    <interface>
+        <field id="itemContent" type="node" onChange="onContentChange" />
+        <field id="focusPercent" type="float" onChange="onFocusPercentChange" />
+        <field id="width" type="float" onChange="onSizeChange" />
+        <field id="height" type="float" onChange="onSizeChange" />
+        <field id="rowIndex" type="integer" onChange="onRowIndexChange" />
+        <field id="index" type="integer" />
+        <!-- Set by the owning grid/list; without these the ring stays lit on the
+             selected poster even when the toolbar or sidebar holds focus -->
+        <field id="gridHasFocus" type="boolean" value="true" onChange="onOwnerFocusChange" />
+        <field id="rowListHasFocus" type="boolean" value="true" onChange="onOwnerFocusChange" />
+    </interface>
+
+    <script type="text/brightscript" uri="PosterItem.brs" />
+
+    <children>
+        <Group id="visual">
+            <Rectangle
+                id="shadow"
+                width="184"
+                height="264"
+                translation="[10, 12]"
+                color="0x000000"
+                opacity="0.4"
+            />
+            <Rectangle
+                id="cardBg"
+                width="168"
+                height="252"
+                color="0x16161E"
+            />
+            <Poster
+                id="poster"
+                width="168"
+                height="252"
+                loadDisplayMode="scaleToZoom"
+                failedBitmapUri="pkg:/images/poster_placeholder.png"
+                loadingBitmapUri="pkg:/images/poster_placeholder.png"
+                uri="pkg:/images/poster_placeholder.png"
+                opacity="0.78"
+            />
+
+            <Rectangle id="focusGlow" width="184" height="268" translation="[-8, -8]" color="0x3B82F6" opacity="0.35" visible="false" />
+            <Rectangle id="ringT" width="184" height="4" translation="[-8, -8]" color="0xFFFFFF" visible="false" />
+            <Rectangle id="ringB" width="184" height="4" translation="[-8, 256]" color="0xFFFFFF" visible="false" />
+            <Rectangle id="ringL" width="4" height="268" translation="[-8, -8]" color="0xFFFFFF" visible="false" />
+            <Rectangle id="ringR" width="4" height="268" translation="[172, -8]" color="0xFFFFFF" visible="false" />
+            <Poster
+                id="focusRing"
+                width="184"
+                height="268"
+                translation="[-8, -8]"
+                loadDisplayMode="scaleToFill"
+                uri="pkg:/images/focus_ring.png"
+                visible="false"
+            />
+            <Rectangle
+                id="focusAccent"
+                width="184"
+                height="5"
+                translation="[-8, 252]"
+                color="0xE50914"
+                visible="false"
+            />
+
+            <Rectangle
+                id="progressBg"
+                width="168"
+                height="5"
+                translation="[0, 247]"
+                color="0x404040"
+                visible="false"
+            />
+            <Rectangle
+                id="progressFg"
+                width="0"
+                height="5"
+                translation="[0, 247]"
+                color="0xE50914"
+                visible="false"
+            />
+
+            <Rectangle
+                id="titleBar"
+                width="168"
+                height="56"
+                translation="[0, 196]"
+                color="0x000000"
+                opacity="0.72"
+                visible="false"
+            />
+            <Label
+                id="titleLabel"
+                width="160"
+                height="48"
+                translation="[4, 200]"
+                horizAlign="left"
+                vertAlign="center"
+                wrap="false"
+                maxLines="2"
+                color="0xFFFFFF"
+                visible="false"
+            >
+                <Font role="font" uri="pkg:/fonts/Outfit-Medium.ttf" size="18" />
+            </Label>
+        </Group>
+    </children>
+</component>

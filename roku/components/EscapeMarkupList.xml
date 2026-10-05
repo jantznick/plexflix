@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<component name="EscapeMarkupList" extends="MarkupList">
+    <interface>
+        <field id="escapeUp" type="boolean" alwaysNotify="true" />
+        <field id="escapeLeft" type="boolean" alwaysNotify="true" />
+        <field id="escapeBack" type="boolean" alwaysNotify="true" />
+    </interface>
+    <script type="text/brightscript" uri="EscapeMarkupList.brs" />
+</component>

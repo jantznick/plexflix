@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<component name="HomeScreen" extends="Group">
+    <interface>
+        <field id="config" type="assocarray" />
+        <field id="selectedItem" type="assocarray" />
+        <field id="loadingMessage" type="string" />
+        <field id="openMenu" type="boolean" alwaysNotify="true" />
+        <field id="refocus" type="boolean" alwaysNotify="true" onChange="onRefocus" />
+    </interface>
+
+    <script type="text/brightscript" uri="HomeScreen.brs" />
+    <script type="text/brightscript" uri="pkg:/source/Fonts.brs" />
+
+    <children>
+        <Rectangle width="1920" height="1080" color="0x07070B" />
+
+        <Group id="loadingPanel" translation="[0, 0]" visible="true">
+            <SplashMosaic id="splashMosaic" />
+        </Group>
+
+        <Group id="frame" translation="[0, 0]" visible="false" clippingRect="[0, 0, 1920, 1080]">
+            <!-- Landscape billboard matching DetailScreen (soft washes, no left panel) -->
+            <Group id="billboard" translation="[0, 0]">
+                <Poster
+                    id="heroArt"
+                    width="1920"
+                    height="680"
+                    loadDisplayMode="scaleToZoom"
+                    loadWidth="1920"
+                    loadHeight="1080"
+                    uri=""
+                />
+                <Rectangle width="1920" height="680" color="0x07070B" opacity="0.14" />
+                <Rectangle width="1920" height="240" translation="[0, 440]" color="0x07070B" opacity="0.55" />
+                <Rectangle width="1920" height="160" translation="[0, 560]" color="0x07070B" opacity="0.82" />
+
+                <Group id="heroCopy" translation="[96, 300]">
+                    <Label id="heroTitle" width="1100" height="110" text="" color="0xFFFFFF" wrap="true" maxLines="2" lineSpacing="2">
+                        <Font role="font" uri="pkg:/fonts/Outfit-Bold.ttf" size="54" />
+                    </Label>
+                    <Label id="heroMeta" translation="[0, 112]" width="1000" height="32" text="" color="0xB8B8C0">
+                        <Font role="font" uri="pkg:/fonts/Outfit-Medium.ttf" size="22" />
+                    </Label>
+                    <Label id="heroSummary" translation="[0, 150]" width="980" height="80" text="" color="0xD0D0D6" wrap="true" maxLines="2" lineSpacing="5">
+                        <Font role="font" uri="pkg:/fonts/Outfit-Regular.ttf" size="22" />
+                    </Label>
+                </Group>
+            </Group>
+
+            <Group id="rowsClip" translation="[0, 560]" clippingRect="[0, 0, 1920, 960]">
+                <ShelfRowList
+                    id="rowList"
+                    translation="[96, 0]"
+                    itemComponentName="PosterItem"
+                    numRows="3"
+                    rowItemSize="[[150, 225]]"
+                    rowItemSpacing="[[22, 0]]"
+                    itemSize="[1728, 300]"
+                    itemSpacing="[0, 10]"
+                    showRowLabel="[true]"
+                    rowLabelOffset="[[0, 4]]"
+                    rowFocusAnimationStyle="fixedFocus"
+                    vertFocusAnimationStyle="floatingFocus"
+                    focusXOffset="[0]"
+                    drawFocusFeedback="false"
+                />
+            </Group>
+
+            <Animation id="homeAnim" duration="0.16" easeFunction="outCubic" optional="true" repeat="false">
+                <Vector2DFieldInterpolator id="billboardMove" key="[0.0, 1.0]" keyValue="[[0, 0], [0, 0]]" fieldToInterp="billboard.translation" />
+                <FloatFieldInterpolator id="billboardFade" key="[0.0, 1.0]" keyValue="[1.0, 1.0]" fieldToInterp="billboard.opacity" />
+                <Vector2DFieldInterpolator id="rowsMove" key="[0.0, 1.0]" keyValue="[[0, 560], [0, 560]]" fieldToInterp="rowsClip.translation" />
+            </Animation>
+        </Group>
+    </children>
+</component>

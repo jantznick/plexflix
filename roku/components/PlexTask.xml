@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<component name="PlexTask" extends="Task">
+    <interface>
+        <field id="config" type="assocarray" />
+        <field id="action" type="string" />
+        <field id="item" type="assocarray" />
+        <field id="response" type="assocarray" />
+    </interface>
+    <script type="text/brightscript" uri="PlexTask.brs" />
+    <script type="text/brightscript" uri="pkg:/source/PlexConfig.brs" />
+</component>
