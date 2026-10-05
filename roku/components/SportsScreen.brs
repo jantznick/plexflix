@@ -4,13 +4,10 @@ sub init()
     m.eventSummary = m.top.findNode("eventSummary")
     m.statusLabel = m.top.findNode("statusLabel")
     m.clockLabel = m.top.findNode("clockLabel")
-    m.watchBg = m.top.findNode("watchBg")
-    m.watchLabel = m.top.findNode("watchLabel")
     m.previewArt = m.top.findNode("previewArt")
     m.guideList = m.top.findNode("guideList")
 
     m.events = []
-    m.focusZone = "guide"
     m.currentIndex = 0
 
     m.guideList.observeField("itemFocused", "onGuideFocused")
@@ -45,7 +42,7 @@ sub showSkeleton()
     root = createObject("roSGNode", "ContentNode")
     for i = 1 to 12
         child = root.createChild("ContentNode")
-        setGuideCols(child, "—", "Loading sports…", "—", "—")
+        setGuideCols(child, "—", "Loading sports…", "", "—")
     end for
     m.guideList.content = root
     m.guideList.setFocus(true)
@@ -100,7 +97,7 @@ sub onFeedLoaded()
         m.statusLabel.text = "No live sports — check sportsFeedUrl"
         m.eventTitle.text = "No events"
     else
-        m.statusLabel.text = StrI(m.events.count()).Trim() + " events"
+        m.statusLabel.text = StrI(m.events.count()).Trim() + " events · OK to open"
         m.guideList.jumpToItem = 0
         m.guideList.setFocus(true)
         updateInfo(0)
@@ -176,54 +173,21 @@ sub requestOpen()
     m.top.selectedItem = item
 end sub
 
-sub paintWatchFocus()
-    if m.focusZone = "watch" then
-        m.watchBg.color = "0xFFFFFF"
-        if m.watchLabel <> invalid then m.watchLabel.color = "0x111118"
-    else
-        m.watchBg.color = "0xE50914"
-        if m.watchLabel <> invalid then m.watchLabel.color = "0xFFFFFF"
-    end if
-end sub
-
-sub onRefocus()
-    if m.top.refocus = true then
-        m.focusZone = "guide"
-        paintWatchFocus()
-        m.guideList.setFocus(true)
-    end if
-end sub
-
 sub onGuideEscapeUp()
-    m.focusZone = "watch"
-    paintWatchFocus()
-    m.top.setFocus(true)
 end sub
 
 sub onGuideEscapeLeft()
     m.top.openMenu = true
 end sub
 
+sub onRefocus()
+    if m.top.refocus = true then
+        m.guideList.setFocus(true)
+    end if
+end sub
+
 function onKeyEvent(key as String, press as Boolean) as Boolean
     if not press then return false
-    if key = "left"
-        if m.focusZone = "watch" then
-            m.top.openMenu = true
-            return true
-        end if
-    else if key = "down"
-        if m.focusZone = "watch" then
-            m.focusZone = "guide"
-            paintWatchFocus()
-            m.guideList.setFocus(true)
-            return true
-        end if
-    else if key = "OK" or key = "play"
-        if m.focusZone = "watch" then
-            requestOpen()
-            return true
-        end if
-    end if
     return false
 end function
 

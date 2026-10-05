@@ -4,23 +4,20 @@ sub init()
     m.programSummary = m.top.findNode("programSummary")
     m.statusLabel = m.top.findNode("statusLabel")
     m.clockLabel = m.top.findNode("clockLabel")
-    m.watchBg = m.top.findNode("watchBg")
-    m.watchLabel = m.top.findNode("watchLabel")
     m.previewArt = m.top.findNode("previewArt")
     m.previewVideo = m.top.findNode("previewVideo")
     m.previewHint = m.top.findNode("previewHint")
     m.guideList = m.top.findNode("guideList")
 
     m.channels = []
-    m.focusZone = "guide"
     m.currentIndex = 0
     m.guideLoaded = false
 
     m.guideList.observeField("itemFocused", "onGuideFocused")
     m.guideList.observeField("itemSelected", "onGuideSelected")
     m.guideList.observeField("escapeUp", "onGuideEscapeUp")
-    m.guideList.observeField("escapeBack", "onGuideEscapeBack")
     m.guideList.observeField("escapeLeft", "onGuideEscapeLeft")
+    m.guideList.observeField("escapeBack", "onGuideEscapeBack")
 
     m.tuneTimer = createObject("roSGNode", "Timer")
     m.tuneTimer.repeat = false
@@ -59,8 +56,6 @@ sub showGuideSkeleton()
     end for
     m.guideList.content = root
     m.guideList.setFocus(true)
-    m.focusZone = "guide"
-    paintWatchFocus()
 end sub
 
 sub onConfigReady()
@@ -108,10 +103,9 @@ sub onGuideLoaded()
     end for
     m.guideList.content = root
     m.guideLoaded = true
-    m.statusLabel.text = StrI(m.channels.count()).Trim() + " channels"
+    m.statusLabel.text = StrI(m.channels.count()).Trim() + " channels · OK to watch"
     m.guideList.jumpToItem = 0
     m.guideList.setFocus(true)
-    m.focusZone = "guide"
     updateInfo(0)
     schedulePreviewTune()
 end sub
@@ -180,20 +174,6 @@ sub applyGuideLine(node as Object, ch as Object)
     setGuideCols(node, channelCol, program, timeCol, nextShow)
 end sub
 
-sub onGuideEscapeUp()
-    m.focusZone = "watch"
-    paintWatchFocus()
-    m.top.setFocus(true)
-end sub
-
-sub onGuideEscapeLeft()
-    m.top.openMenu = true
-end sub
-
-sub onGuideEscapeBack()
-    if m.previewVideo <> invalid then m.previewVideo.control = "stop"
-end sub
-
 sub onGuideFocused()
     idx = m.guideList.itemFocused
     if idx = invalid or idx < 0 then return
@@ -252,10 +232,10 @@ end sub
 sub onPreviewReady()
     response = m.previewTask.response
     if response = invalid or response.ok <> true or response.url = invalid or response.url = "" then
-        m.statusLabel.text = StrI(m.channels.count()).Trim() + " channels"
+        m.statusLabel.text = StrI(m.channels.count()).Trim() + " channels · OK to watch"
         return
     end if
-    m.statusLabel.text = StrI(m.channels.count()).Trim() + " channels"
+    m.statusLabel.text = StrI(m.channels.count()).Trim() + " channels · OK to watch"
     contentNode = createObject("roSGNode", "ContentNode")
     contentNode.url = response.url
     contentNode.streamFormat = "hls"
@@ -290,45 +270,27 @@ sub requestWatch()
     }
 end sub
 
-sub paintWatchFocus()
-    if m.focusZone = "watch" then
-        m.watchBg.color = "0xFFFFFF"
-        if m.watchLabel <> invalid then m.watchLabel.color = "0x111118"
-    else
-        m.watchBg.color = "0xE50914"
-        if m.watchLabel <> invalid then m.watchLabel.color = "0xFFFFFF"
-    end if
+sub onGuideEscapeUp()
+    ' Stay on guide — no Watch button anymore
+end sub
+
+sub onGuideEscapeLeft()
+    m.top.openMenu = true
+end sub
+
+sub onGuideEscapeBack()
+    if m.previewVideo <> invalid then m.previewVideo.control = "stop"
 end sub
 
 sub onRefocus()
     if m.top.refocus = true then
-        m.focusZone = "guide"
-        paintWatchFocus()
         m.guideList.setFocus(true)
     end if
 end sub
 
 function onKeyEvent(key as String, press as Boolean) as Boolean
     if not press then return false
-    if key = "left"
-        if m.focusZone = "watch" then
-            m.top.openMenu = true
-            return true
-        end if
-        ' guide left is handled when list doesn't have focus; open menu from watch only
-    else if key = "down"
-        if m.focusZone = "watch" then
-            m.focusZone = "guide"
-            paintWatchFocus()
-            m.guideList.setFocus(true)
-            return true
-        end if
-    else if key = "OK" or key = "play"
-        if m.focusZone = "watch" then
-            requestWatch()
-            return true
-        end if
-    else if key = "back"
+    if key = "back" then
         if m.previewVideo <> invalid then m.previewVideo.control = "stop"
         return false
     end if
