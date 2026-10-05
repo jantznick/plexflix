@@ -82,22 +82,22 @@ sub buildRows(pool as Object)
         for copy = 0 to 1
             for i = 0 to m.slotsPerRow - 1
                 ' Leave every 4th slot empty (spread evenly). User likes some missing.
-                if ((i + phase) MOD 4) = 3 then goto next_slot
+                isGap = ((i + phase) MOD 4) = 3
+                if isGap <> true then
+                    uri = pool[cursor MOD pool.count()]
+                    cursor = cursor + 1
 
-                uri = pool[cursor MOD pool.count()]
-                cursor = cursor + 1
-
-                p = createObject("roSGNode", "Poster")
-                p.width = m.posterW
-                p.height = m.posterH
-                p.loadDisplayMode = "scaleToZoom"
-                p.loadWidth = 280
-                p.loadHeight = 420
-                p.opacity = 0.78
-                if uri <> invalid and uri <> "" then p.uri = uri
-                p.translation = [(copy * m.slotsPerRow + i) * stepX, 0]
-                row.appendChild(p)
-                next_slot:
+                    p = createObject("roSGNode", "Poster")
+                    p.width = m.posterW
+                    p.height = m.posterH
+                    p.loadDisplayMode = "scaleToZoom"
+                    p.loadWidth = 280
+                    p.loadHeight = 420
+                    p.opacity = 0.78
+                    if uri <> invalid and uri <> "" then p.uri = uri
+                    p.translation = [(copy * m.slotsPerRow + i) * stepX, 0]
+                    row.appendChild(p)
+                end if
             end for
         end for
 
