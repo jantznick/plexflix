@@ -78,7 +78,7 @@ sub onHomeLoaded()
     end if
 
     rowCount = content.getChildCount()
-    m.buildLabel.text = "v0.3.5 · " + safeToStr(rowCount) + " rows"
+    m.buildLabel.text = "v0.3.6 · " + safeToStr(rowCount) + " rows"
 
     m.rowList.content = content
     m.rowList.visible = true
