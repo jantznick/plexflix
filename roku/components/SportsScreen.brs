@@ -15,6 +15,8 @@ sub init()
 
     m.guideList.observeField("itemFocused", "onGuideFocused")
     m.guideList.observeField("itemSelected", "onGuideSelected")
+    m.guideList.observeField("escapeUp", "onGuideEscapeUp")
+    m.guideList.observeField("escapeLeft", "onGuideEscapeLeft")
 
     m.clockTimer = createObject("roSGNode", "Timer")
     m.clockTimer.repeat = true
@@ -192,18 +194,17 @@ sub onRefocus()
     end if
 end sub
 
+sub onGuideEscapeUp()
+    m.focusZone = "watch"
+    paintWatchFocus()
+    m.top.setFocus(true)
+end sub
+
 function onKeyEvent(key as String, press as Boolean) as Boolean
     if not press then return false
     if key = "left"
-        if m.focusZone = "guide" then
+        if m.focusZone = "watch" then
             m.top.openMenu = true
-            return true
-        end if
-    else if key = "up"
-        if m.focusZone = "guide" then
-            m.focusZone = "watch"
-            paintWatchFocus()
-            m.top.setFocus(true)
             return true
         end if
     else if key = "down"
@@ -214,7 +215,7 @@ function onKeyEvent(key as String, press as Boolean) as Boolean
             return true
         end if
     else if key = "OK" or key = "play"
-        if m.focusZone = "watch" or m.guideList.hasFocus() then
+        if m.focusZone = "watch" then
             requestOpen()
             return true
         end if

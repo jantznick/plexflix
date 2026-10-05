@@ -15,13 +15,13 @@ sub init()
     m.billboardFade = m.top.findNode("billboardFade")
     m.rowsMove = m.top.findNode("rowsMove")
 
-    ' Expanded: hero + first shelf fully on screen; next shelf peeks at bottom.
-    ' Collapsed: floatingFocus keeps the ACTIVE shelf fully visible; older shelves
-    ' naturally peek clipped above — never shift the list so the active row clips.
-    m.expandedRowY = 520
-    m.collapsedRowY = 48
+    ' Expanded: hero + focused shelf fully visible below it; next shelf peeks at bottom.
+    ' Collapsed: focused shelf sits in a lower fixed slot so a previous shelf can peek
+    ' above without the ACTIVE shelf being the clipped one.
+    m.expandedRowY = 560
+    m.collapsedRowY = 120
     m.rowsX = 96
-    m.heroHideY = -520
+    m.heroHideY = -560
     m.isCollapsed = false
     m.currentRow = -1
 
@@ -91,7 +91,7 @@ sub onHomeLoaded()
     end if
 
     rowCount = content.getChildCount()
-    m.buildLabel.text = "v0.4.5 · " + safeToStr(rowCount) + " rows"
+    m.buildLabel.text = "v0.4.6 · " + safeToStr(rowCount) + " rows"
 
     if m.loadingPanel <> invalid then m.loadingPanel.visible = false
     if m.frame <> invalid then m.frame.visible = true
@@ -190,7 +190,10 @@ sub applyBrowseModeSnap()
 end sub
 
 sub updateHeroContent(item as Object)
-    ' Prefer backdrop; never stretch a portrait poster into the billboard
+    if m.heroArt <> invalid then
+        m.heroArt.loadDisplayMode = "scaleToZoom"
+    end if
+
     uri = ""
     if item.hdBackdropUrl <> invalid and item.hdBackdropUrl <> "" then
         uri = item.hdBackdropUrl

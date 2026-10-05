@@ -18,6 +18,9 @@ sub init()
 
     m.guideList.observeField("itemFocused", "onGuideFocused")
     m.guideList.observeField("itemSelected", "onGuideSelected")
+    m.guideList.observeField("escapeUp", "onGuideEscapeUp")
+    m.guideList.observeField("escapeBack", "onGuideEscapeBack")
+    m.guideList.observeField("escapeLeft", "onGuideEscapeLeft")
 
     m.tuneTimer = createObject("roSGNode", "Timer")
     m.tuneTimer.repeat = false
@@ -144,14 +147,16 @@ end sub
 sub applyGuideLine(node as Object, ch as Object)
     num = asString(ch.channelNumber)
     callSign = asString(ch.callSign)
+    titleHint = asString(ch.title)
     if Len(callSign) > 22 then callSign = Mid(callSign, 1, 22)
+
     program = asString(ch.programTitle)
-    if program = "" then program = asString(ch.title)
+    if program = "" then program = titleHint
     if program = "" then program = "On now"
     if Len(program) > 42 then program = Mid(program, 1, 42)
 
     timeCol = asString(ch.timeRange)
-    if timeCol = "" then timeCol = "Live"
+    if timeCol = "" or LCase(timeCol) = "live" then timeCol = "—"
     if Len(timeCol) > 18 then timeCol = Mid(timeCol, 1, 18)
 
     nextShow = asString(ch.nextTitle)
@@ -165,13 +170,24 @@ sub applyGuideLine(node as Object, ch as Object)
         channelCol = callSign
     else if num <> "" then
         channelCol = "Ch " + num
+    else if titleHint <> "" and LCase(titleHint) <> LCase(program) then
+        channelCol = Mid(titleHint, 1, 28)
     else
-        channelCol = Mid(asString(ch.title), 1, 24)
+        channelCol = "Channel"
     end if
     if Len(channelCol) > 28 then channelCol = Mid(channelCol, 1, 28)
-    if LCase(channelCol) = LCase(program) then channelCol = "Ch"
 
     setGuideCols(node, channelCol, program, timeCol, nextShow)
+end sub
+
+sub onGuideEscapeUp()
+    m.focusZone = "watch"
+    paintWatchFocus()
+    m.top.setFocus(true)
+end sub
+
+sub onGuideEscapeBack()
+    if m.previewVideo <> invalid then m.previewVideo.control = "stop"
 end sub
 
 sub onGuideFocused()
@@ -291,17 +307,11 @@ end sub
 function onKeyEvent(key as String, press as Boolean) as Boolean
     if not press then return false
     if key = "left"
-        if m.focusZone = "guide" then
+        if m.focusZone = "watch" then
             m.top.openMenu = true
             return true
         end if
-    else if key = "up"
-        if m.focusZone = "guide" then
-            m.focusZone = "watch"
-            paintWatchFocus()
-            m.top.setFocus(true)
-            return true
-        end if
+        ' guide left is handled when list doesn't have focus; open menu from watch only
     else if key = "down"
         if m.focusZone = "watch" then
             m.focusZone = "guide"
@@ -310,7 +320,7 @@ function onKeyEvent(key as String, press as Boolean) as Boolean
             return true
         end if
     else if key = "OK" or key = "play"
-        if m.focusZone = "watch" or m.guideList.hasFocus() then
+        if m.focusZone = "watch" then
             requestWatch()
             return true
         end if

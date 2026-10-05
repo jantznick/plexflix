@@ -178,7 +178,8 @@ function imageUrl(cfg as Object, path as Dynamic, width = 420 as Integer, height
     if path = invalid or path = "" then return ""
     pathStr = safeToStr(path)
     if Left(pathStr, 4) = "http" then return pathStr
-    return cfg.baseUrl + "/photo/:/transcode?width=" + safeToStr(width) + "&height=" + safeToStr(height) + "&minSize=1&upscale=1&url=" + requestEncode(pathStr) + "&X-Plex-Token=" + cfg.token
+    ' minSize=1 = cover/crop (no stretch). Never omit it — stretch looks horrible on heroes.
+    return cfg.baseUrl + "/photo/:/transcode?width=" + safeToStr(width) + "&height=" + safeToStr(height) + "&minSize=1&upscale=0&url=" + requestEncode(pathStr) + "&X-Plex-Token=" + cfg.token
 end function
 
 function requestEncode(value as String) as String
@@ -273,7 +274,7 @@ function metadataToItem(cfg as Object, meta as Object) as Object
         key: key,
         hdPosterUrl: imageUrl(cfg, thumb, posterW, posterH),
         hdShowPosterUrl: showPosterUrl,
-        hdBackdropUrl: imageUrl(cfg, art, 1920, 800),
+        hdBackdropUrl: imageUrl(cfg, art, 1920, 1080),
         duration: duration,
         viewOffset: viewOffset,
         leafCount: meta.leafCount,
@@ -1590,7 +1591,7 @@ function fetchLiveTvGuide(cfg as Object) as Object
             if nextStart <> "" then nextTitle = nextStart + "  " + nextTitle
         end if
         if nextTitle = "" then nextTitle = "—"
-        if timeRange = "" then timeRange = "Live"
+        if timeRange = "" then timeRange = ""
 
         channelNumber = ""
         if ch.DoesExist("channelNumber") then channelNumber = asStringSafe(ch.channelNumber)
