@@ -50,9 +50,17 @@ function fieldStr(item as Object, name as String) as String
 end function
 
 sub onFocusPercentChange()
+    refreshFocusVisual()
+end sub
+
+sub onOwnerFocusChange()
+    refreshFocusVisual()
+end sub
+
+sub refreshFocusVisual()
     fp = m.top.focusPercent
     if fp = invalid then fp = 0
-    focused = fp > 0.5
+    focused = fp > 0.5 and m.top.listHasFocus <> false
     if m.bg <> invalid then
         if focused then
             m.bg.opacity = 0.85
