@@ -282,7 +282,8 @@ function metadataToItem(cfg as Object, meta as Object) as Object
         key: key,
         hdPosterUrl: imageUrl(cfg, thumb, posterW, posterH),
         hdShowPosterUrl: showPosterUrl,
-        hdBackdropUrl: imageUrl(cfg, art, 1920, 1080),
+        ' Width-only transcode keeps landscape art proportional (forced 1920x1080 can warp)
+        hdBackdropUrl: imageUrlWide(cfg, art, 1920),
         duration: duration,
         viewOffset: viewOffset,
         leafCount: meta.leafCount,
