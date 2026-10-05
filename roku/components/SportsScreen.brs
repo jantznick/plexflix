@@ -164,14 +164,14 @@ sub updateInfo(idx as Integer)
     else
         m.eventSummary.text = ""
     end if
-    uri = asString(item.hdBackdropUrl)
-    if uri = "" then uri = asString(item.hdPosterUrl)
+    uri = asString(item.hdPosterUrl)
+    if uri = "" then uri = asString(item.hdBackdropUrl)
     if uri <> "" and m.previewArt <> invalid then
         m.previewArt.loadDisplayMode = "scaleToZoom"
-        m.previewArt.loadWidth = 1280
-        m.previewArt.loadHeight = 720
-        m.previewArt.width = 480
-        m.previewArt.height = 270
+        m.previewArt.loadWidth = 1400
+        m.previewArt.loadHeight = 500
+        m.previewArt.width = 700
+        m.previewArt.height = 250
         m.previewArt.uri = uri
         m.previewArt.opacity = 1.0
     end if
