@@ -159,6 +159,9 @@ sub applyFilters()
     m.loading = false
     m.lastFocusRow = -1
     m.deferInitialLoad = false
+    m.totalSize = 0
+    m.hasMoreForward = false
+    m.warning = ""
     loadPage("reset")
 end sub
 
@@ -594,15 +597,18 @@ end sub
 
 sub buildSortList()
     root = createObject("roSGNode", "ContentNode")
+    active = 0
     for each option in m.sortOptions
+        if option.key = m.activeSort then active = root.getChildCount()
         addFilterItem(root, check(option.key = m.activeSort) + option.label, "setSort", option.key, option.label)
     end for
     addFilterItem(root, "← Back", "back", "", "")
-    setPanelContent(root)
+    setPanelContent(root, active)
 end sub
 
 sub buildGenreList()
     root = createObject("roSGNode", "ContentNode")
+    active = 0
     addFilterItem(root, check(m.activeGenre = "All") + "All genres", "setGenre", "", "All")
     if m.genres <> invalid then
         for each g in m.genres
@@ -611,28 +617,33 @@ sub buildGenreList()
             id = asString(g.id)
             if id = "" then id = asString(g.key)
             if label <> "" and label <> "All" then
+                if label = m.activeGenre then active = root.getChildCount()
                 addFilterItem(root, check(label = m.activeGenre) + label, "setGenre", id, label)
             end if
         end for
     end if
     addFilterItem(root, "← Back", "back", "", "")
-    setPanelContent(root)
+    setPanelContent(root, active)
 end sub
 
 sub buildDecadeList()
     root = createObject("roSGNode", "ContentNode")
+    active = 0
     addFilterItem(root, check(m.activeDecade = "All") + "All years", "setDecade", "All", "All")
     decades = ["2020", "2010", "2000", "1990", "1980", "1970", "1960", "1950"]
     for each d in decades
+        if d = m.activeDecade then active = root.getChildCount()
         addFilterItem(root, check(d = m.activeDecade) + d + "s", "setDecade", d, d)
     end for
     addFilterItem(root, "← Back", "back", "", "")
-    setPanelContent(root)
+    setPanelContent(root, active)
 end sub
 
-sub setPanelContent(root as Object)
+sub setPanelContent(root as Object, focusIndex = 0 as Integer)
+    ' Land on the active choice so a 200 genre list doesn't start from the top
     m.filterList.content = root
-    m.filterList.jumpToItem = 0
+    if focusIndex < 0 or focusIndex > root.getChildCount() - 1 then focusIndex = 0
+    m.filterList.jumpToItem = focusIndex
 end sub
 
 sub addFilterItem(root as Object, display as String, action as String, value as String, label as String)
@@ -686,8 +697,7 @@ sub onFilterSelected()
     else if action = "openSort" then
         showPanelMode("sort")
     else if action = "openSearch" then
-        m.filterPanel.visible = false
-        m.filterMode = ""
+        closeFilterPanel()
         openSearchKeyboard()
     else if action = "toggleUnwatched" then
         m.unwatchedOnly = not m.unwatchedOnly
@@ -728,7 +738,11 @@ end sub
 
 sub openSearchKeyboard()
     scene = m.top.getScene()
-    if scene = invalid then return
+    if scene = invalid then
+        ' No scene to host the keyboard — never leave the grid unloaded
+        if m.deferInitialLoad then applyFilters()
+        return
+    end if
 
     dialog = createObject("roSGNode", "KeyboardDialog")
     dialog.title = "Search " + m.libraryTitle
@@ -782,7 +796,6 @@ sub onSearchClosed()
             return
         end if
     end if
-    if m.loading then return
     if gridCount() > 0 then
         focusGrid()
     else

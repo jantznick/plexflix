@@ -883,7 +883,15 @@ function sectionIdFromKey(key as String) as String
     if key = "" then return ""
     marker = "/library/sections/"
     idx = Instr(1, key, marker)
-    if idx > 0 then return Mid(key, idx + Len(marker))
+    if idx > 0 then
+        ' Keys arrive as /library/sections/4 and /library/sections/4/all?...
+        rest = Mid(key, idx + Len(marker))
+        for i = 1 to Len(rest)
+            ch = Mid(rest, i, 1)
+            if ch = "/" or ch = "?" then return Left(rest, i - 1)
+        end for
+        return rest
+    end if
     lastSlash = 0
     for i = 1 to Len(key)
         if Mid(key, i, 1) = "/" then lastSlash = i
@@ -999,14 +1007,7 @@ function fetchSectionHub(cfg as Object, item as Object) as Object
     }
 end function
 
-function fetchSectionAll(cfg as Object, item as Object) as Object
-    if item = invalid then return { ok: false, error: "No library" }
-    sectionId = safeToStr(item.sectionId)
-    if sectionId = "" then sectionId = sectionIdFromKey(safeToStr(item.key))
-    if sectionId = "" then return { ok: false, error: "Missing library section id" }
-
-    title = safeToStr(item.title)
-    if title = "" then title = "Library"
+function sectionAllQuery(sectionId as String, item as Object) as Object
     genre = safeToStr(item.genre)
     genreId = safeToStr(item.genreId)
     search = safeToStr(item.search)
@@ -1023,7 +1024,7 @@ function fetchSectionAll(cfg as Object, item as Object) as Object
     if pageSize < 1 then pageSize = 48
     if pageSize > 120 then pageSize = 120
 
-    ' Plex needs an explicit metadata type or filters silently return everything
+    ' Plex needs an explicit metadata type or section filters are ignored
     sectionType = safeToStr(item.sectionType)
     typeParam = ""
     if sectionType = "movie" then
@@ -1063,6 +1064,35 @@ function fetchSectionAll(cfg as Object, item as Object) as Object
         end if
     end if
     if unwatched then extra = extra + "&unwatched=1"
+
+    return {
+        path: path,
+        extra: extra,
+        sort: sortKey,
+        start: startAt,
+        pageSize: pageSize,
+        genre: genre,
+        genreId: genreId,
+        search: search,
+        decade: decade,
+        unwatched: unwatched
+    }
+end function
+
+function fetchSectionAll(cfg as Object, item as Object) as Object
+    if item = invalid then return { ok: false, error: "No library" }
+    sectionId = safeToStr(item.sectionId)
+    if sectionId = "" then sectionId = sectionIdFromKey(safeToStr(item.key))
+    if sectionId = "" then return { ok: false, error: "Missing library section id" }
+
+    title = safeToStr(item.title)
+    if title = "" then title = "Library"
+
+    query = sectionAllQuery(sectionId, item)
+    path = query.path
+    extra = query.extra
+    startAt = query.start
+    pageSize = query.pageSize
 
     warning = ""
     result = plexGet(cfg, path + extra)
@@ -1121,12 +1151,12 @@ function fetchSectionAll(cfg as Object, item as Object) as Object
         nextStart: nextStart,
         hasMore: hasMore,
         pageSize: pageSize,
-        genre: genre,
-        genreId: genreId,
-        search: search,
-        sort: sortKey,
-        decade: decade,
-        unwatched: unwatched,
+        genre: query.genre,
+        genreId: query.genreId,
+        search: query.search,
+        sort: query.sort,
+        decade: query.decade,
+        unwatched: query.unwatched,
         warning: warning,
         requestId: safeToStr(item.requestId)
     }

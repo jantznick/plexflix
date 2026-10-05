@@ -24,6 +24,8 @@ sub init()
     m.rowList.observeField("rowItemSelected", "onRowItemSelected")
     m.rowList.observeField("escapeLeft", "onEscapeLeft")
     m.rowList.observeField("escapeUp", "onEscapeUp")
+    ' The shelf list swallows Back; without this it dead-ends inside the rows
+    m.rowList.observeField("escapeBack", "onEscapeBack")
 
     ' Re-assert View all focus after async loads (RowList loves to steal it)
     m.focusGuard = createObject("roSGNode", "Timer")
@@ -39,6 +41,11 @@ sub onEscapeLeft()
 end sub
 
 sub onEscapeUp()
+    focusHero()
+end sub
+
+sub onEscapeBack()
+    ' Back out of the shelves to the hero buttons; Back again leaves the library
     focusHero()
 end sub
 
