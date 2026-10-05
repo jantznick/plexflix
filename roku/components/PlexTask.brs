@@ -294,6 +294,7 @@ function metadataToItem(cfg as Object, meta as Object) as Object
         thumbPath: thumb,
         hdShowPosterUrl: showPosterUrl,
         hdBackdropUrl: imageUrl(cfg, art, 1920, 1080),
+        showDescription: "",
         duration: duration,
         viewOffset: viewOffset,
         leafCount: meta.leafCount,
@@ -777,7 +778,8 @@ sub addUniqueRowLoose(root as Object, seenTitles as Object, title as String, ite
             parentIndex: item.parentIndex,
             isDiscover: item.isDiscover,
             hdShowPosterUrl: item.hdShowPosterUrl,
-            hdBackdropUrl: item.hdBackdropUrl
+            hdBackdropUrl: item.hdBackdropUrl,
+            showDescription: item.showDescription
         })
     end for
     seenTitles[key] = true
