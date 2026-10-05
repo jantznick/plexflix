@@ -1,16 +1,22 @@
 sub init()
     m.titleLabel = m.top.findNode("titleLabel")
+    m.heroHint = m.top.findNode("heroHint")
     m.statusLabel = m.top.findNode("statusLabel")
     m.rowList = m.top.findNode("rowList")
     m.shimmer = m.top.findNode("shimmer")
     m.viewAllBg = m.top.findNode("viewAllBg")
     m.viewAllLabel = m.top.findNode("viewAllLabel")
+    m.searchBg = m.top.findNode("searchBg")
+    m.searchLabel = m.top.findNode("searchLabel")
     m.mosaic = m.top.findNode("mosaic")
     m.heroTiles = []
 
     m.sectionId = ""
+    m.sectionType = ""
     m.genres = []
     m.focusZone = "hero"
+    m.heroBtn = "viewall"
+    m.loaded = false
 
     ' Prevent shelves from stealing focus until the user presses Down
     if m.rowList <> invalid then m.rowList.focusable = false
@@ -24,6 +30,8 @@ sub init()
     m.focusGuard.repeat = false
     m.focusGuard.duration = 0.05
     m.focusGuard.observeField("fire", "onFocusGuard")
+
+    paintHeroFocus()
 end sub
 
 sub onEscapeLeft()
@@ -38,7 +46,19 @@ sub onRefocus()
     if m.top.refocus = true then focusHero()
 end sub
 
+sub onSuspendedChange()
+    if m.top.suspended = true then
+        ' Another screen owns the remote; make sure no timer yanks focus back
+        m.focusGuard.control = "stop"
+    end if
+end sub
+
+function isSuspended() as Boolean
+    return m.top.suspended = true
+end function
+
 sub focusHero()
+    if isSuspended() then return
     m.focusZone = "hero"
     if m.rowList <> invalid then m.rowList.focusable = false
     paintHeroFocus()
@@ -47,6 +67,7 @@ sub focusHero()
 end sub
 
 sub onFocusGuard()
+    if isSuspended() then return
     if m.focusZone = "hero" then
         if m.rowList <> invalid then m.rowList.focusable = false
         m.top.setFocus(true)
@@ -59,10 +80,20 @@ sub onSourceSet()
     if source = invalid then return
     title = asString(source.title)
     if title <> "" then m.titleLabel.text = title
+    m.sectionType = asString(source.sectionType)
+    m.sectionId = asString(source.sectionId)
+    if m.heroHint <> invalid then
+        if m.sectionType = "show" then
+            m.heroHint.text = "Every series in this library — filter, search or sort it however you like."
+        else
+            m.heroHint.text = "Everything in this library — filter, search or sort it however you like."
+        end if
+    end if
     loadBrowse()
 end sub
 
 sub loadBrowse()
+    m.loaded = false
     m.statusLabel.text = "Loading…"
     m.top.loadingMessage = "Loading " + m.titleLabel.text + "..."
     if m.shimmer <> invalid then m.shimmer.active = true
@@ -89,8 +120,10 @@ sub onBrowseLoaded()
         return
     end if
 
+    m.loaded = true
     m.sectionId = asString(response.sectionId)
     if m.sectionId = "" then m.sectionId = asString(m.top.source.sectionId)
+    if asString(response.sectionType) <> "" then m.sectionType = asString(response.sectionType)
     m.genres = response.genres
     if m.genres = invalid then m.genres = []
 
@@ -98,7 +131,7 @@ sub onBrowseLoaded()
 
     content = response.content
     if content <> invalid and content.getChildCount() > 0 then
-        m.statusLabel.text = ""
+        m.statusLabel.text = "Down for shelves · OK for the full grid"
         m.rowList.content = content
         m.rowList.visible = true
         m.rowList.focusable = false
@@ -124,9 +157,9 @@ sub buildMosaic(urls as Object)
     end for
     if pool.count() = 0 then pool.push("pkg:/images/poster_placeholder.png")
 
-    ' Dense 3-row mosaic covering the full hero width — no dead space
+    ' Dense 2-row mosaic across the hero band — clipped by mosaicClip
     cols = 12
-    rows = 3
+    rows = 2
     tileW = 168
     tileH = 252
     gapX = 10
@@ -137,7 +170,6 @@ sub buildMosaic(urls as Object)
     for r = 0 to rows - 1
         rowOffset = 0
         if r = 1 then rowOffset = 40
-        if r = 2 then rowOffset = -20
         for c = 0 to cols - 1
             xJitter = (c mod 3) * 6
             yJitter = ((c + r) mod 4) * 8
@@ -167,24 +199,46 @@ end sub
 
 sub paintHeroFocus()
     if m.viewAllBg = invalid then return
-    if m.focusZone = "hero" then
-        ' Focused: white plate + dark label (never white-on-white)
+    heroFocused = (m.focusZone = "hero")
+
+    if heroFocused and m.heroBtn = "viewall" then
         m.viewAllBg.color = "0xFFFFFF"
         if m.viewAllLabel <> invalid then m.viewAllLabel.color = "0x111118"
+    else if heroFocused then
+        m.viewAllBg.color = "0x2A2A32"
+        if m.viewAllLabel <> invalid then m.viewAllLabel.color = "0xFFFFFF"
     else
         m.viewAllBg.color = "0xE50914"
         if m.viewAllLabel <> invalid then m.viewAllLabel.color = "0xFFFFFF"
     end if
+
+    if m.searchBg <> invalid then
+        if heroFocused and m.heroBtn = "search" then
+            m.searchBg.color = "0xFFFFFF"
+            if m.searchLabel <> invalid then m.searchLabel.color = "0x111118"
+        else
+            m.searchBg.color = "0x2A2A32"
+            if m.searchLabel <> invalid then m.searchLabel.color = "0xFFFFFF"
+        end if
+    end if
 end sub
 
-sub requestViewAll()
+sub requestViewAll(openSearch as Boolean)
     src = m.top.source
     if src = invalid then src = {}
+    sectionId = m.sectionId
+    if sectionId = "" then sectionId = asString(src.sectionId)
+    sectionType = m.sectionType
+    if sectionType = "" then sectionType = asString(src.sectionType)
+    genres = m.genres
+    if genres = invalid then genres = []
     m.top.viewAllRequested = {
         title: m.titleLabel.text,
-        sectionId: m.sectionId,
+        sectionId: sectionId,
+        sectionType: sectionType,
         key: asString(src.key),
-        genres: m.genres
+        genres: genres,
+        openSearch: openSearch
     }
 end sub
 
@@ -225,30 +279,47 @@ sub onCloseRequested()
     if m.top.close = true then m.top.closed = true
 end sub
 
+function hasShelves() as Boolean
+    if m.rowList = invalid then return false
+    if m.rowList.visible <> true then return false
+    if m.rowList.content = invalid then return false
+    return m.rowList.content.getChildCount() > 0
+end function
+
 function onKeyEvent(key as String, press as Boolean) as Boolean
     if not press then return false
 
     if m.focusZone = "hero" then
         if key = "left" then
-            m.top.openMenu = true
+            if m.heroBtn = "search" then
+                m.heroBtn = "viewall"
+                paintHeroFocus()
+            else
+                m.top.openMenu = true
+            end if
+            return true
+        else if key = "right" then
+            if m.heroBtn = "viewall" then
+                m.heroBtn = "search"
+                paintHeroFocus()
+            end if
             return true
         else if key = "down" then
-            if m.rowList.visible = true and m.rowList.content <> invalid and m.rowList.content.getChildCount() > 0 then
+            if hasShelves() then
                 m.focusZone = "rows"
                 paintHeroFocus()
                 m.rowList.focusable = true
                 m.rowList.setFocus(true)
-                return true
             end if
             return true
         else if key = "OK" or key = "play" then
-            requestViewAll()
+            if m.loaded then requestViewAll(m.heroBtn = "search")
             return true
         else if key = "back" then
             m.top.closed = true
             return true
         end if
-        ' Swallow other keys so shelves can't activate while View all is focused
+        ' Swallow the rest so shelves can't activate while the hero owns focus
         return true
     else if key = "back" then
         m.top.closed = true
@@ -261,5 +332,8 @@ function asString(value as Dynamic) as String
     if value = invalid then return ""
     valueType = type(value)
     if valueType = "String" or valueType = "roString" then return value
+    if valueType = "Integer" or valueType = "roInt" or valueType = "roInteger" or valueType = "LongInteger" then
+        return StrI(value).Trim()
+    end if
     return ""
 end function
