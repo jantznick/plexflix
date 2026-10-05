@@ -1,7 +1,6 @@
 sub init()
     m.loadingPanel = m.top.findNode("loadingPanel")
     m.frame = m.top.findNode("frame")
-    m.loadSpinner = m.top.findNode("loadSpinner")
     m.billboard = m.top.findNode("billboard")
     m.heroArt = m.top.findNode("heroArt")
     m.heroCopy = m.top.findNode("heroCopy")
@@ -35,9 +34,8 @@ sub init()
         m.heroArt.translation = [0, 0]
     end if
 
-    m.shimmer = m.top.findNode("shimmer")
-    if m.shimmer <> invalid then m.shimmer.active = true
-    if m.loadSpinner <> invalid then m.loadSpinner.control = "start"
+    m.splashMosaic = m.top.findNode("splashMosaic")
+    if m.splashMosaic <> invalid then m.splashMosaic.active = true
 
     m.snapTimer = createObject("roSGNode", "Timer")
     m.snapTimer.repeat = false
@@ -62,7 +60,17 @@ end sub
 
 sub onConfigReady()
     if m.top.config = invalid then return
+    if m.splashMosaic <> invalid then
+        m.splashMosaic.active = true
+        splashUrl = ""
+        if m.top.config.splashManifestUrl <> invalid then splashUrl = m.top.config.splashManifestUrl
+        if splashUrl <> "" then m.splashMosaic.manifestUrl = splashUrl
+    end if
     loadHome()
+end sub
+
+sub hideSplash()
+    if m.splashMosaic <> invalid then m.splashMosaic.active = false
 end sub
 
 sub loadHome()
@@ -77,8 +85,7 @@ end sub
 sub onHomeLoaded()
     response = m.task.response
     m.top.loadingMessage = ""
-    if m.shimmer <> invalid then m.shimmer.active = false
-    if m.loadSpinner <> invalid then m.loadSpinner.control = "stop"
+    hideSplash()
 
     if response = invalid or response.ok <> true then
         err = "Could not reach Plex. Check baseUrl/token in roku/source/PlexConfig.brs"

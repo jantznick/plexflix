@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<component name="SplashMosaic" extends="Group">
+    <interface>
+        <field id="active" type="boolean" value="true" onChange="onActiveChange" />
+        <field id="manifestUrl" type="string" value="" onChange="onManifestUrlChange" />
+    </interface>
+
+    <script type="text/brightscript" uri="SplashMosaic.brs" />
+
+    <children>
+        <Rectangle width="1920" height="1080" color="0x07070B" />
+
+        <!-- Rows extend past the screen; clip so top/bottom shelves are cut off Netflix-style -->
+        <Group id="rowsClip" clippingRect="[0, 0, 1920, 1080]">
+            <Group id="rowsRoot" translation="[0, -160]" />
+        </Group>
+
+        <!-- Soft center wash so the brand stays readable over the mosaic -->
+        <Rectangle width="1920" height="1080" color="0x07070B" opacity="0.42" />
+        <Rectangle width="1920" height="320" translation="[0, 380]" color="0x07070B" opacity="0.55" />
+
+        <Label id="brandLabel" translation="[0, 440]" width="1920" height="70" horizAlign="center" text="PLEXFLIX" color="0xE50914">
+            <Font role="font" uri="pkg:/fonts/Outfit-Bold.ttf" size="64" />
+        </Label>
+        <Label translation="[0, 520]" width="1920" height="36" horizAlign="center" text="Loading your library…" color="0xA8A8B0">
+            <Font role="font" uri="pkg:/fonts/Outfit-Medium.ttf" size="20" />
+        </Label>
+        <BusySpinner id="spinner" translation="[912, 580]" uri="pkg:/images/spinner.png" />
+    </children>
+</component>

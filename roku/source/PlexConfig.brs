@@ -12,10 +12,15 @@ function GetPlexConfig() as Object
         clientId: "plexflix-roku-mvp-001",
 
         product: "PlexFlix",
-        version: "0.4.9",
+        version: "0.5.0",
 
         ' How many items to request per row (home clamps display to 15–30)
         rowSize: 40,
+
+        ' Daily-refreshed splash poster pack (JSON with a "posters" URL array).
+        ' Built by roku/scripts/update_splash_posters.py on your home server.
+        ' Falls back to hardcoded TMDB CDN posters if unreachable.
+        splashManifestUrl: "https://roku-hockey.s3.us-west-004.backblazeb2.com/plexflix/splash/posters.json",
 
         ' Live sports JSON feed (editable). Expected objects with title/name + url/stream fields.
         sportsFeedUrl: "https://roku-hockey.s3.us-west-004.backblazeb2.com/secretfeedfilename.json",

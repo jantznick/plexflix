@@ -76,7 +76,32 @@ Optional CLI (if `ROKU_IP` / `ROKU_PASSWORD` are set):
 - OK opens the detail screen (episodes open the show with that episode selected)
 - Play / OK starts playback
 - Back returns to the previous screen
-- Loading uses a bottom banner + shimmer skeletons — the UI stays navigable
+- Loading uses a Netflix-style scrolling poster mosaic on home launch (CDN-refreshable)
+- Soft loading banner for in-app fetches — the UI stays navigable
+
+## Daily splash posters (home server)
+
+The channel ships with hardcoded TMDB CDN posters for the scrolling splash. To refresh them from *your* Plex library every day, run this on the home server (not this laptop):
+
+```bash
+# once
+python3 -m venv ~/plexflix-splash-venv
+~/plexflix-splash-venv/bin/pip install b2sdk   # only if using --upload to B2
+
+cp roku/scripts/splash.env.example ~/plexflix-splash.env
+# edit tokens / CDN base / B2 keys
+
+# daily (cron)
+~/plexflix-splash-venv/bin/python /path/to/repo/roku/scripts/update_splash_posters.py \
+  --env-file ~/plexflix-splash.env --upload
+```
+
+That writes `posters.json` + `images/poster_XXX.jpg` and uploads them to your CDN.
+`splashManifestUrl` in `PlexConfig.brs` already points at:
+
+`https://roku-hockey.s3.us-west-004.backblazeb2.com/plexflix/splash/posters.json`
+
+If the JSON isn’t reachable yet, the hardcoded TMDB fallbacks still animate.
 
 ## Fonts
 
@@ -100,5 +125,6 @@ roku/
   components/
   fonts/
   images/
+  scripts/update_splash_posters.py
   package.sh
 ```

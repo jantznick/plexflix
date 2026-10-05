@@ -15,12 +15,7 @@
         <Rectangle width="1920" height="1080" color="0x07070B" />
 
         <Group id="loadingPanel" translation="[0, 0]" visible="true">
-            <Rectangle width="1920" height="1080" color="0x07070B" />
-            <Label translation="[0, 420]" width="1920" height="60" horizAlign="center" text="PLEXFLIX" color="0xE50914">
-                <Font role="font" uri="pkg:/fonts/Outfit-Bold.ttf" size="52" />
-            </Label>
-            <BusySpinner id="loadSpinner" translation="[912, 510]" uri="pkg:/images/spinner.png" />
-            <ShimmerRow id="shimmer" translation="[96, 700]" />
+            <SplashMosaic id="splashMosaic" />
         </Group>
 
         <Group id="frame" translation="[0, 0]" visible="false" clippingRect="[0, 0, 1920, 1080]">
