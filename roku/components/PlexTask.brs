@@ -1517,6 +1517,20 @@ function fetchLiveTvGuide(cfg as Object) as Object
         air = invalid
         nextAir = invalid
         if airList.count() > 0 then
+            ' Sort by beginsAt ascending so "next" is correct
+            for si = 0 to airList.count() - 2
+                for sj = si + 1 to airList.count() - 1
+                    bi = 0
+                    bj = 0
+                    if airList[si].DoesExist("beginsAt") then bi = airList[si].beginsAt
+                    if airList[sj].DoesExist("beginsAt") then bj = airList[sj].beginsAt
+                    if bj > 0 and (bi = 0 or bj < bi) then
+                        tmp = airList[si]
+                        airList[si] = airList[sj]
+                        airList[sj] = tmp
+                    end if
+                end for
+            end for
             ' Pick current airing (now inside window), else first, and next after it
             bestIdx = -1
             for ai = 0 to airList.count() - 1
