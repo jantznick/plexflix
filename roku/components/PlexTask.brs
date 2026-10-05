@@ -320,6 +320,37 @@ function preferShowPosters(items as Object) as Object
     return items
 end function
 
+function enrichEpisodeShowDescriptions(cfg as Object, items as Object) as Object
+    ' Hub/on-deck episodes only carry the episode synopsis. Home billboard should
+    ' show the *show* synopsis — fetch each unique grandparent once and stamp it.
+    if items = invalid then return []
+    cache = {}
+    for each item in items
+        if item <> invalid and safeToStr(item.mediaType) = "episode" then
+            showKey = safeToStr(item.grandparentRatingKey)
+            if showKey <> "" then
+                showSummary = ""
+                if cache.DoesExist(showKey) then
+                    showSummary = safeToStr(cache[showKey])
+                else
+                    result = plexGet(cfg, "/library/metadata/" + showKey)
+                    if result.ok = true and result.json <> invalid and result.json.MediaContainer <> invalid then
+                        meta = result.json.MediaContainer.Metadata
+                        if meta = invalid then meta = result.json.MediaContainer.Directory
+                        if meta <> invalid then
+                            if GetInterface(meta, "ifArray") <> invalid and meta.count() > 0 then meta = meta[0]
+                            if meta.summary <> invalid then showSummary = safeToStr(meta.summary)
+                        end if
+                    end if
+                    cache[showKey] = showSummary
+                end if
+                item.showDescription = showSummary
+            end if
+        end if
+    end for
+    return items
+end function
+
 function clampRowItems(items as Object) as Object
     ' Only keep rows that can feel full: 15–30 items. Cap, then loop by duplicating.
     out = []
@@ -374,7 +405,8 @@ function appendRowNodes(root as Object, title as String, items as Object) as Boo
             isDiscover: isDiscover,
             hdShowPosterUrl: item.hdShowPosterUrl,
             ' Custom field — must be in addFields or RowList drops it
-            hdBackdropUrl: item.hdBackdropUrl
+            hdBackdropUrl: item.hdBackdropUrl,
+            showDescription: item.showDescription
         })
     end for
     return true
@@ -421,7 +453,7 @@ function buildHome(cfg as Object) as Object
     ' Continue Watching / On Deck — exempt from 15-min (always useful)
     onDeck = plexGet(cfg, "/library/onDeck")
     if onDeck.ok = true then
-        addUniqueRowLoose(root, seenTitles, "Continue Watching", preferShowPosters(collectMetadata(cfg, onDeck.json)))
+        addUniqueRowLoose(root, seenTitles, "Continue Watching", enrichEpisodeShowDescriptions(cfg, preferShowPosters(collectMetadata(cfg, onDeck.json))))
     end if
 
     ' Recently Added (global)
@@ -957,7 +989,7 @@ function fetchSectionHub(cfg as Object, item as Object) as Object
     ' Continue Watching is always the first shelf under View all
     onDeck = plexGet(cfg, "/library/sections/" + sectionId + "/onDeck")
     if onDeck.ok = true then
-        addUniqueRowLoose(root, seenTitles, "Continue Watching", preferShowPosters(collectMetadata(cfg, onDeck.json)))
+        addUniqueRowLoose(root, seenTitles, "Continue Watching", enrichEpisodeShowDescriptions(cfg, preferShowPosters(collectMetadata(cfg, onDeck.json))))
     end if
 
     recent = plexGet(cfg, "/library/sections/" + sectionId + "/recentlyAdded")
