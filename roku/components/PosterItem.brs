@@ -26,12 +26,16 @@ sub onRowIndexChange()
 end sub
 
 sub applyRowStagger()
-    ' Odd shelves shift right by half a tile so columns don't form a grid.
-    ' Peek strip already has its own offset; this is for every content row.
-    row = 0
-    if m.top.rowIndex <> invalid then row = m.top.rowIndex
+    ' Prefer staggerX stamped on itemContent (reliable). Fall back to rowIndex.
     stagger = 0
-    if (row MOD 2) = 1 then stagger = 86
+    item = m.top.itemContent
+    if item <> invalid and item.staggerX <> invalid then
+        stagger = item.staggerX
+    else if item <> invalid and item.shelfIndex <> invalid then
+        if (item.shelfIndex MOD 2) = 1 then stagger = 86
+    else if m.top.rowIndex <> invalid then
+        if (m.top.rowIndex MOD 2) = 1 then stagger = 86
+    end if
     m.staggerX = stagger
     if m.visual <> invalid then m.visual.translation = [stagger, 0]
 end sub
