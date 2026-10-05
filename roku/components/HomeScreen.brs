@@ -9,21 +9,22 @@ sub init()
     m.heroMeta = m.top.findNode("heroMeta")
     m.heroSummary = m.top.findNode("heroSummary")
     m.rowList = m.top.findNode("rowList")
-    m.buildLabel = m.top.findNode("buildLabel")
     m.homeAnim = m.top.findNode("homeAnim")
     m.billboardMove = m.top.findNode("billboardMove")
     m.billboardFade = m.top.findNode("billboardFade")
     m.rowsMove = m.top.findNode("rowsMove")
 
-    ' Expanded: hero + focused shelf fully visible below it; next shelf peeks at bottom.
-    ' Collapsed: focused shelf sits in a lower fixed slot so a previous shelf can peek
-    ' above without the ACTIVE shelf being the clipped one.
-    m.expandedRowY = 560
-    m.collapsedRowY = 120
+    ' Expanded: hero + 1 full shelf; next shelf hard-cut at bottom.
+    ' Collapsed: list starts above the clip so the previous shelf peeks cut off at top;
+    ' floatingFocus keeps the ACTIVE shelf fully on-screen below that peek.
+    m.expandedRowY = 500
+    m.collapsedRowY = -110
     m.rowsX = 96
-    m.heroHideY = -560
+    m.heroHideY = -500
     m.isCollapsed = false
     m.currentRow = -1
+
+    if m.heroArt <> invalid then m.heroArt.loadDisplayMode = "scaleToZoom"
 
     m.shimmer = m.top.findNode("shimmer")
     if m.shimmer <> invalid then m.shimmer.active = true
@@ -90,9 +91,6 @@ sub onHomeLoaded()
         return
     end if
 
-    rowCount = content.getChildCount()
-    m.buildLabel.text = "v0.4.6 · " + safeToStr(rowCount) + " rows"
-
     if m.loadingPanel <> invalid then m.loadingPanel.visible = false
     if m.frame <> invalid then m.frame.visible = true
 
@@ -146,12 +144,15 @@ sub setBrowseMode(collapsed as Boolean)
         toOpacity = 0.0
         m.heroCopy.visible = false
         m.billboard.visible = true
+        ' Peek previous above; floatingFocus keeps active fully visible
+        m.rowList.rowFocusAnimationStyle = "floatingFocus"
     else
         toHero = [0, 0]
         toRows = [m.rowsX, m.expandedRowY]
         toOpacity = 1.0
         m.billboard.visible = true
         m.heroCopy.visible = true
+        m.rowList.rowFocusAnimationStyle = "fixedFocus"
     end if
 
     m.isCollapsed = collapsed
@@ -192,6 +193,8 @@ end sub
 sub updateHeroContent(item as Object)
     if m.heroArt <> invalid then
         m.heroArt.loadDisplayMode = "scaleToZoom"
+        m.heroArt.width = 1920
+        m.heroArt.height = 480
     end if
 
     uri = ""

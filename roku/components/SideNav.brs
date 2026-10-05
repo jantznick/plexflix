@@ -1,5 +1,6 @@
 sub init()
     m.navItems = m.top.findNode("navItems")
+    m.versionLabel = m.top.findNode("versionLabel")
     m.entries = []
     m.libraries = []
     m.index = 0
@@ -10,6 +11,9 @@ end sub
 
 sub onConfigReady()
     if m.top.config = invalid then return
+    if m.versionLabel <> invalid and m.top.config.version <> invalid then
+        m.versionLabel.text = "v" + m.top.config.version
+    end if
     loadLibraries()
 end sub
 

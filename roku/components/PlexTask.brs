@@ -178,8 +178,16 @@ function imageUrl(cfg as Object, path as Dynamic, width = 420 as Integer, height
     if path = invalid or path = "" then return ""
     pathStr = safeToStr(path)
     if Left(pathStr, 4) = "http" then return pathStr
-    ' minSize=1 = cover/crop (no stretch). Never omit it — stretch looks horrible on heroes.
+    ' minSize=1 = cover/crop (preserves aspect). upscale=0 avoids mushy blow-ups.
     return cfg.baseUrl + "/photo/:/transcode?width=" + safeToStr(width) + "&height=" + safeToStr(height) + "&minSize=1&upscale=0&url=" + requestEncode(pathStr) + "&X-Plex-Token=" + cfg.token
+end function
+
+function imageUrlWide(cfg as Object, path as Dynamic, width = 1920 as Integer) as String
+    ' Width-only: Plex scales proportionally — no forced height that can look stretched
+    if path = invalid or path = "" then return ""
+    pathStr = safeToStr(path)
+    if Left(pathStr, 4) = "http" then return pathStr
+    return cfg.baseUrl + "/photo/:/transcode?width=" + safeToStr(width) + "&minSize=1&upscale=0&url=" + requestEncode(pathStr) + "&X-Plex-Token=" + cfg.token
 end function
 
 function requestEncode(value as String) as String

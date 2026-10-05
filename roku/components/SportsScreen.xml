@@ -32,14 +32,7 @@
             <Label id="eventSummary" translation="[0, 90]" width="900" height="80" color="0xC5CCD8" wrap="true" maxLines="3" lineSpacing="3" text="">
                 <Font role="font" uri="pkg:/fonts/Outfit-Regular.ttf" size="18" />
             </Label>
-
-            <Group id="watchBtn" translation="[0, 190]">
-                <Rectangle id="watchBg" width="240" height="48" color="0xE50914" />
-                <Label id="watchLabel" width="240" height="48" horizAlign="center" vertAlign="center" text="Open streams" color="0xFFFFFF">
-                    <Font role="font" uri="pkg:/fonts/Outfit-SemiBold.ttf" size="22" />
-                </Label>
-            </Group>
-            <Label id="statusLabel" translation="[260, 200]" width="600" height="32" text="" color="0x778099">
+            <Label id="statusLabel" translation="[0, 190]" width="900" height="32" text="" color="0x778099">
                 <Font role="font" uri="pkg:/fonts/Outfit-Regular.ttf" size="16" />
             </Label>
 
