@@ -12,6 +12,7 @@ sub init()
     m.ringR = m.top.findNode("ringR")
     m.progressBg = m.top.findNode("progressBg")
     m.progressFg = m.top.findNode("progressFg")
+    m.watchedBadge = m.top.findNode("watchedBadge")
     m.itemWidth = 320
     m.itemHeight = 180
     setFocused(false)
@@ -72,9 +73,15 @@ sub onSizeChange()
         m.ringR.translation = [m.itemWidth + pad - 4, -pad]
     end if
 
+    barHeight = 8
     m.progressBg.width = m.itemWidth
-    m.progressBg.translation = [0, m.itemHeight - 4]
-    m.progressFg.translation = [0, m.itemHeight - 4]
+    m.progressBg.translation = [0, m.itemHeight - barHeight]
+    m.progressFg.translation = [0, m.itemHeight - barHeight]
+
+    if m.watchedBadge <> invalid then
+        badge = 34
+        m.watchedBadge.translation = [m.itemWidth - badge - 8, 8]
+    end if
     refreshProgress()
 end sub
 
@@ -92,6 +99,7 @@ sub onContentChange()
     if item.title <> invalid then label = item.title
     m.titleLabel.text = label
     refreshProgress()
+    if m.watchedBadge <> invalid then m.watchedBadge.visible = (item.watched = true)
 end sub
 
 sub refreshProgress()
@@ -120,9 +128,17 @@ sub refreshProgress()
 end sub
 
 sub onFocusPercentChange()
+    refreshFocusVisual()
+end sub
+
+sub onOwnerFocusChange()
+    refreshFocusVisual()
+end sub
+
+sub refreshFocusVisual()
     fp = m.top.focusPercent
     if fp = invalid then fp = 0
-    setFocused(fp > 0.5)
+    setFocused(fp > 0.5 and m.top.rowListHasFocus <> false)
 end sub
 
 sub setFocused(focused as Boolean)

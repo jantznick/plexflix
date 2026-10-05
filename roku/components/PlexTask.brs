@@ -197,6 +197,25 @@ function requestEncode(value as String) as String
     return transfer.Escape(value)
 end function
 
+' Rows can mix library metadata with hand-built live TV / sports entries that
+' never went through metadataToItem, so normalise before handing to addFields
+function watchedFlag(item as Object) as Boolean
+    if item = invalid or item.watched <> true then return false
+    return true
+end function
+
+function unwatchedTotal(item as Object) as Integer
+    if item = invalid or item.unwatchedCount = invalid then return 0
+    count = item.unwatchedCount
+    if count < 0 then return 0
+    return count
+end function
+
+function viewedLeaves(item as Object) as Integer
+    if item = invalid or item.viewedLeafCount = invalid then return 0
+    return item.viewedLeafCount
+end function
+
 function metadataToItem(cfg as Object, meta as Object) as Object
     if meta = invalid then return invalid
 
@@ -259,6 +278,27 @@ function metadataToItem(cfg as Object, meta as Object) as Object
     viewOffset = 0
     if meta.viewOffset <> invalid then viewOffset = meta.viewOffset
 
+    ' Plex watched state: viewCount counts completed plays on a leaf (movie or
+    ' episode), viewedLeafCount counts watched episodes under a show or season
+    viewCount = 0
+    if meta.viewCount <> invalid then viewCount = meta.viewCount
+    viewedLeafCount = 0
+    if meta.viewedLeafCount <> invalid then viewedLeafCount = meta.viewedLeafCount
+    leafCount = 0
+    if meta.leafCount <> invalid then leafCount = meta.leafCount
+    lastViewedAt = 0
+    if meta.lastViewedAt <> invalid then lastViewedAt = meta.lastViewedAt
+
+    watched = false
+    if mediaType = "show" or mediaType = "season" then
+        watched = (leafCount > 0 and viewedLeafCount >= leafCount)
+    else
+        watched = (viewCount > 0 and viewOffset = 0)
+    end if
+
+    unwatchedCount = 0
+    if leafCount > viewedLeafCount then unwatchedCount = leafCount - viewedLeafCount
+
     indexVal = ""
     parentIndexVal = ""
     if meta.index <> invalid then indexVal = safeToStr(meta.index)
@@ -296,7 +336,11 @@ function metadataToItem(cfg as Object, meta as Object) as Object
         hdBackdropUrl: imageUrl(cfg, art, 1920, 1080),
         duration: duration,
         viewOffset: viewOffset,
-        leafCount: meta.leafCount,
+        viewedLeafCount: viewedLeafCount,
+        lastViewedAt: lastViewedAt,
+        watched: watched,
+        unwatchedCount: unwatchedCount,
+        leafCount: leafCount,
         childCount: meta.childCount,
         index: indexVal,
         parentIndex: parentIndexVal,
@@ -363,6 +407,9 @@ function appendRowNodes(root as Object, title as String, items as Object) as Boo
             key: item.key,
             duration: item.duration,
             viewOffset: item.viewOffset,
+            watched: watchedFlag(item),
+            unwatchedCount: unwatchedTotal(item),
+            viewedLeafCount: viewedLeaves(item),
             leafCount: item.leafCount,
             childCount: item.childCount,
             grandparentRatingKey: item.grandparentRatingKey,
@@ -735,6 +782,9 @@ sub addUniqueRowLoose(root as Object, seenTitles as Object, title as String, ite
             key: item.key,
             duration: item.duration,
             viewOffset: item.viewOffset,
+            watched: watchedFlag(item),
+            unwatchedCount: unwatchedTotal(item),
+            viewedLeafCount: viewedLeaves(item),
             leafCount: item.leafCount,
             childCount: item.childCount,
             grandparentRatingKey: item.grandparentRatingKey,
@@ -1121,6 +1171,10 @@ function fetchSectionAll(cfg as Object, item as Object) as Object
             key: it.key,
             duration: it.duration,
             viewOffset: it.viewOffset,
+            watched: watchedFlag(it),
+            unwatchedCount: unwatchedTotal(it),
+            viewedLeafCount: viewedLeaves(it),
+            leafCount: it.leafCount,
             shortTitle: it.shortTitle,
             hdBackdropUrl: it.hdBackdropUrl
         })

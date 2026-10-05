@@ -115,7 +115,11 @@ sub appendCreditRow(root as Object, title as String, list as Object)
                 rating: c.rating,
                 contentRating: c.contentRating,
                 duration: c.duration,
-                viewOffset: c.viewOffset
+                viewOffset: c.viewOffset,
+                watched: c.watched,
+                unwatchedCount: c.unwatchedCount,
+                viewedLeafCount: c.viewedLeafCount,
+                leafCount: c.leafCount
             })
         end if
     end for
@@ -153,7 +157,11 @@ sub onCreditSelected()
         hdPosterUrl: item.hdPosterUrl,
         hdBackdropUrl: item.hdBackdropUrl,
         duration: item.duration,
-        viewOffset: item.viewOffset
+        viewOffset: item.viewOffset,
+        watched: item.watched,
+        unwatchedCount: item.unwatchedCount,
+        viewedLeafCount: item.viewedLeafCount,
+        leafCount: item.leafCount
     }
 end sub
 

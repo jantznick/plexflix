@@ -407,6 +407,10 @@ sub onGridSelected()
         hdBackdropUrl: item.hdBackdropUrl,
         duration: item.duration,
         viewOffset: item.viewOffset,
+        watched: item.watched,
+        unwatchedCount: item.unwatchedCount,
+        viewedLeafCount: item.viewedLeafCount,
+        leafCount: item.leafCount,
         shortTitle: item.shortTitle
     }
 end sub

@@ -56,6 +56,8 @@ sub onContentSet()
     if rating <> "" then metaBits.push(rating + " ★")
     mediaType = asString(item.mediaType)
     if mediaType <> "" then metaBits.push(titleCaseType(mediaType))
+    watchBit = watchedSummary(item)
+    if watchBit <> "" then metaBits.push(watchBit)
     m.metaLabel.text = joinStrings(metaBits, "  ·  ")
 
     if item.hdBackdropUrl <> invalid and item.hdBackdropUrl <> "" then
@@ -240,6 +242,8 @@ sub fillSeasonRow(index as Integer, season as Object, episodes as Object)
             mediaType: ep.mediaType,
             duration: ep.duration,
             viewOffset: ep.viewOffset,
+            watched: ep.watched,
+            unwatchedCount: ep.unwatchedCount,
             year: ep.year,
             hdBackdropUrl: ep.hdBackdropUrl,
             shortTitle: ep.shortTitle,
@@ -304,6 +308,8 @@ sub appendSeasonRow(season as Object, episodes as Object)
             mediaType: ep.mediaType,
             duration: ep.duration,
             viewOffset: ep.viewOffset,
+            watched: ep.watched,
+            unwatchedCount: ep.unwatchedCount,
             year: ep.year,
             hdBackdropUrl: ep.hdBackdropUrl,
             shortTitle: ep.shortTitle,
@@ -335,6 +341,8 @@ sub onExtrasLoaded()
         if rating <> "" then metaBits.push(rating + " ★")
         mediaType = asString(detail.mediaType)
         if mediaType <> "" then metaBits.push(titleCaseType(mediaType))
+        watchBit = watchedSummary(detail)
+        if watchBit <> "" then metaBits.push(watchBit)
         if metaBits.count() > 0 then m.metaLabel.text = joinStrings(metaBits, "  ·  ")
     end if
 
@@ -384,6 +392,10 @@ sub appendItemsRow(root as Object, title as String, items as Object)
             mediaType: item.mediaType,
             duration: item.duration,
             viewOffset: item.viewOffset,
+            watched: item.watched,
+            unwatchedCount: item.unwatchedCount,
+            viewedLeafCount: item.viewedLeafCount,
+            leafCount: item.leafCount,
             year: item.year,
             hdBackdropUrl: item.hdBackdropUrl,
             contentRating: item.contentRating,
@@ -393,6 +405,33 @@ sub appendItemsRow(root as Object, title as String, items as Object)
         })
     end for
 end sub
+
+function watchedSummary(item as Object) as String
+    if item = invalid then return ""
+
+    mediaType = asString(item.mediaType)
+    if mediaType = "show" or mediaType = "season" then
+        leaves = asInteger(item.leafCount)
+        if leaves <= 0 then return ""
+        viewed = asInteger(item.viewedLeafCount)
+        if viewed >= leaves then return "Watched"
+        if viewed <= 0 then return ""
+        return asString(viewed) + " of " + asString(leaves) + " watched"
+    end if
+
+    if asInteger(item.viewOffset) > 0 then
+        return minutesLeftLabel(asInteger(item.duration) - asInteger(item.viewOffset))
+    end if
+    if item.watched = true then return "Watched"
+    return ""
+end function
+
+function minutesLeftLabel(remainingMs as Integer) as String
+    if remainingMs <= 0 then return ""
+    minutes = Int(remainingMs / 60000)
+    if minutes < 1 then return "Almost finished"
+    return asString(minutes) + " min left"
+end function
 
 function formatEpisodeTitle(ep as Object) as String
     title = asString(ep.shortTitle)
@@ -447,6 +486,10 @@ function nodeToItem(item as Object) as Object
         hdBackdropUrl: item.hdBackdropUrl,
         duration: item.duration,
         viewOffset: item.viewOffset,
+        watched: item.watched,
+        unwatchedCount: item.unwatchedCount,
+        viewedLeafCount: item.viewedLeafCount,
+        leafCount: item.leafCount,
         personId: item.personId,
         shortTitle: item.shortTitle
     }
@@ -476,8 +519,6 @@ sub focusActionButtons()
     ' Drop shelf focus so cast/episode rings cannot linger while Play is active
     if m.relatedRows <> invalid then
         m.relatedRows.setFocus(false)
-        m.relatedRows.visible = false
-        m.relatedRows.visible = true
     end if
     if m.seasonRows <> invalid then
         m.seasonRows.setFocus(false)
@@ -588,6 +629,22 @@ function asString(value as Dynamic) as String
         return Str(value).Trim()
     end if
     return ""
+end function
+
+function asInteger(value as Dynamic) as Integer
+    if value = invalid then return 0
+    valueType = type(value)
+    if valueType = "Integer" or valueType = "roInt" or valueType = "roInteger" or valueType = "LongInteger" then
+        return value
+    end if
+    if valueType = "Float" or valueType = "Double" or valueType = "roFloat" or valueType = "roDouble" then
+        return Int(value)
+    end if
+    if valueType = "String" or valueType = "roString" then
+        if value = "" then return 0
+        return Int(Val(value))
+    end if
+    return 0
 end function
 
 function joinStrings(parts as Object, sep as String) as String

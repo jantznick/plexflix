@@ -68,19 +68,51 @@
             <Rectangle
                 id="progressBg"
                 width="168"
-                height="5"
-                translation="[0, 247]"
-                color="0x404040"
+                height="8"
+                translation="[0, 244]"
+                color="0x000000"
+                opacity="0.65"
                 visible="false"
             />
             <Rectangle
                 id="progressFg"
                 width="0"
-                height="5"
-                translation="[0, 247]"
+                height="8"
+                translation="[0, 244]"
                 color="0xE50914"
                 visible="false"
             />
+
+            <!-- Watched tick and unwatched-episode count share the top-right
+                 corner; a title can never be in both states at once -->
+            <Poster
+                id="watchedBadge"
+                width="34"
+                height="34"
+                translation="[126, 8]"
+                uri="pkg:/images/watched_check.png"
+                visible="false"
+            />
+            <Rectangle
+                id="unwatchedPill"
+                width="34"
+                height="26"
+                translation="[126, 8]"
+                color="0xE5A00D"
+                visible="false"
+            />
+            <Label
+                id="unwatchedLabel"
+                width="34"
+                height="26"
+                translation="[126, 8]"
+                horizAlign="center"
+                vertAlign="center"
+                color="0x14140C"
+                visible="false"
+            >
+                <Font role="font" uri="pkg:/fonts/Outfit-SemiBold.ttf" size="18" />
+            </Label>
 
             <Rectangle
                 id="titleBar"
