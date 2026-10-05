@@ -1,9 +1,13 @@
 ' Full-library grid: one scrolling MarkupGrid over a sliding window of Plex pages.
 '
-' Only MAXWINDOWPAGES * PAGESIZE content nodes are ever live, so a 10,000 title
-' library costs the same memory as a 300 title one. Paging is driven by the
+' Only MAXWINDOWPAGES * PAGESIZE content nodes are ever live, so a 40,000 title
+' library costs the same memory as a 900 title one. Paging is driven by the
 ' focused index: cross into the last rows and the next Plex page is appended,
 ' scroll back toward the top and the previous page is prepended again.
+'
+' The window is deliberately much larger than the screen. Trimming re-anchors
+' the grid with jumpToItem, which is the one moment scrolling can visibly jolt,
+' so it should happen after a hundred-odd rows rather than every few pages.
 
 sub init()
     m.titleLabel = m.top.findNode("titleLabel")
@@ -12,23 +16,21 @@ sub init()
     m.grid = m.top.findNode("grid")
     m.spinner = m.top.findNode("spinner")
     m.emptyLabel = m.top.findNode("emptyLabel")
+    m.alphaRail = m.top.findNode("alphaRail")
 
-    m.filterBg = m.top.findNode("filterBg")
-    m.filterLabel = m.top.findNode("filterLabel")
-    m.searchBg = m.top.findNode("searchBg")
-    m.searchLabel = m.top.findNode("searchLabel")
-    m.sortBg = m.top.findNode("sortBg")
-    m.sortLabel = m.top.findNode("sortLabel")
+    m.filterBtn = m.top.findNode("filterBtn")
+    m.searchBtn = m.top.findNode("searchBtn")
+    m.sortBtn = m.top.findNode("sortBtn")
 
     m.filterPanel = m.top.findNode("filterPanel")
     m.filterList = m.top.findNode("filterList")
     m.panelTitle = m.top.findNode("panelTitle")
     m.panelHint = m.top.findNode("panelHint")
 
-    m.numColumns = 11
-    m.pageSize = 66          ' six grid rows per Plex request
-    m.maxWindowPages = 5     ' hard cap on live content nodes (5 * 66 = 330)
-    m.prefetchRows = 2
+    m.numColumns = 6
+    m.pageSize = 60          ' ten grid rows per Plex request
+    m.maxWindowPages = 15    ' hard cap on live content nodes (15 * 60 = 900)
+    m.prefetchRows = 4
 
     m.libraryTitle = "Library"
     m.sectionId = ""
@@ -47,14 +49,18 @@ sub init()
     m.hasMoreForward = false
     m.loading = false
     m.pendingDir = ""
+    m.pendingUp = false
     m.requestSeq = 0
     m.activeRequestId = ""
     m.lastFocusRow = -1
-    m.deferInitialLoad = false
     m.warning = ""
 
+    m.jumpStart = 0
+    m.jumpFocus = 0
+    m.letterOffsets = {}
+
     m.task = invalid
-    m.prevTask = invalid
+    m.letterTask = invalid
     m.searchDialog = invalid
 
     m.toolbarButtons = ["filter", "search", "sort"]
@@ -80,7 +86,12 @@ sub init()
     m.grid.observeField("itemFocused", "onGridFocused")
     m.filterList.observeField("itemSelected", "onFilterSelected")
 
-    paintToolbar()
+    m.filterBtn.observeField("selected", "onFilterButton")
+    m.searchBtn.observeField("selected", "onSearchButton")
+    m.sortBtn.observeField("selected", "onSortButton")
+
+    m.alphaRail.observeField("letterSelected", "onLetterSelected")
+    m.alphaRail.observeField("escapeLeft", "onRailEscapeLeft")
 end sub
 
 '--------------------------------------------------------------------
@@ -109,20 +120,16 @@ sub onSourceSet()
     m.activeSort = "titleSort"
     m.unwatchedOnly = false
 
-    if source.openSearch = true then
-        ' Opened straight from the library Search button — ask first, fetch once
-        m.deferInitialLoad = true
-        refreshStatus()
-        openSearchKeyboard()
-    else
-        applyFilters()
-    end if
+    loadLetters()
+    applyFilters()
 end sub
 
 sub onRefocus()
     if m.top.refocus <> true then return
     if m.filterPanel.visible = true then
         m.filterList.setFocus(true)
+    else if m.focusZone = "rail" and m.alphaRail.visible = true then
+        focusRail()
     else if gridCount() > 0 then
         focusGrid()
     else
@@ -158,7 +165,6 @@ sub applyFilters()
     ' Any in-flight page is abandoned; stale responses are dropped by requestId
     m.loading = false
     m.lastFocusRow = -1
-    m.deferInitialLoad = false
     m.totalSize = 0
     m.hasMoreForward = false
     m.warning = ""
@@ -186,6 +192,8 @@ sub loadPage(direction as String)
         if startAt < 0 then startAt = 0
         ' Ask for exactly the gap so the prepended page can't overlap the window
         size = m.windowStart - startAt
+    else if direction = "jump" then
+        startAt = m.jumpStart
     else
         direction = "reset"
     end if
@@ -195,7 +203,7 @@ sub loadPage(direction as String)
     m.pendingDir = direction
     m.loading = true
 
-    if direction = "reset" then
+    if direction = "reset" or direction = "jump" then
         hideEmpty()
         setSpinner(true)
         m.top.loadingMessage = "Loading " + m.libraryTitle + "…"
@@ -217,7 +225,6 @@ sub loadPage(direction as String)
         requestId: m.activeRequestId
     }
 
-    m.prevTask = m.task
     m.task = createObject("roSGNode", "PlexTask")
     m.task.config = m.top.config
     m.task.action = "sectionAll"
@@ -234,6 +241,8 @@ sub onLoaded(event as Object)
     direction = m.pendingDir
     if direction = "" then direction = "reset"
     m.pendingDir = ""
+    wasUp = m.pendingUp
+    m.pendingUp = false
     m.loading = false
     setSpinner(false)
     m.top.loadingMessage = ""
@@ -241,8 +250,8 @@ sub onLoaded(event as Object)
     if response.ok <> true then
         err = "Could not load titles"
         if asString(response.error) <> "" then err = asString(response.error)
-        if direction = "reset" then
-            resetGrid([])
+        if direction = "reset" or direction = "jump" then
+            resetGrid([], 0, 0)
             showEmpty(err)
             focusToolbar("filter")
         else
@@ -263,18 +272,27 @@ sub onLoaded(event as Object)
         page.removeChildren(newNodes)
     end if
 
-    if direction = "reset" then
+    if direction = "reset" or direction = "jump" then
+        base = 0
+        focusIdx = 0
+        if direction = "jump" then
+            base = m.jumpStart
+            focusIdx = m.jumpFocus
+        end if
         m.hasMoreForward = (response.hasMore = true)
-        resetGrid(newNodes)
+        resetGrid(newNodes, base, focusIdx)
+        m.lastFocusRow = -1
         if gridCount() = 0 then
             showEmpty(emptyMessage())
+            refreshRail()
             focusToolbar("filter")
             refreshStatus()
             return
         end if
         hideEmpty()
-        m.lastFocusRow = 0
-        focusGrid()
+        refreshRail()
+        ' A jump came from the rail, so leave the rail holding the remote
+        if m.focusZone <> "rail" or m.alphaRail.visible <> true then focusGrid()
     else if direction = "forward" then
         m.hasMoreForward = (response.hasMore = true)
         if newNodes.count() > 0 then
@@ -287,7 +305,11 @@ sub onLoaded(event as Object)
             m.gridRoot.insertChildren(newNodes, 0)
             m.windowStart = m.windowStart - newNodes.count()
             if m.windowStart < 0 then m.windowStart = 0
-            m.grid.jumpToItem = focused + newNodes.count()
+            target = focused + newNodes.count()
+            ' The prepend was triggered by pressing Up, so honour that move too
+            if wasUp then target = target - m.numColumns
+            if target < 0 then target = 0
+            m.grid.jumpToItem = target
             trimWindowBack()
         end if
     end if
@@ -295,12 +317,15 @@ sub onLoaded(event as Object)
     refreshStatus()
 end sub
 
-sub resetGrid(nodes as Object)
+sub resetGrid(nodes as Object, startIndex = 0 as Integer, focusIndex = 0 as Integer)
     m.gridRoot = createObject("roSGNode", "ContentNode")
     if nodes <> invalid and nodes.count() > 0 then m.gridRoot.appendChildren(nodes)
     m.grid.content = m.gridRoot
-    m.windowStart = 0
-    if gridCount() > 0 then m.grid.jumpToItem = 0
+    m.windowStart = startIndex
+    if gridCount() > 0 then
+        if focusIndex < 0 or focusIndex > gridCount() - 1 then focusIndex = 0
+        m.grid.jumpToItem = focusIndex
+    end if
 end sub
 
 sub trimWindowFront()
@@ -361,6 +386,9 @@ sub onGridFocused()
 end sub
 
 sub onGridSelected()
+    ' Without the focus check a repaint of the grid can re-fire this while the
+    ' toolbar owns the remote, which is how OK used to open the wrong thing
+    if not m.grid.hasFocus() then return
     idx = m.grid.itemSelected
     if idx = invalid or idx < 0 then return
     if m.gridRoot = invalid or idx > gridCount() - 1 then return
@@ -381,6 +409,83 @@ sub onGridSelected()
         viewOffset: item.viewOffset,
         shortTitle: item.shortTitle
     }
+end sub
+
+'--------------------------------------------------------------------
+' A-Z jump rail
+'--------------------------------------------------------------------
+
+sub loadLetters()
+    m.letterOffsets = {}
+    buildRail()
+    if m.sectionId = "" then return
+    m.letterTask = createObject("roSGNode", "PlexTask")
+    m.letterTask.config = m.top.config
+    m.letterTask.action = "sectionFirstCharacter"
+    m.letterTask.item = { sectionId: m.sectionId, sectionType: m.sectionType }
+    m.letterTask.observeField("response", "onLettersLoaded")
+    m.letterTask.control = "RUN"
+end sub
+
+sub onLettersLoaded(event as Object)
+    response = event.getData()
+    offsets = {}
+    if response <> invalid and response.ok = true and response.letters <> invalid then
+        for each entry in response.letters
+            letter = asString(entry.letter)
+            if letter <> "" and offsets[letter] = invalid then offsets[letter] = entry.offset
+        end for
+    end if
+    m.letterOffsets = offsets
+    buildRail()
+end sub
+
+sub buildRail()
+    if m.alphaRail = invalid then return
+    entries = []
+    for each letter in railLetters()
+        entries.push({ letter: letter, enabled: m.letterOffsets[letter] <> invalid })
+    end for
+    m.alphaRail.letters = entries
+    refreshRail()
+end sub
+
+sub refreshRail()
+    if m.alphaRail = invalid then return
+    ' The offsets come from the unfiltered title-ascending order, so the rail
+    ' can only point at real rows while the grid is in exactly that order
+    show = (m.activeSort = "titleSort" and activeFilterCount() = 0)
+    show = show and m.letterOffsets.count() > 0 and gridCount() > 0
+    if m.alphaRail.visible <> show then m.alphaRail.visible = show
+    if not show and m.focusZone = "rail" then focusGrid()
+end sub
+
+function railLetters() as Object
+    out = ["#"]
+    alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+    for i = 1 to Len(alphabet)
+        out.push(Mid(alphabet, i, 1))
+    end for
+    return out
+end function
+
+sub onLetterSelected(event as Object)
+    letter = asString(event.getData())
+    if letter = "" then return
+    offset = m.letterOffsets[letter]
+    if offset = invalid then return
+
+    ' Start the window on a row boundary so the grid keeps whole rows
+    aligned = Int(offset / m.numColumns) * m.numColumns
+    m.jumpStart = aligned
+    m.jumpFocus = offset - aligned
+    m.lastFocusRow = -1
+    m.totalSize = 0
+    loadPage("jump")
+end sub
+
+sub onRailEscapeLeft()
+    focusGrid()
 end sub
 
 '--------------------------------------------------------------------
@@ -411,7 +516,7 @@ end sub
 
 function emptyMessage() as String
     if activeFilterCount() = 0 then return "This library looks empty."
-    return "Nothing matches " + filterSummary() + "." + Chr(10) + "Open Filter to clear it."
+    return "Nothing matches " + filterSummary() + "."
 end function
 
 function activeFilterCount() as Integer
@@ -434,7 +539,6 @@ function filterSummary() as String
 end function
 
 function positionText() as String
-    if m.deferInitialLoad then return ""
     count = gridCount()
     if count = 0 then
         if m.loading then return "Loading…"
@@ -455,13 +559,13 @@ sub refreshStatus()
         m.metaLabel.text = summary
     end if
     if m.posLabel <> invalid then m.posLabel.text = positionText()
-    if m.sortLabel <> invalid then m.sortLabel.text = "Order by: " + sortLabelFor(m.activeSort)
-    if m.filterLabel <> invalid then
+    if m.sortBtn <> invalid then m.sortBtn.text = "Order by: " + sortLabelFor(m.activeSort)
+    if m.filterBtn <> invalid then
         count = activeFilterCount()
         if count > 0 then
-            m.filterLabel.text = "Filter (" + StrI(count).Trim() + ")"
+            m.filterBtn.text = "Filter (" + StrI(count).Trim() + ")"
         else
-            m.filterLabel.text = "Filter"
+            m.filterBtn.text = "Filter"
         end if
     end if
 end sub
@@ -476,35 +580,27 @@ sub focusGrid()
         return
     end if
     m.focusZone = "grid"
-    paintToolbar()
     m.grid.setFocus(true)
 end sub
 
 sub focusToolbar(which as String)
     m.focusZone = "toolbar"
     if which <> "" then m.toolbarBtn = which
-    paintToolbar()
-    m.top.setFocus(true)
+    btn = toolbarNode(m.toolbarBtn)
+    if btn <> invalid then btn.setFocus(true)
 end sub
 
-sub paintToolbar()
-    active = ""
-    if m.focusZone = "toolbar" then active = m.toolbarBtn
-    paintButton(m.filterBg, m.filterLabel, active = "filter")
-    paintButton(m.searchBg, m.searchLabel, active = "search")
-    paintButton(m.sortBg, m.sortLabel, active = "sort")
+sub focusRail()
+    if m.alphaRail = invalid or m.alphaRail.visible <> true then return
+    m.focusZone = "rail"
+    m.alphaRail.setFocus(true)
 end sub
 
-sub paintButton(bg as Object, label as Object, focused as Boolean)
-    if bg = invalid then return
-    if focused then
-        bg.color = "0xFFFFFF"
-        if label <> invalid then label.color = "0x111118"
-    else
-        bg.color = "0x2A2A32"
-        if label <> invalid then label.color = "0xFFFFFF"
-    end if
-end sub
+function toolbarNode(which as String) as Object
+    if which = "search" then return m.searchBtn
+    if which = "sort" then return m.sortBtn
+    return m.filterBtn
+end function
 
 sub moveToolbar(delta as Integer)
     idx = 0
@@ -514,18 +610,22 @@ sub moveToolbar(delta as Integer)
     idx = idx + delta
     if idx < 0 then idx = 0
     if idx > m.toolbarButtons.count() - 1 then idx = m.toolbarButtons.count() - 1
-    m.toolbarBtn = m.toolbarButtons[idx]
-    paintToolbar()
+    focusToolbar(m.toolbarButtons[idx])
 end sub
 
-sub activateToolbarButton()
-    if m.toolbarBtn = "search" then
-        openSearchKeyboard()
-    else if m.toolbarBtn = "sort" then
-        openFilterPanel("sort")
-    else
-        openFilterPanel("filter")
-    end if
+sub onFilterButton()
+    m.toolbarBtn = "filter"
+    openFilterPanel("filter")
+end sub
+
+sub onSearchButton()
+    m.toolbarBtn = "search"
+    openSearchKeyboard()
+end sub
+
+sub onSortButton()
+    m.toolbarBtn = "sort"
+    openFilterPanel("sort")
 end sub
 
 '--------------------------------------------------------------------
@@ -537,7 +637,6 @@ sub openFilterPanel(mode as String)
     showPanelMode(mode)
     m.filterPanel.visible = true
     m.focusZone = "panel"
-    paintToolbar()
     m.filterList.setFocus(true)
 end sub
 
@@ -555,7 +654,7 @@ sub showPanelMode(mode as String)
     m.filterMode = mode
     if mode = "sort" then
         m.panelTitle.text = "Order by"
-        m.panelHint.text = "Sorting reloads the grid from the top"
+        m.panelHint.text = sortLabelFor(m.activeSort)
         buildSortList()
     else if mode = "genre" then
         m.panelTitle.text = "Genre"
@@ -563,7 +662,7 @@ sub showPanelMode(mode as String)
         buildGenreList()
     else if mode = "decade" then
         m.panelTitle.text = "Decade"
-        m.panelHint.text = "Release decade"
+        m.panelHint.text = decadeDisplay()
         buildDecadeList()
     else
         m.panelTitle.text = "Filter"
@@ -573,8 +672,8 @@ sub showPanelMode(mode as String)
 end sub
 
 function genreHint() as String
-    if m.genres = invalid or m.genres.count() = 0 then return "No genres reported by this library"
-    return StrI(m.genres.count()).Trim() + " genres in " + m.libraryTitle
+    if m.genres = invalid or m.genres.count() = 0 then return ""
+    return StrI(m.genres.count()).Trim() + " genres"
 end function
 
 sub buildFilterRoot()
@@ -680,6 +779,7 @@ function sortLabelFor(sortKey as String) as String
 end function
 
 sub onFilterSelected()
+    if not m.filterList.hasFocus() then return
     idx = m.filterList.itemSelected
     if idx = invalid or idx < 0 then return
     if m.filterList.content = invalid then return
@@ -738,11 +838,7 @@ end sub
 
 sub openSearchKeyboard()
     scene = m.top.getScene()
-    if scene = invalid then
-        ' No scene to host the keyboard — never leave the grid unloaded
-        if m.deferInitialLoad then applyFilters()
-        return
-    end if
+    if scene = invalid then return
 
     dialog = createObject("roSGNode", "KeyboardDialog")
     dialog.title = "Search " + m.libraryTitle
@@ -752,13 +848,13 @@ sub openSearchKeyboard()
     else
         dialog.buttons = ["Search", "Clear search", "Cancel"]
     end if
-    dialog.observeField("buttonSelected", "onSearchButton")
+    dialog.observeField("buttonSelected", "onSearchDialogButton")
     dialog.observeField("wasClosed", "onSearchClosed")
     m.searchDialog = dialog
     scene.dialog = dialog
 end sub
 
-sub onSearchButton()
+sub onSearchDialogButton()
     dialog = m.searchDialog
     if dialog = invalid then return
 
@@ -777,9 +873,6 @@ sub onSearchButton()
     else if picked = "Clear search" then
         m.activeSearch = ""
         applyFilters()
-    else if m.deferInitialLoad then
-        ' Cancelled before the first fetch — fall back to the unfiltered grid
-        applyFilters()
     end if
 end sub
 
@@ -787,15 +880,8 @@ sub onSearchClosed()
     ' Drop the scene's reference too, otherwise MainScene keeps treating the remote as busy
     scene = m.top.getScene()
     if scene <> invalid and scene.dialog <> invalid then scene.dialog = invalid
+    m.searchDialog = invalid
 
-    if m.searchDialog <> invalid then
-        ' Backed out of the keyboard without choosing a button
-        m.searchDialog = invalid
-        if m.deferInitialLoad then
-            applyFilters()
-            return
-        end if
-    end if
     if gridCount() > 0 then
         focusGrid()
     else
@@ -824,6 +910,15 @@ function onKeyEvent(key as String, press as Boolean) as Boolean
         return false
     end if
 
+    if m.focusZone = "rail" then
+        ' The rail owns up/down/OK and hands left back; Back returns to the grid
+        if key = "back" then
+            focusGrid()
+            return true
+        end if
+        return false
+    end if
+
     if key = "back" then
         m.top.closed = true
         return true
@@ -845,18 +940,30 @@ function onKeyEvent(key as String, press as Boolean) as Boolean
             moveToolbar(1)
         else if key = "down" then
             focusGrid()
-        else if key = "OK" or key = "play" then
-            activateToolbarButton()
         end if
         return true
     end if
 
     ' Grid zone: the grid itself handles movement and only bubbles at its edges
     if key = "up" then
-        focusToolbar(m.toolbarBtn)
+        if m.windowStart > 0 then
+            ' More of the library sits above the window — pull it in, don't jump out
+            if not m.loading then
+                m.pendingUp = true
+                loadPage("back")
+            end if
+        else
+            focusToolbar(m.toolbarBtn)
+        end if
         return true
     else if key = "left" then
         m.top.openMenu = true
+        return true
+    else if key = "right" then
+        if m.alphaRail.visible = true then
+            focusRail()
+            return true
+        end if
         return true
     end if
 
