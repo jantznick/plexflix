@@ -15,59 +15,61 @@
     <children>
         <Rectangle width="1920" height="1080" color="0x07070B" />
 
-        <Group id="frame" translation="[96, 64]">
-            <Poster
-                id="backdrop"
-                width="1728"
-                height="460"
-                loadDisplayMode="scaleToZoom"
-                opacity="0.28"
-            />
-            <Rectangle width="1728" height="460" color="0x07070B" opacity="0.5" />
-            <Rectangle width="1728" height="700" translation="[0, 280]" color="0x07070B" opacity="0.96" />
+        <!-- Full-bleed hero backdrop -->
+        <Poster
+            id="backdrop"
+            width="1920"
+            height="720"
+            loadDisplayMode="scaleToZoom"
+            opacity="1"
+        />
+        <Rectangle width="1920" height="720" color="0x07070B" opacity="0.35" />
+        <Rectangle width="1100" height="720" color="0x07070B" opacity="0.5" />
+        <Rectangle width="1920" height="360" translation="[0, 360]" color="0x07070B" opacity="0.88" />
 
-            <!-- Poster with depth shadow -->
-            <Rectangle width="208" height="312" translation="[8, 10]" color="0x000000" opacity="0.5" />
+        <Group id="frame" translation="[96, 72]">
+            <Rectangle width="216" height="324" translation="[8, 10]" color="0x000000" opacity="0.55" />
             <Poster
                 id="poster"
                 translation="[0, 0]"
-                width="200"
-                height="300"
+                width="210"
+                height="315"
                 loadDisplayMode="scaleToZoom"
                 uri="pkg:/images/poster_placeholder.png"
             />
 
-            <Label id="titleLabel" translation="[248, 8]" width="1400" height="70" color="0xFFFFFF" wrap="true" maxLines="2">
-                <Font role="font" uri="pkg:/fonts/Outfit-Bold.ttf" size="48" />
+            <Label id="titleLabel" translation="[248, 12]" width="1450" height="70" color="0xFFFFFF" wrap="true" maxLines="2">
+                <Font role="font" uri="pkg:/fonts/Outfit-Bold.ttf" size="50" />
             </Label>
-            <Label id="metaLabel" translation="[248, 86]" width="1400" height="32" color="0xA8A8B0">
+            <Label id="metaLabel" translation="[248, 92]" width="1450" height="32" color="0xA8A8B0">
                 <Font role="font" uri="pkg:/fonts/Outfit-Medium.ttf" size="22" />
             </Label>
-            <Label id="summaryLabel" translation="[248, 128]" width="1360" height="80" color="0xD0D0D6" wrap="true" maxLines="2" lineSpacing="5">
+            <Label id="summaryLabel" translation="[248, 136]" width="1400" height="80" color="0xD0D0D6" wrap="true" maxLines="2" lineSpacing="5">
                 <Font role="font" uri="pkg:/fonts/Outfit-Regular.ttf" size="22" />
             </Label>
 
-            <Group id="movieActions" translation="[248, 228]" visible="true">
+            <Group id="movieActions" translation="[248, 240]" visible="true">
                 <Group id="playBtn" translation="[0, 0]">
-                    <Rectangle width="224" height="58" translation="[4, 4]" color="0x000000" opacity="0.45" />
+                    <Rectangle id="playShadow" width="228" height="60" translation="[4, 5]" color="0x000000" opacity="0.45" />
                     <Rectangle id="playBg" width="220" height="56" color="0xE50914" />
                     <Label id="playLabel" width="220" height="56" horizAlign="center" vertAlign="center" text="Play" color="0xFFFFFF">
                         <Font role="font" uri="pkg:/fonts/Outfit-SemiBold.ttf" size="26" />
                     </Label>
                 </Group>
                 <Group id="backBtn" translation="[248, 0]">
-                    <Rectangle id="backBg" width="160" height="56" color="0x24242C" />
+                    <Rectangle id="backShadow" width="168" height="60" translation="[4, 5]" color="0x000000" opacity="0.0" />
+                    <Rectangle id="backBg" width="160" height="56" color="0x2A2A32" />
                     <Label id="backLabel" width="160" height="56" horizAlign="center" vertAlign="center" text="Back" color="0xFFFFFF">
                         <Font role="font" uri="pkg:/fonts/Outfit-Medium.ttf" size="24" />
                     </Label>
                 </Group>
             </Group>
 
-            <Label id="softStatus" translation="[248, 300]" width="1200" height="28" text="" color="0x666670">
+            <Label id="softStatus" translation="[248, 316]" width="1200" height="28" text="" color="0x666670">
                 <Font role="font" uri="pkg:/fonts/Outfit-Regular.ttf" size="18" />
             </Label>
 
-            <Group id="tvPanel" translation="[0, 340]" visible="false">
+            <Group id="tvPanel" translation="[0, 360]" visible="false">
                 <ShelfRowList
                     id="seasonRows"
                     translation="[0, 0]"
@@ -85,7 +87,7 @@
                 />
             </Group>
 
-            <Group id="relatedPanel" translation="[0, 340]" visible="false">
+            <Group id="relatedPanel" translation="[0, 360]" visible="false">
                 <ShelfRowList
                     id="relatedRows"
                     translation="[0, 0]"

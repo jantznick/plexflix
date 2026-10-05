@@ -21,6 +21,8 @@ sub exec()
         m.top.response = fetchSectionBrowse(cfg, m.top.item)
     else if action = "resolveEpisodeShow" then
         m.top.response = resolveEpisodeShow(cfg, m.top.item)
+    else if action = "personDetail" then
+        m.top.response = fetchPersonDetail(cfg, m.top.item)
     else if action = "sportsFeed" then
         m.top.response = fetchSportsFeed(cfg)
     else if action = "streamUrl" then
@@ -434,13 +436,17 @@ function fetchExtras(cfg as Object, item as Object) as Object
                     if name <> "" then
                         thumb = ""
                         if role.thumb <> invalid then thumb = safeToStr(role.thumb)
+                        personId = ""
+                        if role.id <> invalid then personId = safeToStr(role.id)
+                        if personId = "" and role.tagKey <> invalid then personId = safeToStr(role.tagKey)
                         castItems.push({
                             title: name,
                             shortTitle: name,
                             description: safeToStr(role.role),
                             mediaType: "actor",
-                            ratingKey: "",
-                            key: "",
+                            ratingKey: personId,
+                            key: personId,
+                            personId: personId,
                             hdPosterUrl: imageUrl(cfg, thumb, 300, 450),
                             hdBackdropUrl: "",
                             duration: 0,
@@ -580,6 +586,167 @@ function resolveEpisodeShow(cfg as Object, item as Object) as Object
         focusEpisodeKey: safeToStr(ep.ratingKey),
         focusSeasonKey: safeToStr(ep.parentRatingKey)
     }
+end function
+
+function fetchPersonDetail(cfg as Object, item as Object) as Object
+    if item = invalid then return { ok: false, error: "No person" }
+    name = safeToStr(item.title)
+    personId = safeToStr(item.personId)
+    if personId = "" then personId = safeToStr(item.ratingKey)
+
+    credits = []
+    bio = safeToStr(item.description)
+    poster = safeToStr(item.hdPosterUrl)
+    backdrop = ""
+
+    ' Plex people endpoint (when id is available)
+    if personId <> "" then
+        plexPerson = plexGet(cfg, "/library/people/" + personId + "/media")
+        if plexPerson.ok = true then
+            credits = collectMetadata(cfg, plexPerson.json)
+        end if
+        plexMeta = plexGet(cfg, "/library/people/" + personId)
+        if plexMeta.ok = true and plexMeta.json <> invalid and plexMeta.json.MediaContainer <> invalid then
+            meta = plexMeta.json.MediaContainer.Directory
+            if meta = invalid then meta = plexMeta.json.MediaContainer.Metadata
+            if meta <> invalid then
+                if GetInterface(meta, "ifArray") <> invalid and meta.count() > 0 then meta = meta[0]
+                if meta.summary <> invalid and safeToStr(meta.summary) <> "" then bio = safeToStr(meta.summary)
+                if meta.thumb <> invalid then poster = imageUrl(cfg, safeToStr(meta.thumb), 400, 600)
+                if meta.art <> invalid then backdrop = imageUrl(cfg, safeToStr(meta.art), 1920, 1080)
+            end if
+        end if
+    end if
+
+    ' Optional TMDB enrichment
+    tmdbKey = ""
+    if cfg.tmdbApiKey <> invalid then tmdbKey = safeToStr(cfg.tmdbApiKey)
+    if tmdbKey <> "" and tmdbKey <> "REPLACE_WITH_TMDB_API_KEY" and name <> "" then
+        tmdb = fetchTmdbPerson(tmdbKey, name)
+        if tmdb <> invalid then
+            if tmdb.bio <> "" then bio = tmdb.bio
+            if tmdb.poster <> "" then poster = tmdb.poster
+            if tmdb.backdrop <> "" then backdrop = tmdb.backdrop
+            if tmdb.credits <> invalid and tmdb.credits.count() > 0 and credits.count() = 0 then
+                credits = tmdb.credits
+            end if
+        end if
+    end if
+
+    return {
+        ok: true,
+        person: {
+            title: name,
+            description: bio,
+            hdPosterUrl: poster,
+            hdBackdropUrl: backdrop,
+            mediaType: "actor",
+            personId: personId
+        },
+        credits: credits
+    }
+end function
+
+function fetchTmdbPerson(apiKey as String, name as String) as Object
+    searchUrl = "https://api.themoviedb.org/3/search/person?api_key=" + apiKey + "&query=" + requestEncode(name)
+    search = httpGetJson(searchUrl)
+    if search = invalid or search.results = invalid or search.results.count() = 0 then return invalid
+
+    person = search.results[0]
+    personId = safeToStr(person.id)
+    if personId = "" then return invalid
+
+    detailUrl = "https://api.themoviedb.org/3/person/" + personId + "?api_key=" + apiKey
+    detail = httpGetJson(detailUrl)
+
+    creditsUrl = "https://api.themoviedb.org/3/person/" + personId + "/combined_credits?api_key=" + apiKey
+    creditsJson = httpGetJson(creditsUrl)
+
+    poster = ""
+    backdrop = ""
+    bio = ""
+    if detail <> invalid then
+        bio = safeToStr(detail.biography)
+        if detail.profile_path <> invalid and safeToStr(detail.profile_path) <> "" then
+            poster = "https://image.tmdb.org/t/p/w500" + safeToStr(detail.profile_path)
+        end if
+    end if
+    if person.profile_path <> invalid and poster = "" then
+        poster = "https://image.tmdb.org/t/p/w500" + safeToStr(person.profile_path)
+    end if
+
+    credits = []
+    if creditsJson <> invalid then
+        castList = creditsJson.cast
+        if castList <> invalid then
+            if GetInterface(castList, "ifArray") = invalid then castList = [castList]
+            maxN = castList.count()
+            if maxN > 24 then maxN = 24
+            for i = 0 to maxN - 1
+                c = castList[i]
+                if c <> invalid then
+                    title = firstString(c, ["title", "name"])
+                    mediaType = safeToStr(c.media_type)
+                    if mediaType = "tv" then mediaType = "show"
+                    if mediaType = "" then mediaType = "movie"
+                    path = ""
+                    if c.poster_path <> invalid then path = safeToStr(c.poster_path)
+                    thumb = ""
+                    if path <> "" then thumb = "https://image.tmdb.org/t/p/w342" + path
+                    if c.backdrop_path <> invalid and backdrop = "" then
+                        backdrop = "https://image.tmdb.org/t/p/w1280" + safeToStr(c.backdrop_path)
+                    end if
+                    if title <> "" then
+                        credits.push({
+                            title: title,
+                            description: safeToStr(c.character),
+                            mediaType: mediaType,
+                            ratingKey: "",
+                            key: "",
+                            hdPosterUrl: thumb,
+                            hdBackdropUrl: "",
+                            year: Left(safeToStr(c.release_date), 4),
+                            rating: "",
+                            contentRating: "",
+                            duration: 0,
+                            viewOffset: 0
+                        })
+                    end if
+                end if
+            end for
+        end if
+    end if
+
+    return { bio: bio, poster: poster, backdrop: backdrop, credits: credits }
+end function
+
+function httpGetJson(url as String) as Object
+    request = CreateObject("roUrlTransfer")
+    port = CreateObject("roMessagePort")
+    request.SetMessagePort(port)
+    request.SetUrl(url)
+    request.SetRequest("GET")
+    request.EnableEncodings(true)
+    request.RetainBodyOnError(true)
+    request.AddHeader("Accept", "application/json")
+    if Left(url, 8) = "https://" then
+        request.SetCertificatesFile("common:/certs/ca-bundle.crt")
+        request.InitClientCertificates()
+    end if
+    if not request.AsyncGetToString() then return invalid
+    while true
+        msg = wait(15000, port)
+        if msg = invalid then
+            request.AsyncCancel()
+            return invalid
+        end if
+        if type(msg) = "roUrlEvent" then
+            code = msg.GetResponseCode()
+            body = msg.GetString()
+            if code < 200 or code >= 300 then return invalid
+            return ParseJson(body)
+        end if
+    end while
 end function
 
 function fetchSportsFeed(cfg as Object) as Object

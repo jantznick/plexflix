@@ -15,22 +15,10 @@
         <Rectangle id="rail" width="300" height="1080" color="0x121218" />
         <Rectangle width="1" height="1080" translation="[299, 0]" color="0xFFFFFF" opacity="0.12" />
 
-        <Label id="brandLabel" translation="[36, 48]" width="228" height="48" text="PLEXFLIX" color="0xE50914">
+        <Label translation="[36, 48]" width="228" height="48" text="PLEXFLIX" color="0xE50914">
             <Font role="font" uri="pkg:/fonts/Outfit-Bold.ttf" size="34" />
         </Label>
-        <Label translation="[36, 96]" width="228" height="28" text="← Back closes menu" color="0x666670">
-            <Font role="font" uri="pkg:/fonts/Outfit-Medium.ttf" size="15" />
-        </Label>
 
-        <NavLabelList
-            id="navList"
-            translation="[20, 140]"
-            itemSize="[260, 56]"
-            itemSpacing="[0, 6]"
-            numRows="14"
-            color="0xE8E8E8"
-            focusedColor="0xFFFFFF"
-            drawFocusFeedback="true"
-        />
+        <Group id="navItems" translation="[20, 130]" />
     </children>
 </component>

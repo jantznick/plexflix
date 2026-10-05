@@ -1,4 +1,7 @@
 sub init()
+    m.loadingPanel = m.top.findNode("loadingPanel")
+    m.frame = m.top.findNode("frame")
+    m.loadSpinner = m.top.findNode("loadSpinner")
     m.billboard = m.top.findNode("billboard")
     m.heroArt = m.top.findNode("heroArt")
     m.heroCopy = m.top.findNode("heroCopy")
@@ -13,14 +16,16 @@ sub init()
     m.rowsMove = m.top.findNode("rowsMove")
 
     ' Expanded = billboard mode. Collapsed = shelves fill the screen.
-    m.expandedRowY = 520
-    m.collapsedRowY = 80
-    m.heroHideY = -680
+    m.expandedRowY = 620
+    m.collapsedRowY = 64
+    m.rowsX = 96
+    m.heroHideY = -820
     m.isCollapsed = false
     m.currentRow = -1
 
     m.shimmer = m.top.findNode("shimmer")
     if m.shimmer <> invalid then m.shimmer.active = true
+    if m.loadSpinner <> invalid then m.loadSpinner.control = "start"
 
     m.snapTimer = createObject("roSGNode", "Timer")
     m.snapTimer.repeat = false
@@ -61,12 +66,15 @@ sub onHomeLoaded()
     response = m.task.response
     m.top.loadingMessage = ""
     if m.shimmer <> invalid then m.shimmer.active = false
+    if m.loadSpinner <> invalid then m.loadSpinner.control = "stop"
 
     if response = invalid or response.ok <> true then
         err = "Could not reach Plex. Check baseUrl/token in roku/source/PlexConfig.brs"
         if response <> invalid and response.error <> invalid and response.error <> "" then
             err = response.error
         end if
+        if m.loadingPanel <> invalid then m.loadingPanel.visible = false
+        if m.frame <> invalid then m.frame.visible = true
         m.heroTitle.text = "Unable to load library"
         m.heroSummary.text = err
         return
@@ -74,16 +82,20 @@ sub onHomeLoaded()
 
     content = response.content
     if content = invalid or content.getChildCount() = 0 then
+        if m.loadingPanel <> invalid then m.loadingPanel.visible = false
+        if m.frame <> invalid then m.frame.visible = true
         m.heroTitle.text = "No media found"
         m.heroSummary.text = "Your Plex server responded, but no movie/TV hubs were returned."
         return
     end if
 
     rowCount = content.getChildCount()
-    m.buildLabel.text = "v0.3.7 · " + safeToStr(rowCount) + " rows"
+    m.buildLabel.text = "v0.3.8 · " + safeToStr(rowCount) + " rows"
+
+    if m.loadingPanel <> invalid then m.loadingPanel.visible = false
+    if m.frame <> invalid then m.frame.visible = true
 
     m.rowList.content = content
-    m.rowList.visible = true
     m.currentRow = -1
     setBrowseMode(false)
     m.rowList.setFocus(true)
@@ -130,13 +142,13 @@ sub setBrowseMode(collapsed as Boolean)
 
     if collapsed then
         toHero = [0, m.heroHideY]
-        toRows = [0, m.collapsedRowY]
+        toRows = [m.rowsX, m.collapsedRowY]
         toOpacity = 0.0
         m.heroCopy.visible = false
         m.billboard.visible = true
     else
         toHero = [0, 0]
-        toRows = [0, m.expandedRowY]
+        toRows = [m.rowsX, m.expandedRowY]
         toOpacity = 1.0
         m.billboard.visible = true
         m.heroCopy.visible = true

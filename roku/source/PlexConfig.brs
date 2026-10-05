@@ -12,12 +12,16 @@ function GetPlexConfig() as Object
         clientId: "plexflix-roku-mvp-001",
 
         product: "PlexFlix",
-        version: "0.3.7",
+        version: "0.3.8",
 
         ' How many items to request per row
         rowSize: 36,
 
         ' Live sports JSON feed (editable). Expected objects with title/name + url/stream fields.
-        sportsFeedUrl: "https://roku-hockey.s3.us-west-004.backblazeb2.com/secretfeedfilename.json"
+        sportsFeedUrl: "https://roku-hockey.s3.us-west-004.backblazeb2.com/secretfeedfilename.json",
+
+        ' Optional TMDB key for cast bios / photos / known-for when Plex people data is thin.
+        ' https://www.themoviedb.org/settings/api
+        tmdbApiKey: "REPLACE_WITH_TMDB_API_KEY"
     }
 end function

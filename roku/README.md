@@ -14,7 +14,7 @@ This is intentionally a **design/UX shell** on top of existing Plex data. Creden
 - Title detail screen (Cast + More Like This)
 - Playback via Plex universal transcoder (HLS)
 - Live sports from a configurable JSON feed URL (event detail + stream picker)
-- Custom **Outfit** font, poster shadows, shimmer loading skeletons
+- Optional **TMDB** enrichment for cast pages (`tmdbApiKey` in config)
 
 ## Configure before sideload
 
@@ -24,8 +24,12 @@ Edit `roku/source/PlexConfig.brs`:
 baseUrl: "http://192.168.x.x:32400"
 token: "YOUR_PLEX_TOKEN"
 sportsFeedUrl: "https://roku-hockey.s3.us-west-004.backblazeb2.com/secretfeedfilename.json"
+tmdbApiKey: "YOUR_TMDB_API_KEY"
 ```
 
+Optional keys:
+- `tmdbApiKey` — cast bios / photos / known-for (https://www.themoviedb.org/settings/api)
+- Leave as `REPLACE_WITH_TMDB_API_KEY` to skip TMDB (Plex people data still used when available)
 `sportsFeedUrl` can point at any JSON feed. Category maps like `{ "FOOTBALL": [ { title, thumbnail, content.videos[].url } ] }` are supported.
 
 Notes:

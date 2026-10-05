@@ -16,6 +16,7 @@ sub init()
     m.libraryBrowseScreen = invalid
     m.sportsScreen = invalid
     m.sportsDetailScreen = invalid
+    m.castDetailScreen = invalid
     m.section = "home"
     m.navExpanded = false
     m.activeLibraryId = ""
@@ -55,6 +56,7 @@ sub clearScreens()
     m.libraryBrowseScreen = invalid
     m.sportsScreen = invalid
     m.sportsDetailScreen = invalid
+    m.castDetailScreen = invalid
 end sub
 
 sub onNavSelected()
@@ -183,6 +185,11 @@ end sub
 sub showDetail(item as Object)
     if item = invalid then return
 
+    if asString(item.mediaType) = "actor" then
+        showCastDetail(item)
+        return
+    end if
+
     if asString(item.mediaType) = "episode" then
         if asString(item.grandparentRatingKey) <> "" then
             openShowForEpisode(item)
@@ -193,6 +200,38 @@ sub showDetail(item as Object)
     end if
 
     openDetailScreen(item)
+end sub
+
+sub showCastDetail(item as Object)
+    if m.castDetailScreen <> invalid then
+        m.screens.removeChild(m.castDetailScreen)
+        m.castDetailScreen = invalid
+    end if
+    m.castDetailScreen = createObject("roSGNode", "CastDetailScreen")
+    m.castDetailScreen.config = m.config
+    m.castDetailScreen.content = item
+    m.castDetailScreen.observeField("openDetails", "onCastOpenDetails")
+    m.castDetailScreen.observeField("closed", "onCastDetailClosed")
+    m.screens.appendChild(m.castDetailScreen)
+    m.castDetailScreen.setFocus(true)
+end sub
+
+sub onCastOpenDetails()
+    item = m.castDetailScreen.openDetails
+    if item = invalid then return
+    showDetail(item)
+end sub
+
+sub onCastDetailClosed()
+    if m.castDetailScreen <> invalid then
+        m.screens.removeChild(m.castDetailScreen)
+        m.castDetailScreen = invalid
+    end if
+    if m.detailScreen <> invalid then
+        m.detailScreen.setFocus(true)
+    else
+        restoreSectionFocus()
+    end if
 end sub
 
 sub openShowForEpisode(episode as Object)
@@ -279,7 +318,8 @@ sub onPlayRequested()
 end sub
 
 sub onOpenDetails()
-    item = m.detailScreen.openDetails
+    item = invalid
+    if m.detailScreen <> invalid then item = m.detailScreen.openDetails
     if item = invalid then return
     showDetail(item)
 end sub
@@ -337,6 +377,9 @@ function onKeyEvent(key as String, press as Boolean) as Boolean
         else if m.sportsDetailScreen <> invalid then
             m.sportsDetailScreen.close = true
             return true
+        else if m.castDetailScreen <> invalid then
+            m.castDetailScreen.close = true
+            return true
         else if m.detailScreen <> invalid then
             m.detailScreen.close = true
             return true
@@ -347,7 +390,7 @@ function onKeyEvent(key as String, press as Boolean) as Boolean
             setNavExpanded(false)
             return true
         end if
-    else if key = "left" and not m.navExpanded and m.videoScreen = invalid and m.detailScreen = invalid then
+    else if key = "left" and not m.navExpanded and m.videoScreen = invalid and m.detailScreen = invalid and m.castDetailScreen = invalid then
         ' Allow Left → menu from home / libraries / sports / sports detail
         setNavExpanded(true)
         m.sideNav.setFocus(true)

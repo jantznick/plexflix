@@ -89,12 +89,12 @@ sub showTvMode()
     m.relatedPanel.visible = false
     m.tvPanel.visible = true
     m.playLabel.text = "Play"
-    m.poster.width = 200
-    m.poster.height = 300
+    m.poster.width = 210
+    m.poster.height = 315
     m.poster.translation = [0, 0]
-    m.titleLabel.translation = [248, 8]
-    m.metaLabel.translation = [248, 86]
-    m.summaryLabel.translation = [248, 128]
+    m.titleLabel.translation = [248, 12]
+    m.metaLabel.translation = [248, 92]
+    m.summaryLabel.translation = [248, 136]
     m.summaryLabel.height = 72
     m.focusIndex = 0
     updateMovieButtonFocus()
@@ -105,12 +105,12 @@ sub showMovieMode()
     m.tvPanel.visible = false
     m.relatedPanel.visible = false
     m.playLabel.text = "Play"
-    m.poster.width = 200
-    m.poster.height = 300
+    m.poster.width = 210
+    m.poster.height = 315
     m.poster.translation = [0, 0]
-    m.titleLabel.translation = [248, 8]
-    m.metaLabel.translation = [248, 86]
-    m.summaryLabel.translation = [248, 128]
+    m.titleLabel.translation = [248, 12]
+    m.metaLabel.translation = [248, 92]
+    m.summaryLabel.translation = [248, 136]
     m.relatedContent = createObject("roSGNode", "ContentNode")
     m.relatedRows.content = m.relatedContent
     m.focusIndex = 0
@@ -387,7 +387,9 @@ sub appendItemsRow(root as Object, title as String, items as Object)
             year: item.year,
             hdBackdropUrl: item.hdBackdropUrl,
             contentRating: item.contentRating,
-            rating: item.rating
+            rating: item.rating,
+            personId: item.personId,
+            shortTitle: item.shortTitle
         })
     end for
 end sub
@@ -410,7 +412,10 @@ sub onEpisodeSelected()
     if item = invalid then return
 
     mediaType = asString(item.mediaType)
-    if mediaType = "actor" then return
+    if mediaType = "actor" then
+        m.top.openDetails = nodeToItem(item)
+        return
+    end if
     if mediaType = "episode" then
         m.top.playRequested = nodeToItem(item)
     else if mediaType = "movie" or mediaType = "show" then
@@ -425,9 +430,6 @@ sub onRelatedSelected()
     if row = invalid then return
     item = row.getChild(info[1])
     if item = invalid then return
-
-    mediaType = asString(item.mediaType)
-    if mediaType = "actor" then return
     m.top.openDetails = nodeToItem(item)
 end sub
 
@@ -444,7 +446,9 @@ function nodeToItem(item as Object) as Object
         hdPosterUrl: item.hdPosterUrl,
         hdBackdropUrl: item.hdBackdropUrl,
         duration: item.duration,
-        viewOffset: item.viewOffset
+        viewOffset: item.viewOffset,
+        personId: item.personId,
+        shortTitle: item.shortTitle
     }
 end function
 
@@ -455,11 +459,22 @@ end sub
 sub updateMovieButtonFocus()
     if m.focusIndex = 0 then
         m.playBg.color = "0xE50914"
-        m.backBg.color = "0x2A2A2A"
+        m.backBg.color = "0x2A2A32"
+        if m.top.findNode("playShadow") <> invalid then m.top.findNode("playShadow").opacity = 0.5
+        if m.top.findNode("backShadow") <> invalid then m.top.findNode("backShadow").opacity = 0.0
     else
-        m.playBg.color = "0x2A2A2A"
+        m.playBg.color = "0x2A2A32"
         m.backBg.color = "0xE50914"
+        if m.top.findNode("playShadow") <> invalid then m.top.findNode("playShadow").opacity = 0.0
+        if m.top.findNode("backShadow") <> invalid then m.top.findNode("backShadow").opacity = 0.5
     end if
+end sub
+
+sub focusActionButtons()
+    m.focusIndex = 0
+    updateMovieButtonFocus()
+    m.movieActions.setFocus(true)
+    m.top.setFocus(true)
 end sub
 
 sub onEscapeBack()
@@ -467,16 +482,11 @@ sub onEscapeBack()
 end sub
 
 sub onRelatedEscapeUp()
-    m.focusIndex = 0
-    updateMovieButtonFocus()
-    m.top.setFocus(true)
+    focusActionButtons()
 end sub
 
 sub onSeasonEscapeUp()
-    ' Return focus to Play/Back on the show header
-    m.focusIndex = 0
-    updateMovieButtonFocus()
-    m.top.setFocus(true)
+    focusActionButtons()
 end sub
 
 sub requestMoviePlay()
