@@ -186,6 +186,10 @@ sub onGuideEscapeUp()
     m.top.setFocus(true)
 end sub
 
+sub onGuideEscapeLeft()
+    m.top.openMenu = true
+end sub
+
 sub onGuideEscapeBack()
     if m.previewVideo <> invalid then m.previewVideo.control = "stop"
 end sub

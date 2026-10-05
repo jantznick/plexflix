@@ -200,6 +200,10 @@ sub onGuideEscapeUp()
     m.top.setFocus(true)
 end sub
 
+sub onGuideEscapeLeft()
+    m.top.openMenu = true
+end sub
+
 function onKeyEvent(key as String, press as Boolean) as Boolean
     if not press then return false
     if key = "left"
