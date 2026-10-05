@@ -180,13 +180,10 @@ sub updatePeek(rowIndex as Integer)
 
     clearPeekPosters()
 
-    ' Peek only: half-tile left overhang so it doesn't line up with the focused shelf.
-    ' (Whole-shelf stagger is not used — it pulls the focused poster off-screen.)
-    stagger = -86
-
+    ' Same left edge as active shelves — no horizontal stagger.
     maxN = 10
     drawn = 0
-    x = stagger
+    x = 0
     for i = 0 to prev.getChildCount() - 1
         if drawn >= maxN then exit for
         it = prev.getChild(i)

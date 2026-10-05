@@ -10,8 +10,7 @@ sub init()
     m.gap = 16
     m.rowH = 226
     m.numRows = 6
-    ' Slot count per strip (includes intentional empties). ~1 in 4 slots left blank.
-    m.slotsPerRow = 16
+    m.slotsPerRow = 14
 
     if m.spinner <> invalid then m.spinner.control = "start"
 
@@ -75,29 +74,23 @@ sub buildRows(pool as Object)
 
     for r = 0 to m.numRows - 1
         row = createObject("roSGNode", "Group")
-        ' Phase shifts which slots are empty so gaps don't stack into columns
-        phase = (r * 2) MOD 4
 
-        ' Two copies of the strip for seamless looping
+        ' Two copies of the strip for seamless looping — every slot filled
         for copy = 0 to 1
             for i = 0 to m.slotsPerRow - 1
-                ' Leave every 4th slot empty (spread evenly). User likes some missing.
-                isGap = ((i + phase) MOD 4) = 3
-                if isGap <> true then
-                    uri = pool[cursor MOD pool.count()]
-                    cursor = cursor + 1
+                uri = pool[cursor MOD pool.count()]
+                cursor = cursor + 1
 
-                    p = createObject("roSGNode", "Poster")
-                    p.width = m.posterW
-                    p.height = m.posterH
-                    p.loadDisplayMode = "scaleToZoom"
-                    p.loadWidth = 280
-                    p.loadHeight = 420
-                    p.opacity = 0.78
-                    if uri <> invalid and uri <> "" then p.uri = uri
-                    p.translation = [(copy * m.slotsPerRow + i) * stepX, 0]
-                    row.appendChild(p)
-                end if
+                p = createObject("roSGNode", "Poster")
+                p.width = m.posterW
+                p.height = m.posterH
+                p.loadDisplayMode = "scaleToZoom"
+                p.loadWidth = 280
+                p.loadHeight = 420
+                p.opacity = 0.78
+                if uri <> invalid and uri <> "" then p.uri = uri
+                p.translation = [(copy * m.slotsPerRow + i) * stepX, 0]
+                row.appendChild(p)
             end for
         end for
 
@@ -105,14 +98,13 @@ sub buildRows(pool as Object)
         m.rowNodes.push(row)
         m.loopWidths.push(loopW)
 
-        ' Half-tile horizontal stagger between rows + alternate scroll direction
-        stagger = Int(stepX / 2)
+        ' Alternate scroll direction; slight phase offset so rows don't march in lockstep
         if (r MOD 2) = 0 then
             m.rowSpeeds.push(1.15 + (r * 0.12))
             m.rowOffsets.push(0 - (r * 18))
         else
             m.rowSpeeds.push(-(1.0 + (r * 0.1)))
-            m.rowOffsets.push(-stagger - (r * 22))
+            m.rowOffsets.push(-Int(stepX / 2) - (r * 22))
         end if
         row.translation = [m.rowOffsets[r], r * m.rowH]
     end for

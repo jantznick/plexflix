@@ -47,8 +47,8 @@
                 </Group>
             </Group>
 
-            <!-- Peek strip: posters start at +half-tile so they never share columns with the row below -->
-            <Group id="peekStrip" translation="[96, 0]" visible="false" clippingRect="[-96, 0, 1920, 140]">
+            <!-- Peek strip: previous shelf, clipped; same left edge as active rows -->
+            <Group id="peekStrip" translation="[96, 0]" visible="false" clippingRect="[0, 0, 1824, 140]">
                 <Group id="peekPosters" translation="[0, -100]" />
             </Group>
 
