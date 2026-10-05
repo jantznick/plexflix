@@ -181,9 +181,8 @@ sub updatePeek(rowIndex as Integer)
     clearPeekPosters()
 
     ' Opposite of the focused row's half-tile stagger so peek never shares columns.
-    ' Even focused row (posters at x=0) → peek at +86
-    ' Odd focused row (posters at x=86) → peek at 0
-    stagger = 86
+    ' Even focused (x=0) → peek at -86; odd focused (x=-86) → peek at 0
+    stagger = -86
     if (rowIndex MOD 2) = 1 then stagger = 0
 
     maxN = 10

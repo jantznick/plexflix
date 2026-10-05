@@ -27,14 +27,15 @@ end sub
 
 sub applyRowStagger()
     ' Prefer staggerX stamped on itemContent (reliable). Fall back to rowIndex.
+    ' Negative = shift left so the row overhangs the left edge (no empty gap).
     stagger = 0
     item = m.top.itemContent
     if item <> invalid and item.staggerX <> invalid then
         stagger = item.staggerX
     else if item <> invalid and item.shelfIndex <> invalid then
-        if (item.shelfIndex MOD 2) = 1 then stagger = 86
+        if (item.shelfIndex MOD 2) = 1 then stagger = -86
     else if m.top.rowIndex <> invalid then
-        if (m.top.rowIndex MOD 2) = 1 then stagger = 86
+        if (m.top.rowIndex MOD 2) = 1 then stagger = -86
     end if
     m.staggerX = stagger
     if m.visual <> invalid then m.visual.translation = [stagger, 0]

@@ -481,7 +481,7 @@ sub stampRowStagger(root as Object)
         row = root.getChild(i)
         if row <> invalid then
             stagger = 0
-            if (i MOD 2) = 1 then stagger = 86
+            if (i MOD 2) = 1 then stagger = -86
             for j = 0 to row.getChildCount() - 1
                 child = row.getChild(j)
                 if child <> invalid then
