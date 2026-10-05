@@ -7,6 +7,14 @@ sub init()
     m.previewArt = m.top.findNode("previewArt")
     m.guideList = m.top.findNode("guideList")
 
+    if m.previewArt <> invalid then
+        m.previewArt.loadDisplayMode = "scaleToZoom"
+        m.previewArt.loadWidth = 1280
+        m.previewArt.loadHeight = 720
+        m.previewArt.width = 480
+        m.previewArt.height = 270
+    end if
+
     m.events = []
     m.currentIndex = 0
 
@@ -156,8 +164,15 @@ sub updateInfo(idx as Integer)
     else
         m.eventSummary.text = ""
     end if
-    if asString(item.hdPosterUrl) <> "" then
-        m.previewArt.uri = item.hdPosterUrl
+    uri = asString(item.hdBackdropUrl)
+    if uri = "" then uri = asString(item.hdPosterUrl)
+    if uri <> "" and m.previewArt <> invalid then
+        m.previewArt.loadDisplayMode = "scaleToZoom"
+        m.previewArt.loadWidth = 1280
+        m.previewArt.loadHeight = 720
+        m.previewArt.width = 480
+        m.previewArt.height = 270
+        m.previewArt.uri = uri
         m.previewArt.opacity = 1.0
     end if
 end sub

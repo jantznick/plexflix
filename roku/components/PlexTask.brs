@@ -282,7 +282,7 @@ function metadataToItem(cfg as Object, meta as Object) as Object
         key: key,
         hdPosterUrl: imageUrl(cfg, thumb, posterW, posterH),
         hdShowPosterUrl: showPosterUrl,
-        hdBackdropUrl: imageUrlWide(cfg, art, 1920),
+        hdBackdropUrl: imageUrl(cfg, art, 1920, 1080),
         duration: duration,
         viewOffset: viewOffset,
         leafCount: meta.leafCount,

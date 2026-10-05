@@ -24,50 +24,42 @@
         </Group>
 
         <Group id="frame" translation="[0, 0]" visible="false" clippingRect="[0, 0, 1920, 1080]">
-            <!--
-              Poster is 16:9 (1920x1080). Even if the sim ignores scaleToZoom and
-              stretch-fills, landscape backdrops look correct. We clip to 520px.
-            -->
-            <Group id="billboard" translation="[0, 0]" clippingRect="[0, 0, 1920, 520]">
-                <Rectangle width="1920" height="520" color="0x0A0A10" />
+            <!-- Restore the 0.4.3 billboard that looked right: tall art plane + soft washes -->
+            <Group id="billboard" translation="[0, 0]">
                 <Poster
                     id="heroArt"
                     width="1920"
-                    height="1080"
-                    translation="[0, -220]"
+                    height="680"
                     loadDisplayMode="scaleToZoom"
+                    loadWidth="1920"
+                    loadHeight="1080"
                     uri=""
                 />
-                <Rectangle width="1920" height="160" translation="[0, 360]" color="0x07070B" opacity="0.55" />
+                <Rectangle width="1920" height="680" color="0x07070B" opacity="0.12" />
+                <Rectangle width="1920" height="260" translation="[0, 420]" color="0x07070B" opacity="0.55" />
+                <Rectangle width="1920" height="120" translation="[0, 560]" color="0x07070B" opacity="0.75" />
 
-                <Group id="heroCopy" translation="[96, 330]">
-                    <Label id="heroTitle" width="1200" height="70" text="" color="0xFFFFFF" wrap="true" maxLines="2" lineSpacing="1">
-                        <Font role="font" uri="pkg:/fonts/Outfit-Bold.ttf" size="40" />
+                <Group id="heroCopy" translation="[96, 300]">
+                    <Label id="heroTitle" width="1100" height="110" text="" color="0xFFFFFF" wrap="true" maxLines="2" lineSpacing="2">
+                        <Font role="font" uri="pkg:/fonts/Outfit-Bold.ttf" size="54" />
                     </Label>
-                    <Label id="heroMeta" translation="[0, 68]" width="1100" height="26" text="" color="0xB8B8C0">
-                        <Font role="font" uri="pkg:/fonts/Outfit-Medium.ttf" size="17" />
+                    <Label id="heroMeta" translation="[0, 112]" width="1000" height="32" text="" color="0xB8B8C0">
+                        <Font role="font" uri="pkg:/fonts/Outfit-Medium.ttf" size="22" />
                     </Label>
-                    <Label id="heroSummary" translation="[0, 96]" width="1000" height="50" text="" color="0xD0D0D6" wrap="true" maxLines="2" lineSpacing="2">
-                        <Font role="font" uri="pkg:/fonts/Outfit-Regular.ttf" size="17" />
+                    <Label id="heroSummary" translation="[0, 150]" width="980" height="80" text="" color="0xD0D0D6" wrap="true" maxLines="2" lineSpacing="5">
+                        <Font role="font" uri="pkg:/fonts/Outfit-Regular.ttf" size="22" />
                     </Label>
                 </Group>
             </Group>
 
-            <!-- Previous shelf peek (clipped). Only visible when scrolled; NEVER focused. -->
+            <!-- Previous shelf peek — posters only, no row title -->
             <Group id="peekStrip" translation="[96, 0]" visible="false" clippingRect="[0, 0, 1728, 140]">
-                <Label id="peekLabel" translation="[0, 8]" width="800" height="28" text="" color="0x777780">
-                    <Font role="font" uri="pkg:/fonts/Outfit-Medium.ttf" size="18" />
-                </Label>
                 <Group id="peekPosters" translation="[0, -100]" />
             </Group>
 
-            <!--
-              Expanded: Y=540 → one full shelf + next cut off at bottom.
-              Collapsed: Y=150 → active shelf fully on-screen; peekStrip shows previous above.
-            -->
             <ShelfRowList
                 id="rowList"
-                translation="[96, 540]"
+                translation="[96, 560]"
                 itemComponentName="PosterItem"
                 numRows="3"
                 rowItemSize="[[150, 225]]"
@@ -84,7 +76,7 @@
             <Animation id="homeAnim" duration="0.16" easeFunction="outCubic" optional="true" repeat="false">
                 <Vector2DFieldInterpolator id="billboardMove" key="[0.0, 1.0]" keyValue="[[0, 0], [0, 0]]" fieldToInterp="billboard.translation" />
                 <FloatFieldInterpolator id="billboardFade" key="[0.0, 1.0]" keyValue="[1.0, 1.0]" fieldToInterp="billboard.opacity" />
-                <Vector2DFieldInterpolator id="rowsMove" key="[0.0, 1.0]" keyValue="[[96, 540], [96, 540]]" fieldToInterp="rowList.translation" />
+                <Vector2DFieldInterpolator id="rowsMove" key="[0.0, 1.0]" keyValue="[[96, 560], [96, 560]]" fieldToInterp="rowList.translation" />
             </Animation>
         </Group>
     </children>

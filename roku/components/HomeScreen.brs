@@ -10,7 +10,6 @@ sub init()
     m.heroSummary = m.top.findNode("heroSummary")
     m.rowList = m.top.findNode("rowList")
     m.peekStrip = m.top.findNode("peekStrip")
-    m.peekLabel = m.top.findNode("peekLabel")
     m.peekPosters = m.top.findNode("peekPosters")
     m.homeAnim = m.top.findNode("homeAnim")
     m.billboardMove = m.top.findNode("billboardMove")
@@ -20,17 +19,20 @@ sub init()
     ' Active shelf is ALWAYS the RowList focus slot — never the peek strip.
     ' Expanded: hero + active shelf fully visible; next shelf cut off at bottom.
     ' Collapsed: peek strip shows previous (clipped); RowList sits below it fully visible.
-    m.expandedRowY = 540
+    m.expandedRowY = 560
     m.collapsedRowY = 150
     m.rowsX = 96
-    m.heroHideY = -540
+    m.heroHideY = -720
     m.isCollapsed = false
     m.currentRow = -1
 
     if m.heroArt <> invalid then
         m.heroArt.loadDisplayMode = "scaleToZoom"
+        m.heroArt.loadWidth = 1920
+        m.heroArt.loadHeight = 1080
         m.heroArt.width = 1920
-        m.heroArt.height = 1080
+        m.heroArt.height = 680
+        m.heroArt.translation = [0, 0]
     end if
 
     m.shimmer = m.top.findNode("shimmer")
@@ -165,16 +167,12 @@ sub updatePeek(rowIndex as Integer)
     end if
 
     clearPeekPosters()
-    if m.peekLabel <> invalid then
-        title = ""
-        if prev.title <> invalid then title = prev.title
-        m.peekLabel.text = title
-    end if
 
-    ' Draw posters shifted UP so only the bottom ~140px shows (clipped)
+    ' Netflix-style stagger: random horizontal offset so the peek doesn't align with the row below
+    stagger = Int(Rnd(0) * 140) - 70
     maxN = prev.getChildCount()
     if maxN > 10 then maxN = 10
-    x = 0
+    x = stagger
     for i = 0 to maxN - 1
         it = prev.getChild(i)
         if it <> invalid then
@@ -182,6 +180,8 @@ sub updatePeek(rowIndex as Integer)
             p.width = 150
             p.height = 225
             p.loadDisplayMode = "scaleToZoom"
+            p.loadWidth = 300
+            p.loadHeight = 450
             p.opacity = 0.55
             uri = ""
             if it.hdPosterUrl <> invalid then uri = it.hdPosterUrl
@@ -257,9 +257,11 @@ end sub
 sub updateHeroContent(item as Object)
     if m.heroArt <> invalid then
         m.heroArt.loadDisplayMode = "scaleToZoom"
+        m.heroArt.loadWidth = 1920
+        m.heroArt.loadHeight = 1080
         m.heroArt.width = 1920
-        m.heroArt.height = 1080
-        m.heroArt.translation = [0, -220]
+        m.heroArt.height = 680
+        m.heroArt.translation = [0, 0]
     end if
 
     uri = ""
