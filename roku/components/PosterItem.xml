@@ -3,6 +3,8 @@
     <interface>
         <field id="itemContent" type="node" onChange="onContentChange" />
         <field id="focusPercent" type="float" onChange="onFocusPercentChange" />
+        <field id="width" type="float" onChange="onSizeChange" />
+        <field id="height" type="float" onChange="onSizeChange" />
     </interface>
 
     <script type="text/brightscript" uri="PosterItem.brs" />
@@ -10,37 +12,27 @@
     <children>
         <Poster
             id="poster"
-            width="210"
-            height="315"
+            width="154"
+            height="231"
             loadDisplayMode="scaleToZoom"
+            failedBitmapUri="pkg:/images/poster_placeholder.png"
+            loadingBitmapUri="pkg:/images/poster_placeholder.png"
             uri="pkg:/images/poster_placeholder.png"
         />
         <Rectangle
             id="progressBg"
-            width="210"
-            height="6"
-            translation="[0, 309]"
+            width="154"
+            height="5"
+            translation="[0, 226]"
             color="0x404040"
             visible="false"
         />
         <Rectangle
             id="progressFg"
             width="0"
-            height="6"
-            translation="[0, 309]"
+            height="5"
+            translation="[0, 226]"
             color="0xE50914"
-            visible="false"
-        />
-        <Label
-            id="titleLabel"
-            width="210"
-            height="40"
-            translation="[0, 320]"
-            color="0xFFFFFF"
-            font="font:SmallestSystemFont"
-            horizAlign="center"
-            wrap="true"
-            maxLines="2"
             visible="false"
         />
     </children>

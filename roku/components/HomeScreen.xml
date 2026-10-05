@@ -9,83 +9,101 @@
     <script type="text/brightscript" uri="HomeScreen.brs" />
 
     <children>
-        ' Hero / billboard
+        ' Full-bleed billboard — rows sit over the lower half (Netflix-style)
         <Poster
             id="heroArt"
             width="1920"
-            height="720"
+            height="820"
             loadDisplayMode="scaleToFill"
             uri="pkg:/images/splash-screen_fhd.jpg"
         />
+
+        ' Soft scrims instead of a hard black bar
         <Rectangle
-            id="heroGradient"
+            id="heroDim"
             width="1920"
-            height="720"
+            height="820"
+            color="0x000000"
+            opacity="0.25"
+        />
+        <Rectangle
+            width="980"
+            height="820"
+            color="0x000000"
+            opacity="0.45"
+        />
+        <Rectangle
+            id="heroFade"
+            width="1920"
+            height="360"
+            translation="[0, 460]"
             color="0x0A0A0A"
-            opacity="0.35"
+            opacity="0.92"
         />
         <Rectangle
             width="1920"
             height="280"
-            translation="[0, 440]"
+            translation="[0, 800]"
             color="0x0A0A0A"
-            opacity="0.85"
         />
 
         <Label
             id="brandLabel"
-            translation="[72, 36]"
-            width="600"
-            height="60"
+            translation="[72, 28]"
+            width="500"
+            height="48"
             text="PLEXFLIX"
             color="0xE50914"
-            font="font:LargeBoldSystemFont"
+            font="font:MediumBoldSystemFont"
         />
 
-        <Label
-            id="heroTitle"
-            translation="[72, 460]"
-            width="1100"
-            height="70"
-            text="Loading your library..."
-            color="0xFFFFFF"
-            font="font:LargeBoldSystemFont"
-            wrap="true"
-            lineSpacing="4"
-        />
-        <Label
-            id="heroMeta"
-            translation="[72, 535]"
-            width="900"
-            height="36"
-            text=""
-            color="0xB3B3B3"
-            font="font:SmallSystemFont"
-        />
-        <Label
-            id="heroSummary"
-            translation="[72, 575]"
-            width="900"
-            height="100"
-            text=""
-            color="0xE5E5E5"
-            font="font:SmallSystemFont"
-            wrap="true"
-            maxLines="3"
-            lineSpacing="4"
-        />
+        <Group id="heroCopy" translation="[72, 220]">
+            <Label
+                id="heroTitle"
+                width="900"
+                height="96"
+                text="Loading your library..."
+                color="0xFFFFFF"
+                font="font:LargeBoldSystemFont"
+                wrap="true"
+                maxLines="2"
+                lineSpacing="2"
+            />
+            <Label
+                id="heroMeta"
+                translation="[0, 104]"
+                width="900"
+                height="32"
+                text=""
+                color="0xC7C7C7"
+                font="font:SmallSystemFont"
+            />
+            <Label
+                id="heroSummary"
+                translation="[0, 144]"
+                width="820"
+                height="84"
+                text=""
+                color="0xD0D0D0"
+                font="font:SmallSystemFont"
+                wrap="true"
+                maxLines="2"
+                lineSpacing="4"
+            />
+        </Group>
 
+        ' Start high enough that ~3 shelves fit on FHD
         <RowList
             id="rowList"
-            translation="[0, 700]"
+            translation="[0, 460]"
             itemComponentName="PosterItem"
             numRows="3"
-            rowItemSize="[[210, 315]]"
-            rowItemSpacing="[[18, 0]]"
-            itemSize="[1920, 370]"
-            itemSpacing="[0, 18]"
+            rowItemSize="[[154, 231]]"
+            rowItemSpacing="[[14, 0]]"
+            itemSize="[1920, 290]"
+            itemSpacing="[0, 8]"
             showRowLabel="[true]"
-            rowLabelOffset="[[72, 12]]"
+            rowLabelOffset="[[72, 4]]"
             rowFocusAnimationStyle="fixedFocus"
             focusXOffset="[72]"
             drawFocusFeedback="true"

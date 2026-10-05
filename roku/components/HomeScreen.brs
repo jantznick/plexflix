@@ -1,5 +1,6 @@
 sub init()
     m.heroArt = m.top.findNode("heroArt")
+    m.heroCopy = m.top.findNode("heroCopy")
     m.heroTitle = m.top.findNode("heroTitle")
     m.heroMeta = m.top.findNode("heroMeta")
     m.heroSummary = m.top.findNode("heroSummary")
@@ -50,10 +51,9 @@ sub onHomeLoaded()
     m.rowList.content = content
     m.rowList.setFocus(true)
 
-    ' Seed hero from first playable item
     firstRow = content.getChild(0)
     if firstRow <> invalid and firstRow.getChildCount() > 0 then
-        updateHero(firstRow.getChild(0))
+        updateHero(firstRow.getChild(0), 0)
     end if
 end sub
 
@@ -64,10 +64,10 @@ sub onRowItemFocused()
     if row = invalid then return
     item = row.getChild(info[1])
     if item = invalid then return
-    updateHero(item)
+    updateHero(item, info[0])
 end sub
 
-sub updateHero(item as Object)
+sub updateHero(item as Object, rowIndex = 0 as Integer)
     if item.hdBackdropUrl <> invalid and item.hdBackdropUrl <> "" then
         m.heroArt.uri = item.hdBackdropUrl
     else if item.hdPosterUrl <> invalid then
@@ -75,18 +75,37 @@ sub updateHero(item as Object)
     end if
 
     m.heroTitle.text = asString(item.title)
+
     metaBits = []
     year = asString(item.year)
     if year <> "" then metaBits.push(year)
     contentRating = asString(item.contentRating)
     if contentRating <> "" then metaBits.push(contentRating)
     rating = asString(item.rating)
-    if rating <> "" then metaBits.push(rating + " *")
+    if rating <> "" then metaBits.push(rating + " ★")
     mediaType = asString(item.mediaType)
-    if mediaType <> "" then metaBits.push(UCase(mediaType))
-    m.heroMeta.text = joinStrings(metaBits, "  •  ")
-    m.heroSummary.text = asString(item.description)
+    if mediaType <> "" then metaBits.push(titleCaseType(mediaType))
+    m.heroMeta.text = joinStrings(metaBits, "  ·  ")
+
+    ' Compact the billboard copy when browsing lower shelves so more rows stay readable
+    if rowIndex = 0 then
+        m.heroSummary.visible = true
+        m.heroSummary.text = asString(item.description)
+        m.heroCopy.translation = [72, 220]
+    else
+        m.heroSummary.visible = false
+        m.heroSummary.text = ""
+        m.heroCopy.translation = [72, 280]
+    end if
 end sub
+
+function titleCaseType(mediaType as String) as String
+    if mediaType = "movie" then return "Movie"
+    if mediaType = "show" then return "Series"
+    if mediaType = "episode" then return "Episode"
+    if mediaType = "season" then return "Season"
+    return UCase(Left(mediaType, 1)) + Right(mediaType, Len(mediaType) - 1)
+end function
 
 function asString(value as Dynamic) as String
     if value = invalid then return ""
