@@ -122,9 +122,15 @@ sub showHome()
     m.homeScreen.setFocus(true)
 end sub
 
+function dialogIsOpen() as Boolean
+    ' wasClosed guards against a stale dialog reference blocking the remote
+    if m.top.dialog = invalid then return false
+    return m.top.dialog.wasClosed <> true
+end function
+
 sub onOpenMenu()
     if m.videoScreen <> invalid or m.detailScreen <> invalid then return
-    if m.top.dialog <> invalid then return
+    if dialogIsOpen() then return
     setNavExpanded(true)
     m.sideNav.setFocus(true)
 end sub
@@ -496,7 +502,7 @@ function onKeyEvent(key as String, press as Boolean) as Boolean
     if not press then return false
 
     ' A dialog (search keyboard) owns the remote while it is up
-    if m.top.dialog <> invalid then return false
+    if dialogIsOpen() then return false
 
     if key = "back"
         if m.videoScreen <> invalid then

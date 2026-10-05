@@ -26,8 +26,10 @@
         </Group>
         <Rectangle width="1920" height="460" color="0x07070B" opacity="0.42" />
         <Rectangle width="980" height="460" color="0x07070B" opacity="0.72" />
-        <!-- Fade the mosaic into the shelves instead of a hard seam -->
-        <Rectangle translation="[0, 400]" width="1920" height="60" color="0x07070B" opacity="0.8" />
+        <!-- Stepped wash so the clipped mosaic edge reads as a fade, not a seam -->
+        <Rectangle translation="[0, 380]" width="1920" height="30" color="0x07070B" opacity="0.45" />
+        <Rectangle translation="[0, 410]" width="1920" height="25" color="0x07070B" opacity="0.7" />
+        <Rectangle translation="[0, 435]" width="1920" height="25" color="0x07070B" opacity="0.88" />
 
         <Group id="hero" translation="[0, 0]">
             <Label id="titleLabel" translation="[96, 48]" width="860" height="70" text="Library" color="0xFFFFFF" wrap="true" maxLines="2">
