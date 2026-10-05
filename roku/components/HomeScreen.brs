@@ -15,13 +15,15 @@ sub init()
     m.billboardFade = m.top.findNode("billboardFade")
     m.rowsMove = m.top.findNode("rowsMove")
 
-    ' Expanded = billboard mode. Collapsed = shelves fill the screen.
+    ' Expanded = billboard mode. Collapsed = shelves fill the screen with a top peek.
     m.expandedRowY = 720
-    m.collapsedRowY = 64
+    m.collapsedRowY = 48
+    m.collapsedPeekY = -96
     m.rowsX = 96
     m.heroHideY = -920
     m.isCollapsed = false
     m.currentRow = -1
+    m.peekActive = false
 
     m.shimmer = m.top.findNode("shimmer")
     if m.shimmer <> invalid then m.shimmer.active = true
@@ -90,7 +92,7 @@ sub onHomeLoaded()
     end if
 
     rowCount = content.getChildCount()
-    m.buildLabel.text = "v0.4.1 · " + safeToStr(rowCount) + " rows"
+    m.buildLabel.text = "v0.4.2 · " + safeToStr(rowCount) + " rows"
 
     if m.loadingPanel <> invalid then m.loadingPanel.visible = false
     if m.frame <> invalid then m.frame.visible = true
@@ -129,7 +131,19 @@ sub applyFocusedRow(force as Boolean)
     m.currentRow = rowIndex
     ' Any shelf below the first one hides the billboard and lifts the rails
     setBrowseMode(rowIndex > 0)
+    ' From the second collapsed row onward, peek the previous shelf above
+    applyRowPeek(rowIndex)
     updateHeroContent(item)
+end sub
+
+sub applyRowPeek(rowIndex as Integer)
+    if not m.isCollapsed then return
+    wantPeek = rowIndex > 1
+    targetY = m.collapsedRowY
+    if wantPeek then targetY = m.collapsedPeekY
+    if m.peekActive = wantPeek and m.rowList.translation[1] = targetY then return
+    m.peekActive = wantPeek
+    m.rowList.translation = [m.rowsX, targetY]
 end sub
 
 sub setBrowseMode(collapsed as Boolean)
@@ -146,12 +160,14 @@ sub setBrowseMode(collapsed as Boolean)
         toOpacity = 0.0
         m.heroCopy.visible = false
         m.billboard.visible = true
+        m.peekActive = false
     else
         toHero = [0, 0]
         toRows = [m.rowsX, m.expandedRowY]
         toOpacity = 1.0
         m.billboard.visible = true
         m.heroCopy.visible = true
+        m.peekActive = false
     end if
 
     m.isCollapsed = collapsed

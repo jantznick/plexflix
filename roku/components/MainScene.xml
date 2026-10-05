@@ -11,11 +11,11 @@
             <Group id="screens" />
         </Group>
 
-        <!-- Soft vignette edges for depth -->
-        <Rectangle width="96" height="1080" color="0x000000" opacity="0.35" />
-        <Rectangle width="96" height="1080" translation="[1824, 0]" color="0x000000" opacity="0.28" />
-        <Rectangle width="1920" height="72" color="0x000000" opacity="0.3" />
-        <Rectangle width="1920" height="80" translation="[0, 1000]" color="0x000000" opacity="0.4" />
+        <!-- Soft vignette edges for depth — keep very light so content stays clear -->
+        <Rectangle width="48" height="1080" color="0x000000" opacity="0.12" />
+        <Rectangle width="48" height="1080" translation="[1872, 0]" color="0x000000" opacity="0.1" />
+        <Rectangle width="1920" height="36" color="0x000000" opacity="0.12" />
+        <Rectangle width="1920" height="48" translation="[0, 1032]" color="0x000000" opacity="0.18" />
 
         <Rectangle
             id="navScrim"

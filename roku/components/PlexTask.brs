@@ -205,6 +205,7 @@ function metadataToItem(cfg as Object, meta as Object) as Object
     grandparentRatingKey = ""
     parentRatingKey = ""
     grandparentTitle = ""
+    showThumb = ""
     if mediaType = "episode" then
         grandparentTitle = safeToStr(meta.grandparentTitle)
         grandparentRatingKey = safeToStr(meta.grandparentRatingKey)
@@ -214,7 +215,8 @@ function metadataToItem(cfg as Object, meta as Object) as Object
         if grandparentTitle <> "" then
             title = grandparentTitle + " — S" + season + "E" + episode + " " + rawTitle
         end if
-        if meta.grandparentThumb <> invalid and thumb = "" then thumb = safeToStr(meta.grandparentThumb)
+        if meta.grandparentThumb <> invalid then showThumb = safeToStr(meta.grandparentThumb)
+        if showThumb <> "" and thumb = "" then thumb = showThumb
         if meta.grandparentArt <> invalid and art = "" then art = safeToStr(meta.grandparentArt)
     end if
 
@@ -253,6 +255,9 @@ function metadataToItem(cfg as Object, meta as Object) as Object
         posterH = 270
     end if
 
+    showPosterUrl = ""
+    if showThumb <> "" then showPosterUrl = imageUrl(cfg, showThumb, 360, 540)
+
     return {
         title: title,
         shortTitle: rawTitle,
@@ -264,6 +269,7 @@ function metadataToItem(cfg as Object, meta as Object) as Object
         ratingKey: ratingKey,
         key: key,
         hdPosterUrl: imageUrl(cfg, thumb, posterW, posterH),
+        hdShowPosterUrl: showPosterUrl,
         hdBackdropUrl: imageUrl(cfg, art, 1920, 1080),
         duration: duration,
         viewOffset: viewOffset,
@@ -275,6 +281,20 @@ function metadataToItem(cfg as Object, meta as Object) as Object
         parentRatingKey: parentRatingKey,
         grandparentTitle: grandparentTitle
     }
+end function
+
+function preferShowPosters(items as Object) as Object
+    ' Continue Watching: use the show/movie poster, not episode stills
+    if items = invalid then return []
+    for each item in items
+        if item <> invalid and safeToStr(item.mediaType) = "episode" then
+            showPoster = ""
+            if item.DoesExist("hdShowPosterUrl") then showPoster = safeToStr(item.hdShowPosterUrl)
+            if showPoster <> "" then item.hdPosterUrl = showPoster
+            if safeToStr(item.grandparentTitle) <> "" then item.shortTitle = safeToStr(item.grandparentTitle)
+        end if
+    end for
+    return items
 end function
 
 function clampRowItems(items as Object) as Object
@@ -327,7 +347,8 @@ function appendRowNodes(root as Object, title as String, items as Object) as Boo
             index: item.index,
             shortTitle: item.shortTitle,
             parentIndex: item.parentIndex,
-            isDiscover: isDiscover
+            isDiscover: isDiscover,
+            hdShowPosterUrl: item.hdShowPosterUrl
         })
     end for
     return true
@@ -374,7 +395,7 @@ function buildHome(cfg as Object) as Object
     ' Continue Watching / On Deck — exempt from 15-min (always useful)
     onDeck = plexGet(cfg, "/library/onDeck")
     if onDeck.ok = true then
-        addUniqueRowLoose(root, seenTitles, "Continue Watching", collectMetadata(cfg, onDeck.json))
+        addUniqueRowLoose(root, seenTitles, "Continue Watching", preferShowPosters(collectMetadata(cfg, onDeck.json)))
     end if
 
     ' Recently Added (global)
@@ -696,7 +717,8 @@ sub addUniqueRowLoose(root as Object, seenTitles as Object, title as String, ite
             index: item.index,
             shortTitle: item.shortTitle,
             parentIndex: item.parentIndex,
-            isDiscover: item.isDiscover
+            isDiscover: item.isDiscover,
+            hdShowPosterUrl: item.hdShowPosterUrl
         })
     end for
     seenTitles[key] = true
@@ -918,7 +940,7 @@ function fetchSectionHub(cfg as Object, item as Object) as Object
 
     onDeck = plexGet(cfg, "/library/sections/" + sectionId + "/onDeck")
     if onDeck.ok = true then
-        addUniqueRowLoose(root, seenTitles, "Continue Watching", collectMetadata(cfg, onDeck.json))
+        addUniqueRowLoose(root, seenTitles, "Continue Watching", preferShowPosters(collectMetadata(cfg, onDeck.json)))
     end if
 
     genres = collectSectionGenres(cfg, sectionId)
@@ -1421,23 +1443,32 @@ function fetchLiveTvGuide(cfg as Object) as Object
         poster = asStringSafe(ch.hdPosterUrl)
         backdrop = asStringSafe(ch.hdBackdropUrl)
         timeRange = ""
-        callSign = asStringSafe(ch.description)
-        if Instr(1, callSign, " · ") > 0 then callSign = Left(callSign, Instr(1, callSign, " · ") - 1)
+        callSign = ""
+        if ch.DoesExist("callSign") then callSign = asStringSafe(ch.callSign)
+        if callSign = "" then
+            ' Fallback: short channel title, never a long program summary
+            candidate = asStringSafe(ch.description)
+            if Len(candidate) > 0 and Len(candidate) <= 32 and Instr(1, candidate, " · ") = 0 then
+                callSign = candidate
+            end if
+        end if
+        if Instr(1, callSign, " · ") > 0 then
+            cut = Instr(1, callSign, " · ")
+            callSign = Mid(callSign, 1, cut - 1)
+        end if
+        if Len(callSign) > 32 then callSign = Mid(callSign, 1, 32)
 
         if air <> invalid then
             if asStringSafe(air.title) <> "" then programTitle = asStringSafe(air.title)
             if asStringSafe(air.description) <> "" then description = asStringSafe(air.description)
             if asStringSafe(air.hdPosterUrl) <> "" then poster = asStringSafe(air.hdPosterUrl)
             if asStringSafe(air.hdBackdropUrl) <> "" then backdrop = asStringSafe(air.hdBackdropUrl)
+            if asStringSafe(air.callSign) <> "" and callSign = "" then callSign = asStringSafe(air.callSign)
         end if
 
         channelNumber = ""
-        ' Parse "12.1  CNN" style titles from mapLiveTvChannels
-        bits = ch.title
-        if bits <> invalid then
-            ' channel number often leading
-            channelNumber = firstTokenNumber(asStringSafe(ch.title))
-        end if
+        if ch.DoesExist("channelNumber") then channelNumber = asStringSafe(ch.channelNumber)
+        if channelNumber = "" then channelNumber = firstTokenNumber(asStringSafe(ch.title))
 
         enriched.push({
             title: asStringSafe(ch.title),
@@ -1584,6 +1615,8 @@ function mapLiveTvChannels(cfg as Object, json as Object, dvrId as String) as Ob
         items.push({
             title: title,
             description: callSign,
+            callSign: callSign,
+            channelNumber: channelNum,
             mediaType: "livetv",
             ratingKey: safeToStr(ch.ratingKey),
             key: safeToStr(ch.key),
@@ -1663,6 +1696,8 @@ function guideAiringToItem(cfg as Object, air as Object, dvrId as String, channe
     return {
         title: title,
         description: desc,
+        callSign: channelLabel,
+        channelNumber: firstTokenNumber(channelHint),
         mediaType: mediaType,
         ratingKey: safeToStr(air.ratingKey),
         key: safeToStr(air.key),

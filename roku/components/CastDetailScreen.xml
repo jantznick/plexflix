@@ -14,9 +14,9 @@
     <children>
         <Rectangle width="1920" height="1080" color="0x07070B" />
 
-        <Poster id="backdrop" width="1920" height="720" loadDisplayMode="scaleToZoom" opacity="0.35" />
-        <Rectangle width="1920" height="720" color="0x07070B" opacity="0.55" />
-        <Rectangle width="1920" height="400" translation="[0, 320]" color="0x07070B" opacity="0.92" />
+        <Poster id="backdrop" width="1920" height="720" loadDisplayMode="scaleToZoom" opacity="0.28" />
+        <Rectangle width="1920" height="720" color="0x07070B" opacity="0.4" />
+        <Rectangle width="1920" height="400" translation="[0, 320]" color="0x07070B" opacity="0.88" />
 
         <Group translation="[96, 72]">
             <Rectangle width="228" height="342" translation="[8, 10]" color="0x000000" opacity="0.5" />
@@ -28,10 +28,17 @@
             <Label id="roleLabel" translation="[268, 90]" width="1400" height="36" color="0xA8A8B0">
                 <Font role="font" uri="pkg:/fonts/Outfit-Medium.ttf" size="22" />
             </Label>
-            <Label id="bioLabel" translation="[268, 136]" width="1380" height="160" color="0xD0D0D6" wrap="true" maxLines="5" lineSpacing="5">
+            <Label id="bioLabel" translation="[268, 136]" width="1380" height="120" color="0xD0D0D6" wrap="true" maxLines="4" lineSpacing="5">
                 <Font role="font" uri="pkg:/fonts/Outfit-Regular.ttf" size="22" />
             </Label>
-            <BusySpinner id="spinner" translation="[268, 310]" uri="pkg:/images/spinner.png" visible="false" />
+
+            <Group id="backBtn" translation="[268, 270]">
+                <Rectangle id="backBg" width="160" height="52" color="0x2A2A32" />
+                <Label width="160" height="52" horizAlign="center" vertAlign="center" text="Back" color="0xFFFFFF">
+                    <Font role="font" uri="pkg:/fonts/Outfit-Medium.ttf" size="24" />
+                </Label>
+            </Group>
+            <BusySpinner id="spinner" translation="[460, 280]" uri="pkg:/images/spinner.png" visible="false" />
 
             <ShelfRowList
                 id="creditRows"

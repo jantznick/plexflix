@@ -146,25 +146,26 @@ end sub
 function formatGuideLine(ch as Object) as String
     num = asString(ch.channelNumber)
     callSign = asString(ch.callSign)
+    ' callSign must stay short — never use program summaries here
+    if Len(callSign) > 40 then callSign = ""
     program = asString(ch.programTitle)
     if program = "" then program = "On now"
-    left = ""
+    channelCol = ""
     if num <> "" and callSign <> "" then
-        left = num + "  " + callSign
+        channelCol = num + "  " + callSign
     else if callSign <> "" then
-        left = callSign
+        channelCol = callSign
     else if num <> "" then
-        left = "Ch " + num
+        channelCol = "Ch " + num
     else
-        left = asString(ch.title)
+        channelCol = asString(ch.title)
     end if
-    if Len(left) > 26 then left = Left(left, 26)
+    if Len(channelCol) > 26 then channelCol = Mid(channelCol, 1, 26)
     timeTxt = asString(ch.timeRange)
     if timeTxt = "" then timeTxt = "Live"
     progShort = program
-    if Len(progShort) > 48 then progShort = Left(progShort, 48)
-    ' Fixed-width-ish columns via padding (LabelList is single line)
-    return padRight(left, 32) + progShort + "     " + timeTxt
+    if Len(progShort) > 48 then progShort = Mid(progShort, 1, 48)
+    return padRight(channelCol, 32) + progShort + "     " + timeTxt
 end function
 
 function padRight(text as String, width as Integer) as String

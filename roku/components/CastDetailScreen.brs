@@ -5,9 +5,12 @@ sub init()
     m.roleLabel = m.top.findNode("roleLabel")
     m.bioLabel = m.top.findNode("bioLabel")
     m.spinner = m.top.findNode("spinner")
+    m.backBg = m.top.findNode("backBg")
     m.creditRows = m.top.findNode("creditRows")
+    m.focusZone = "back" ' back | rows
     m.creditRows.observeField("rowItemSelected", "onCreditSelected")
     m.creditRows.observeField("escapeBack", "onEscapeBack")
+    m.creditRows.observeField("escapeUp", "onEscapeUp")
 end sub
 
 sub onContentSet()
@@ -23,6 +26,10 @@ sub onContentSet()
         m.spinner.visible = true
         m.spinner.control = "start"
     end if
+
+    m.focusZone = "back"
+    paintBackFocus()
+    m.top.setFocus(true)
 
     m.task = createObject("roSGNode", "PlexTask")
     m.task.config = m.top.config
@@ -79,7 +86,9 @@ sub onLoaded()
     end if
 
     m.creditRows.content = root
-    if added > 0 then m.creditRows.setFocus(true)
+    m.focusZone = "back"
+    paintBackFocus()
+    m.top.setFocus(true)
 end sub
 
 sub appendCreditRow(root as Object, title as String, list as Object)
@@ -109,6 +118,15 @@ sub appendCreditRow(root as Object, title as String, list as Object)
     end for
 end sub
 
+sub paintBackFocus()
+    if m.backBg = invalid then return
+    if m.focusZone = "back" then
+        m.backBg.color = "0xFFFFFF"
+    else
+        m.backBg.color = "0x2A2A32"
+    end if
+end sub
+
 sub onCreditSelected()
     info = m.creditRows.rowItemSelected
     if info = invalid or info.count() < 2 then return
@@ -116,7 +134,6 @@ sub onCreditSelected()
     if row = invalid then return
     item = row.getChild(info[1])
     if item = invalid then return
-    ' Only open Plex-backed titles (need ratingKey)
     if asString(item.ratingKey) = "" then return
     m.top.openDetails = {
         title: item.title,
@@ -138,6 +155,12 @@ sub onEscapeBack()
     m.top.closed = true
 end sub
 
+sub onEscapeUp()
+    m.focusZone = "back"
+    paintBackFocus()
+    m.top.setFocus(true)
+end sub
+
 sub onCloseRequested()
     if m.top.close = true then m.top.closed = true
 end sub
@@ -147,6 +170,20 @@ function onKeyEvent(key as String, press as Boolean) as Boolean
     if key = "back" then
         m.top.closed = true
         return true
+    end if
+
+    if m.focusZone = "back" then
+        if key = "OK" then
+            m.top.closed = true
+            return true
+        else if key = "down" then
+            if m.creditRows.content <> invalid and m.creditRows.content.getChildCount() > 0 then
+                m.focusZone = "rows"
+                paintBackFocus()
+                m.creditRows.setFocus(true)
+                return true
+            end if
+        end if
     end if
     return false
 end function

@@ -23,10 +23,10 @@
             loadDisplayMode="scaleToZoom"
             opacity="1"
         />
-        <Rectangle width="1920" height="900" color="0x07070B" opacity="0.22" />
-        <Rectangle width="1100" height="900" color="0x07070B" opacity="0.42" />
+        <Rectangle width="1920" height="900" color="0x07070B" opacity="0.1" />
+        <Rectangle width="920" height="900" color="0x07070B" opacity="0.32" />
         <!-- Soft fade only near bottom so art stays visible -->
-        <Rectangle width="1920" height="280" translation="[0, 620]" color="0x07070B" opacity="0.72" />
+        <Rectangle width="1920" height="220" translation="[0, 680]" color="0x07070B" opacity="0.58" />
 
         <Group id="frame" translation="[96, 56]">
             <Rectangle width="216" height="324" translation="[8, 10]" color="0x000000" opacity="0.55" />
