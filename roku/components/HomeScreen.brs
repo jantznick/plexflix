@@ -16,12 +16,12 @@ sub init()
     m.rowsMove = m.top.findNode("rowsMove")
 
     ' Active shelf is ALWAYS the RowList focus slot — never the peek strip.
-    ' Expanded: hero + active shelf fully visible; next shelf cut off at bottom.
-    ' Collapsed: peek strip shows previous (clipped); RowList sits below it fully visible.
-    m.expandedRowY = 560
-    m.collapsedRowY = 150
+    ' Expanded: tall hero (0.4.2-style) + shelves below.
+    ' Collapsed: peek strip shows previous; RowList jumps up so the active shelf is fully on-screen.
+    m.expandedRowY = 720
+    m.collapsedRowY = 130
     m.rowsX = 96
-    m.heroHideY = -720
+    m.heroHideY = -920
     m.isCollapsed = false
     m.currentRow = -1
 
@@ -30,7 +30,7 @@ sub init()
         m.heroArt.loadWidth = 1920
         m.heroArt.loadHeight = 1080
         m.heroArt.width = 1920
-        m.heroArt.height = 680
+        m.heroArt.height = 900
         m.heroArt.translation = [0, 0]
     end if
 
@@ -179,8 +179,9 @@ sub updatePeek(rowIndex as Integer)
 
     clearPeekPosters()
 
-    ' Stable per-row stagger (not random-on-rebuild) so peeks stay put while browsing
-    stagger = ((rowIndex * 53) MOD 121) - 60
+    ' Half-tile offset so peek columns don't line up with the active shelf (Netflix-style)
+    stagger = 86
+    if (rowIndex MOD 2) = 0 then stagger = -86
     maxN = prev.getChildCount()
     if maxN > 10 then maxN = 10
     x = stagger
@@ -208,42 +209,22 @@ sub updatePeek(rowIndex as Integer)
 end sub
 
 sub setBrowseMode(collapsed as Boolean)
-    if m.isCollapsed = collapsed then return
-
-    fromHero = m.billboard.translation
-    fromRows = m.rowList.translation
-    fromOpacity = m.billboard.opacity
-    if fromOpacity = invalid then fromOpacity = 1.0
-
     if collapsed then
-        toHero = [0, m.heroHideY]
-        toRows = [m.rowsX, m.collapsedRowY]
-        toOpacity = 0.0
-        m.heroCopy.visible = false
-        m.billboard.visible = true
+        m.pendingHero = [0, m.heroHideY]
+        m.pendingRows = [m.rowsX, m.collapsedRowY]
+        m.pendingOpacity = 0.0
     else
-        toHero = [0, 0]
-        toRows = [m.rowsX, m.expandedRowY]
-        toOpacity = 1.0
-        m.billboard.visible = true
-        m.heroCopy.visible = true
+        m.pendingHero = [0, 0]
+        m.pendingRows = [m.rowsX, m.expandedRowY]
+        m.pendingOpacity = 1.0
         hidePeek()
     end if
 
     m.isCollapsed = collapsed
-    m.pendingHero = toHero
-    m.pendingRows = toRows
-    m.pendingOpacity = toOpacity
 
-    if m.homeAnim <> invalid and m.billboardMove <> invalid then
-        m.billboardMove.keyValue = [fromHero, toHero]
-        m.rowsMove.keyValue = [fromRows, toRows]
-        m.billboardFade.keyValue = [fromOpacity, toOpacity]
-        m.homeAnim.control = "start"
-        m.snapTimer.control = "start"
-    else
-        applyBrowseModeSnap()
-    end if
+    ' Always apply layout immediately — Animation is unreliable in brs-desktop
+    ' and was leaving the hero-sized black gap with rows still at expanded Y.
+    applyBrowseModeSnap()
 end sub
 
 sub onAnimSnap()
@@ -252,6 +233,7 @@ end sub
 
 sub applyBrowseModeSnap()
     if m.pendingHero = invalid then return
+    if m.homeAnim <> invalid then m.homeAnim.control = "stop"
     m.billboard.translation = m.pendingHero
     m.rowList.translation = m.pendingRows
     m.billboard.opacity = m.pendingOpacity
@@ -272,7 +254,7 @@ sub updateHeroContent(item as Object)
         m.heroArt.loadWidth = 1920
         m.heroArt.loadHeight = 1080
         m.heroArt.width = 1920
-        m.heroArt.height = 680
+        m.heroArt.height = 900
         m.heroArt.translation = [0, 0]
     end if
 

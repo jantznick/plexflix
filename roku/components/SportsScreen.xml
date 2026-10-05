@@ -36,8 +36,21 @@
                 <Font role="font" uri="pkg:/fonts/Outfit-Regular.ttf" size="16" />
             </Label>
 
-            <Rectangle translation="[1020, 0]" width="700" height="250" color="0x000000" />
-            <Poster id="previewArt" translation="[1020, 0]" width="700" height="250" loadDisplayMode="scaleToZoom" loadWidth="1400" loadHeight="500" uri="pkg:/images/poster_placeholder.png" opacity="0.5" />
+            <!-- Clip a 16:9 poster into the preview frame so letterboxing can't leave a black box -->
+            <Group id="previewClip" translation="[1020, 0]" clippingRect="[0, 0, 700, 250]">
+                <Rectangle width="700" height="250" color="0x111820" />
+                <Poster
+                    id="previewArt"
+                    width="700"
+                    height="394"
+                    translation="[0, -72]"
+                    loadDisplayMode="scaleToZoom"
+                    loadWidth="1280"
+                    loadHeight="720"
+                    uri="pkg:/images/poster_placeholder.png"
+                    opacity="0.5"
+                />
+            </Group>
         </Group>
 
         <Rectangle translation="[0, 350]" width="1920" height="36" color="0x1A2438" />

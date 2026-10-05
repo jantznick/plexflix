@@ -19,42 +19,42 @@
         </Group>
 
         <Group id="frame" translation="[0, 0]" visible="false" clippingRect="[0, 0, 1920, 1080]">
-            <!-- Restore the 0.4.3 billboard that looked right: tall art plane + soft washes -->
+            <!-- Restore tall 0.4.2-style billboard -->
             <Group id="billboard" translation="[0, 0]">
                 <Poster
                     id="heroArt"
                     width="1920"
-                    height="680"
+                    height="900"
                     loadDisplayMode="scaleToZoom"
                     loadWidth="1920"
                     loadHeight="1080"
                     uri=""
                 />
-                <Rectangle width="1920" height="680" color="0x07070B" opacity="0.12" />
-                <Rectangle width="1920" height="260" translation="[0, 420]" color="0x07070B" opacity="0.55" />
-                <Rectangle width="1920" height="120" translation="[0, 560]" color="0x07070B" opacity="0.75" />
+                <Rectangle width="1920" height="900" color="0x07070B" opacity="0.08" />
+                <Rectangle width="920" height="900" color="0x07070B" opacity="0.28" />
+                <Rectangle width="1920" height="220" translation="[0, 680]" color="0x07070B" opacity="0.55" />
 
-                <Group id="heroCopy" translation="[96, 300]">
-                    <Label id="heroTitle" width="1100" height="110" text="" color="0xFFFFFF" wrap="true" maxLines="2" lineSpacing="2">
-                        <Font role="font" uri="pkg:/fonts/Outfit-Bold.ttf" size="54" />
+                <Group id="heroCopy" translation="[96, 420]">
+                    <Label id="heroTitle" width="1000" height="110" text="" color="0xFFFFFF" wrap="true" maxLines="2" lineSpacing="2">
+                        <Font role="font" uri="pkg:/fonts/Outfit-Bold.ttf" size="58" />
                     </Label>
-                    <Label id="heroMeta" translation="[0, 112]" width="1000" height="32" text="" color="0xB8B8C0">
+                    <Label id="heroMeta" translation="[0, 118]" width="900" height="32" text="" color="0xB8B8C0">
                         <Font role="font" uri="pkg:/fonts/Outfit-Medium.ttf" size="22" />
                     </Label>
-                    <Label id="heroSummary" translation="[0, 150]" width="980" height="80" text="" color="0xD0D0D6" wrap="true" maxLines="2" lineSpacing="5">
+                    <Label id="heroSummary" translation="[0, 158]" width="880" height="80" text="" color="0xD0D0D6" wrap="true" maxLines="2" lineSpacing="5">
                         <Font role="font" uri="pkg:/fonts/Outfit-Regular.ttf" size="22" />
                     </Label>
                 </Group>
             </Group>
 
-            <!-- Previous shelf peek — posters only, no row title -->
+            <!-- Previous shelf peek — posters only, half-tile horizontal stagger -->
             <Group id="peekStrip" translation="[96, 0]" visible="false" clippingRect="[0, 0, 1728, 140]">
                 <Group id="peekPosters" translation="[0, -100]" />
             </Group>
 
             <ShelfRowList
                 id="rowList"
-                translation="[96, 560]"
+                translation="[96, 720]"
                 itemComponentName="PosterItem"
                 numRows="3"
                 rowItemSize="[[150, 225]]"
@@ -71,7 +71,7 @@
             <Animation id="homeAnim" duration="0.16" easeFunction="outCubic" optional="true" repeat="false">
                 <Vector2DFieldInterpolator id="billboardMove" key="[0.0, 1.0]" keyValue="[[0, 0], [0, 0]]" fieldToInterp="billboard.translation" />
                 <FloatFieldInterpolator id="billboardFade" key="[0.0, 1.0]" keyValue="[1.0, 1.0]" fieldToInterp="billboard.opacity" />
-                <Vector2DFieldInterpolator id="rowsMove" key="[0.0, 1.0]" keyValue="[[96, 560], [96, 560]]" fieldToInterp="rowList.translation" />
+                <Vector2DFieldInterpolator id="rowsMove" key="[0.0, 1.0]" keyValue="[[96, 720], [96, 720]]" fieldToInterp="rowList.translation" />
             </Animation>
         </Group>
     </children>

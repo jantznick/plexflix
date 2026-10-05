@@ -11,10 +11,11 @@ sub init()
 
     if m.previewArt <> invalid then
         m.previewArt.loadDisplayMode = "scaleToZoom"
-        m.previewArt.loadWidth = 1400
-        m.previewArt.loadHeight = 500
+        m.previewArt.loadWidth = 1280
+        m.previewArt.loadHeight = 720
         m.previewArt.width = 700
-        m.previewArt.height = 250
+        m.previewArt.height = 394
+        m.previewArt.translation = [0, -72]
     end if
 
     m.channels = []
@@ -211,15 +212,16 @@ sub updateInfo(idx as Integer)
     end if
     m.programSummary.text = summary
 
-    ' Prefer program poster (same as before); backdrop only as fallback
+    ' Prefer program poster; backdrop only as fallback
     uri = asString(ch.hdPosterUrl)
     if uri = "" then uri = asString(ch.hdBackdropUrl)
     if uri <> "" and m.previewArt <> invalid then
         m.previewArt.loadDisplayMode = "scaleToZoom"
-        m.previewArt.loadWidth = 1400
-        m.previewArt.loadHeight = 500
+        m.previewArt.loadWidth = 1280
+        m.previewArt.loadHeight = 720
         m.previewArt.width = 700
-        m.previewArt.height = 250
+        m.previewArt.height = 394
+        m.previewArt.translation = [0, -72]
         m.previewArt.uri = uri
         m.previewArt.opacity = 1.0
         if m.previewHint <> invalid then m.previewHint.visible = false
