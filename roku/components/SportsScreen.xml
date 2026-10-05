@@ -4,6 +4,8 @@
         <field id="config" type="assocarray" onChange="onConfigReady" />
         <field id="selectedItem" type="assocarray" />
         <field id="loadingMessage" type="string" />
+        <field id="openMenu" type="boolean" alwaysNotify="true" />
+        <field id="refocus" type="boolean" alwaysNotify="true" onChange="onRefocus" />
     </interface>
 
     <script type="text/brightscript" uri="SportsScreen.brs" />
@@ -22,7 +24,7 @@
 
             <ShimmerRow id="shimmer" translation="[0, 120]" />
 
-            <RowList
+            <ShelfRowList
                 id="sportsRows"
                 translation="[0, 120]"
                 itemComponentName="EpisodeItem"

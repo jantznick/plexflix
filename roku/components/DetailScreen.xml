@@ -68,7 +68,7 @@
             </Label>
 
             <Group id="tvPanel" translation="[0, 340]" visible="false">
-                <RowList
+                <ShelfRowList
                     id="seasonRows"
                     translation="[0, 0]"
                     itemComponentName="EpisodeItem"
@@ -86,7 +86,7 @@
             </Group>
 
             <Group id="relatedPanel" translation="[0, 340]" visible="false">
-                <RowList
+                <ShelfRowList
                     id="relatedRows"
                     translation="[0, 0]"
                     itemComponentName="PosterItem"

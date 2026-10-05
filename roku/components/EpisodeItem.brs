@@ -2,10 +2,9 @@ sub init()
     m.still = m.top.findNode("still")
     m.titleLabel = m.top.findNode("titleLabel")
     m.titleScrim = m.top.findNode("titleScrim")
-    m.focusTop = m.top.findNode("focusTop")
-    m.focusBottom = m.top.findNode("focusBottom")
-    m.focusLeft = m.top.findNode("focusLeft")
-    m.focusRight = m.top.findNode("focusRight")
+    m.shadow = m.top.findNode("shadow")
+    m.focusGlow = m.top.findNode("focusGlow")
+    m.focusRing = m.top.findNode("focusRing")
     m.focusAccent = m.top.findNode("focusAccent")
     m.progressBg = m.top.findNode("progressBg")
     m.progressFg = m.top.findNode("progressFg")
@@ -21,18 +20,33 @@ sub onSizeChange()
     m.still.width = m.itemWidth
     m.still.height = m.itemHeight
     m.titleScrim.width = m.itemWidth
-    m.titleScrim.translation = [0, m.itemHeight - 48]
-    m.titleLabel.width = m.itemWidth - 20
-    m.titleLabel.translation = [10, m.itemHeight - 42]
+    m.titleScrim.translation = [0, m.itemHeight - 52]
+    m.titleLabel.width = m.itemWidth - 24
+    m.titleLabel.translation = [12, m.itemHeight - 44]
 
-    m.focusTop.width = m.itemWidth + 8
-    m.focusBottom.width = m.itemWidth + 8
-    m.focusBottom.translation = [-4, m.itemHeight]
-    m.focusLeft.height = m.itemHeight + 7
-    m.focusRight.height = m.itemHeight + 7
-    m.focusRight.translation = [m.itemWidth, -4]
-    m.focusAccent.width = m.itemWidth + 8
-    m.focusAccent.translation = [-4, m.itemHeight]
+    if m.shadow <> invalid then
+        m.shadow.width = m.itemWidth + 16
+        m.shadow.height = m.itemHeight + 12
+        m.shadow.translation = [10, 10]
+    end if
+
+    pad = 8
+    ringW = m.itemWidth + pad * 2
+    ringH = m.itemHeight + pad * 2
+    if m.focusGlow <> invalid then
+        m.focusGlow.width = ringW
+        m.focusGlow.height = ringH
+        m.focusGlow.translation = [-pad, -pad]
+    end if
+    if m.focusRing <> invalid then
+        m.focusRing.width = ringW
+        m.focusRing.height = ringH
+        m.focusRing.translation = [-pad, -pad]
+    end if
+    if m.focusAccent <> invalid then
+        m.focusAccent.width = ringW
+        m.focusAccent.translation = [-pad, m.itemHeight]
+    end if
 
     m.progressBg.width = m.itemWidth
     m.progressBg.translation = [0, m.itemHeight - 4]
@@ -86,14 +100,20 @@ sub onFocusPercentChange()
 end sub
 
 sub setFocused(focused as Boolean)
-    m.focusTop.visible = focused
-    m.focusBottom.visible = focused
-    m.focusLeft.visible = focused
-    m.focusRight.visible = focused
-    m.focusAccent.visible = focused
+    if m.focusGlow <> invalid then m.focusGlow.visible = focused
+    if m.focusRing <> invalid then m.focusRing.visible = focused
+    if m.focusAccent <> invalid then m.focusAccent.visible = focused
     if focused then
         m.still.opacity = 1.0
+        if m.shadow <> invalid then
+            m.shadow.opacity = 0.7
+            m.shadow.translation = [14, 14]
+        end if
     else
         m.still.opacity = 0.78
+        if m.shadow <> invalid then
+            m.shadow.opacity = 0.4
+            m.shadow.translation = [10, 10]
+        end if
     end if
 end sub

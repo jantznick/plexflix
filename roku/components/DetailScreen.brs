@@ -13,10 +13,14 @@ sub init()
     m.tvPanel = m.top.findNode("tvPanel")
     m.seasonRows = m.top.findNode("seasonRows")
     m.seasonRows.observeField("rowItemSelected", "onEpisodeSelected")
+    m.seasonRows.observeField("escapeUp", "onSeasonEscapeUp")
+    m.seasonRows.observeField("escapeBack", "onEscapeBack")
 
     m.relatedPanel = m.top.findNode("relatedPanel")
     m.relatedRows = m.top.findNode("relatedRows")
     m.relatedRows.observeField("rowItemSelected", "onRelatedSelected")
+    m.relatedRows.observeField("escapeUp", "onRelatedEscapeUp")
+    m.relatedRows.observeField("escapeBack", "onEscapeBack")
     m.softStatus = m.top.findNode("softStatus")
 
     m.focusIndex = 0
@@ -81,9 +85,10 @@ sub onContentSet()
 end sub
 
 sub showTvMode()
-    m.movieActions.visible = false
+    m.movieActions.visible = true
     m.relatedPanel.visible = false
     m.tvPanel.visible = true
+    m.playLabel.text = "Play"
     m.poster.width = 200
     m.poster.height = 300
     m.poster.translation = [0, 0]
@@ -91,6 +96,8 @@ sub showTvMode()
     m.metaLabel.translation = [248, 86]
     m.summaryLabel.translation = [248, 128]
     m.summaryLabel.height = 72
+    m.focusIndex = 0
+    updateMovieButtonFocus()
 end sub
 
 sub showMovieMode()
@@ -455,25 +462,57 @@ sub updateMovieButtonFocus()
     end if
 end sub
 
+sub onEscapeBack()
+    m.top.closed = true
+end sub
+
+sub onRelatedEscapeUp()
+    m.focusIndex = 0
+    updateMovieButtonFocus()
+    m.top.setFocus(true)
+end sub
+
+sub onSeasonEscapeUp()
+    ' Return focus to Play/Back on the show header
+    m.focusIndex = 0
+    updateMovieButtonFocus()
+    m.top.setFocus(true)
+end sub
+
 sub requestMoviePlay()
     item = m.top.content
     if item = invalid then return
+
+    if m.isShow then
+        ' Play focused episode if one is selected in the season rows
+        if m.seasonRows <> invalid and m.seasonRows.content <> invalid then
+            info = m.seasonRows.rowItemFocused
+            if info <> invalid and info.count() >= 2 then
+                row = m.seasonRows.content.getChild(info[0])
+                if row <> invalid then
+                    ep = row.getChild(info[1])
+                    if ep <> invalid and asString(ep.mediaType) = "episode" then
+                        m.top.playRequested = nodeToItem(ep)
+                        return
+                    end if
+                end if
+            end if
+        end if
+    end if
+
     m.top.playRequested = item
 end sub
 
 function onKeyEvent(key as String, press as Boolean) as Boolean
     if not press then return false
 
-    if m.isShow then
-        if key = "back"
-            m.top.closed = true
-            return true
-        else if key = "down" and m.movieActions.visible = false
-            if not m.seasonRows.hasFocus() then
-                m.seasonRows.setFocus(true)
-                return true
-            end if
-        end if
+    if key = "back"
+        m.top.closed = true
+        return true
+    end if
+
+    ' Shared Play / Back button row (movies + shows)
+    if m.relatedRows.hasFocus() or m.seasonRows.hasFocus() then
         return false
     end if
 
@@ -486,18 +525,16 @@ function onKeyEvent(key as String, press as Boolean) as Boolean
         updateMovieButtonFocus()
         return true
     else if key = "down"
-        if m.relatedPanel.visible = true then
+        if m.isShow and m.tvPanel.visible = true then
+            m.seasonRows.setFocus(true)
+            return true
+        else if m.relatedPanel.visible = true then
             m.relatedRows.setFocus(true)
             return true
         end if
     else if key = "up"
-        if m.relatedRows.hasFocus() then
-            updateMovieButtonFocus()
-            m.top.setFocus(true)
-            return true
-        end if
+        return true
     else if key = "OK"
-        if m.relatedRows.hasFocus() then return false
         if m.focusIndex = 0 then
             requestMoviePlay()
         else
@@ -506,9 +543,6 @@ function onKeyEvent(key as String, press as Boolean) as Boolean
         return true
     else if key = "play"
         requestMoviePlay()
-        return true
-    else if key = "back"
-        m.top.closed = true
         return true
     end if
 

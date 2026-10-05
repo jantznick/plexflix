@@ -7,6 +7,8 @@
         <field id="closed" type="boolean" alwaysNotify="true" />
         <field id="close" type="boolean" alwaysNotify="true" onChange="onCloseRequested" />
         <field id="loadingMessage" type="string" />
+        <field id="openMenu" type="boolean" alwaysNotify="true" />
+        <field id="refocus" type="boolean" alwaysNotify="true" onChange="onRefocus" />
     </interface>
 
     <script type="text/brightscript" uri="LibraryBrowseScreen.brs" />
@@ -25,7 +27,7 @@
 
             <ShimmerRow id="shimmer" translation="[0, 120]" />
 
-            <RowList
+            <ShelfRowList
                 id="rowList"
                 translation="[0, 120]"
                 itemComponentName="PosterItem"

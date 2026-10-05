@@ -29,6 +29,8 @@ sub init()
 
     m.rowList.observeField("rowItemSelected", "onRowItemSelected")
     m.rowList.observeField("rowItemFocused", "onRowItemFocused")
+    m.rowList.observeField("escapeLeft", "onEscapeLeft")
+    m.rowList.observeField("escapeUp", "onEscapeUp")
 
     ' brs-desktop sometimes misses rowItemFocused; poll as a backup
     m.focusPoll = createObject("roSGNode", "Timer")
@@ -78,7 +80,7 @@ sub onHomeLoaded()
     end if
 
     rowCount = content.getChildCount()
-    m.buildLabel.text = "v0.3.6 · " + safeToStr(rowCount) + " rows"
+    m.buildLabel.text = "v0.3.7 · " + safeToStr(rowCount) + " rows"
 
     m.rowList.content = content
     m.rowList.visible = true
@@ -265,10 +267,30 @@ sub onRowItemSelected()
     }
 end sub
 
+sub onEscapeLeft()
+    m.top.openMenu = true
+end sub
+
+sub onEscapeUp()
+    ' At top shelf — expand billboard if collapsed
+    if m.isCollapsed = true then
+        setBrowseMode(false)
+    end if
+end sub
+
+sub onRefocus()
+    if m.top.refocus = true and m.rowList <> invalid then
+        m.rowList.setFocus(true)
+    end if
+end sub
+
 function onKeyEvent(key as String, press as Boolean) as Boolean
     if not press then return false
 
-    if key = "OK" and not m.rowList.hasFocus() then
+    if key = "left" then
+        m.top.openMenu = true
+        return true
+    else if key = "OK" and not m.rowList.hasFocus() then
         m.rowList.setFocus(true)
         return true
     end if

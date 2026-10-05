@@ -2,10 +2,8 @@ sub init()
     m.poster = m.top.findNode("poster")
     m.shadow = m.top.findNode("shadow")
     m.cardBg = m.top.findNode("cardBg")
-    m.focusTop = m.top.findNode("focusTop")
-    m.focusBottom = m.top.findNode("focusBottom")
-    m.focusLeft = m.top.findNode("focusLeft")
-    m.focusRight = m.top.findNode("focusRight")
+    m.focusGlow = m.top.findNode("focusGlow")
+    m.focusRing = m.top.findNode("focusRing")
     m.focusAccent = m.top.findNode("focusAccent")
     m.progressBg = m.top.findNode("progressBg")
     m.progressFg = m.top.findNode("progressFg")
@@ -25,19 +23,28 @@ sub onSizeChange()
         m.cardBg.height = m.itemHeight
     end if
     if m.shadow <> invalid then
-        m.shadow.width = m.itemWidth + 8
-        m.shadow.height = m.itemHeight + 6
-        m.shadow.translation = [8, 10]
+        m.shadow.width = m.itemWidth + 16
+        m.shadow.height = m.itemHeight + 12
+        m.shadow.translation = [10, 12]
     end if
 
-    m.focusTop.width = m.itemWidth + 8
-    m.focusBottom.width = m.itemWidth + 8
-    m.focusBottom.translation = [-4, m.itemHeight]
-    m.focusLeft.height = m.itemHeight + 8
-    m.focusRight.height = m.itemHeight + 8
-    m.focusRight.translation = [m.itemWidth, -4]
-    m.focusAccent.width = m.itemWidth + 8
-    m.focusAccent.translation = [-4, m.itemHeight]
+    pad = 8
+    ringW = m.itemWidth + pad * 2
+    ringH = m.itemHeight + pad * 2
+    if m.focusGlow <> invalid then
+        m.focusGlow.width = ringW
+        m.focusGlow.height = ringH
+        m.focusGlow.translation = [-pad, -pad]
+    end if
+    if m.focusRing <> invalid then
+        m.focusRing.width = ringW
+        m.focusRing.height = ringH
+        m.focusRing.translation = [-pad, -pad]
+    end if
+    if m.focusAccent <> invalid then
+        m.focusAccent.width = ringW
+        m.focusAccent.translation = [-pad, m.itemHeight]
+    end if
 
     m.progressBg.width = m.itemWidth
     m.progressBg.translation = [0, m.itemHeight - 5]
@@ -88,21 +95,20 @@ sub onFocusPercentChange()
 end sub
 
 sub setFocused(focused as Boolean)
-    m.focusTop.visible = focused
-    m.focusBottom.visible = focused
-    m.focusLeft.visible = focused
-    m.focusRight.visible = focused
-    m.focusAccent.visible = focused
+    if m.focusGlow <> invalid then m.focusGlow.visible = focused
+    if m.focusRing <> invalid then m.focusRing.visible = focused
+    if m.focusAccent <> invalid then m.focusAccent.visible = focused
     if focused then
         m.poster.opacity = 1.0
-        if m.shadow <> invalid then m.shadow.opacity = 0.65
-        ' Slight lift via shadow offset — SceneGraph scale on RowList items is limited
-        if m.shadow <> invalid then m.shadow.translation = [10, 14]
-    else
-        m.poster.opacity = 0.82
         if m.shadow <> invalid then
-            m.shadow.opacity = 0.45
-            m.shadow.translation = [8, 10]
+            m.shadow.opacity = 0.7
+            m.shadow.translation = [14, 16]
+        end if
+    else
+        m.poster.opacity = 0.78
+        if m.shadow <> invalid then
+            m.shadow.opacity = 0.4
+            m.shadow.translation = [10, 12]
         end if
     end if
 end sub

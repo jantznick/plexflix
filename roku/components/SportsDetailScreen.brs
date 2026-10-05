@@ -69,6 +69,10 @@ function onKeyEvent(key as String, press as Boolean) as Boolean
     if key = "back" then
         m.top.closed = true
         return true
+    else if key = "left" then
+        ' Prefer returning to sports list; sidebar is Left from the list
+        m.top.closed = true
+        return true
     end if
     return false
 end function

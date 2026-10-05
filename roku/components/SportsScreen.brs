@@ -3,7 +3,18 @@ sub init()
     m.sportsRows = m.top.findNode("sportsRows")
     m.shimmer = m.top.findNode("shimmer")
     m.sportsRows.observeField("rowItemSelected", "onItemSelected")
+    m.sportsRows.observeField("escapeLeft", "onEscapeLeft")
     m.events = []
+end sub
+
+sub onEscapeLeft()
+    m.top.openMenu = true
+end sub
+
+sub onRefocus()
+    if m.top.refocus = true and m.sportsRows <> invalid then
+        m.sportsRows.setFocus(true)
+    end if
 end sub
 
 sub onConfigReady()
@@ -96,6 +107,11 @@ sub onItemSelected()
 end sub
 
 function onKeyEvent(key as String, press as Boolean) as Boolean
+    if not press then return false
+    if key = "left" then
+        m.top.openMenu = true
+        return true
+    end if
     return false
 end function
 

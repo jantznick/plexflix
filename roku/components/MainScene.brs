@@ -88,8 +88,15 @@ sub showHome()
     m.homeScreen.config = m.config
     m.homeScreen.observeField("selectedItem", "onBrowseSelected")
     m.homeScreen.observeField("loadingMessage", "onSoftLoading")
+    m.homeScreen.observeField("openMenu", "onOpenMenu")
     m.screens.appendChild(m.homeScreen)
     m.homeScreen.setFocus(true)
+end sub
+
+sub onOpenMenu()
+    if m.videoScreen <> invalid or m.detailScreen <> invalid then return
+    setNavExpanded(true)
+    m.sideNav.setFocus(true)
 end sub
 
 sub showLibraryBrowse(source as Object)
@@ -100,6 +107,7 @@ sub showLibraryBrowse(source as Object)
     m.libraryBrowseScreen.observeField("selectedItem", "onBrowseSelected")
     m.libraryBrowseScreen.observeField("closed", "onLibraryBrowseClosed")
     m.libraryBrowseScreen.observeField("loadingMessage", "onSoftLoading")
+    m.libraryBrowseScreen.observeField("openMenu", "onOpenMenu")
     m.screens.appendChild(m.libraryBrowseScreen)
     m.libraryBrowseScreen.setFocus(true)
 end sub
@@ -116,6 +124,7 @@ sub showSports()
     m.sportsScreen.config = m.config
     m.sportsScreen.observeField("selectedItem", "onSportsItemSelected")
     m.sportsScreen.observeField("loadingMessage", "onSoftLoading")
+    m.sportsScreen.observeField("openMenu", "onOpenMenu")
     m.screens.appendChild(m.sportsScreen)
     m.sportsScreen.setFocus(true)
 end sub
@@ -259,6 +268,7 @@ sub onDetailClosed()
         m.screens.removeChild(m.detailScreen)
         m.detailScreen = invalid
     end if
+    ' Explicitly restore focus so the remote never goes dead after Back
     restoreSectionFocus()
 end sub
 
@@ -304,11 +314,16 @@ end sub
 
 sub restoreSectionFocus()
     if m.section = "library" and m.libraryBrowseScreen <> invalid then
+        m.libraryBrowseScreen.refocus = true
         m.libraryBrowseScreen.setFocus(true)
     else if m.section = "sports" and m.sportsScreen <> invalid then
+        m.sportsScreen.refocus = true
         m.sportsScreen.setFocus(true)
     else if m.homeScreen <> invalid then
+        m.homeScreen.refocus = true
         m.homeScreen.setFocus(true)
+    else
+        showHome()
     end if
 end sub
 
@@ -332,7 +347,8 @@ function onKeyEvent(key as String, press as Boolean) as Boolean
             setNavExpanded(false)
             return true
         end if
-    else if key = "left" and not m.navExpanded and m.detailScreen = invalid and m.videoScreen = invalid and m.sportsDetailScreen = invalid then
+    else if key = "left" and not m.navExpanded and m.videoScreen = invalid and m.detailScreen = invalid then
+        ' Allow Left → menu from home / libraries / sports / sports detail
         setNavExpanded(true)
         m.sideNav.setFocus(true)
         return true

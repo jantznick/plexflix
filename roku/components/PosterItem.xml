@@ -10,22 +10,19 @@
     <script type="text/brightscript" uri="PosterItem.brs" />
 
     <children>
-        <!-- Soft shadow for depth -->
         <Rectangle
             id="shadow"
-            width="176"
-            height="258"
-            translation="[8, 10]"
+            width="184"
+            height="264"
+            translation="[10, 12]"
             color="0x000000"
-            opacity="0.45"
+            opacity="0.4"
         />
         <Rectangle
             id="cardBg"
             width="168"
             height="252"
-            translation="[0, 0]"
             color="0x16161E"
-            opacity="1"
         />
         <Poster
             id="poster"
@@ -35,14 +32,36 @@
             failedBitmapUri="pkg:/images/poster_placeholder.png"
             loadingBitmapUri="pkg:/images/poster_placeholder.png"
             uri="pkg:/images/poster_placeholder.png"
-            opacity="0.82"
+            opacity="0.78"
         />
 
-        <Rectangle id="focusTop" width="176" height="3" translation="[-4, -4]" color="0xFFFFFF" visible="false" />
-        <Rectangle id="focusBottom" width="176" height="3" translation="[-4, 252]" color="0xFFFFFF" visible="false" />
-        <Rectangle id="focusLeft" width="3" height="259" translation="[-4, -4]" color="0xFFFFFF" visible="false" />
-        <Rectangle id="focusRight" width="3" height="259" translation="[168, -4]" color="0xFFFFFF" visible="false" />
-        <Rectangle id="focusAccent" width="176" height="4" translation="[-4, 252]" color="0xE50914" visible="false" />
+        <!-- Soft glow plate behind the ring -->
+        <Rectangle
+            id="focusGlow"
+            width="184"
+            height="268"
+            translation="[-8, -8]"
+            color="0xFFFFFF"
+            opacity="0.18"
+            visible="false"
+        />
+        <Poster
+            id="focusRing"
+            width="184"
+            height="268"
+            translation="[-8, -8]"
+            loadDisplayMode="scaleToFill"
+            uri="pkg:/images/focus_ring.png"
+            visible="false"
+        />
+        <Rectangle
+            id="focusAccent"
+            width="184"
+            height="5"
+            translation="[-8, 252]"
+            color="0xE50914"
+            visible="false"
+        />
 
         <Rectangle
             id="progressBg"

@@ -61,8 +61,8 @@ Optional CLI (if `ROKU_IP` / `ROKU_PASSWORD` are set):
 
 ## Remote / focus
 
-- **Left** opens the sidebar; **Right** or **Back** hides it again
-- Libraries appear **in the sidebar** (movie/TV sections from your Plex server)
+- **Left** opens the sidebar from Home, Libraries, Live Sports (and sports detail via Back first); **Right** or **Back** hides it
+- Libraries appear as flat items in the sidebar (no wrapping cycle at the ends)
 - Arrow keys move across poster rows
 - Focused title updates the hero billboard
 - OK opens the detail screen (episodes open the show with that episode selected)

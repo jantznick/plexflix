@@ -4,6 +4,22 @@ sub init()
     m.rowList = m.top.findNode("rowList")
     m.shimmer = m.top.findNode("shimmer")
     m.rowList.observeField("rowItemSelected", "onRowItemSelected")
+    m.rowList.observeField("escapeLeft", "onEscapeLeft")
+    m.rowList.observeField("escapeBack", "onEscapeBack")
+end sub
+
+sub onEscapeLeft()
+    m.top.openMenu = true
+end sub
+
+sub onEscapeBack()
+    m.top.closed = true
+end sub
+
+sub onRefocus()
+    if m.top.refocus = true and m.rowList <> invalid then
+        m.rowList.setFocus(true)
+    end if
 end sub
 
 sub onSourceSet()
@@ -91,6 +107,9 @@ function onKeyEvent(key as String, press as Boolean) as Boolean
     if not press then return false
     if key = "back" then
         m.top.closed = true
+        return true
+    else if key = "left" then
+        m.top.openMenu = true
         return true
     end if
     return false

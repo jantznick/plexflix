@@ -17,7 +17,6 @@ end sub
 sub buildStaticEntries()
     m.entries = [
         { id: "home", kind: "nav", title: "Home" },
-        { id: "header_libs", kind: "header", title: "Libraries" },
         { id: "sports", kind: "nav", title: "Live Sports" }
     ]
     paintList()
@@ -40,18 +39,14 @@ sub onLibrariesLoaded()
 
     m.entries = []
     m.entries.push({ id: "home", kind: "nav", title: "Home" })
-    m.entries.push({ id: "header_libs", kind: "header", title: "— Libraries —" })
     for each lib in m.libraries
         m.entries.push({
             id: "lib:" + asString(lib.sectionId),
             kind: "library",
-            title: "  " + asString(lib.title),
+            title: asString(lib.title),
             library: lib
         })
     end for
-    if m.libraries.count() = 0 then
-        m.entries.push({ id: "libs_empty", kind: "header", title: "  (none found)" })
-    end if
     m.entries.push({ id: "sports", kind: "nav", title: "Live Sports" })
     paintList()
     syncActiveIndex()
@@ -100,7 +95,6 @@ sub onItemSelected()
     idx = m.navList.itemSelected
     if idx = invalid or idx < 0 or idx >= m.entries.count() then return
     entry = m.entries[idx]
-    if entry.kind = "header" then return
 
     if entry.kind = "library" then
         m.top.active = entry.id
@@ -119,9 +113,6 @@ function onKeyEvent(key as String, press as Boolean) as Boolean
         m.top.expanded = false
         return true
     else if key = "right" then
-        return false
-    else if key = "OK" or key = "play" then
-        ' LabelList fires itemSelected on OK
         return false
     end if
     return false
