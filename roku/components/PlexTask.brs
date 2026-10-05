@@ -21,6 +21,8 @@ sub exec()
         m.top.response = fetchSectionHub(cfg, m.top.item)
     else if action = "sectionAll" then
         m.top.response = fetchSectionAll(cfg, m.top.item)
+    else if action = "sectionFirstCharacter" then
+        m.top.response = fetchSectionFirstCharacter(cfg, m.top.item)
     else if action = "resolveEpisodeShow" then
         m.top.response = resolveEpisodeShow(cfg, m.top.item)
     else if action = "personDetail" then
@@ -1139,6 +1141,66 @@ function fetchSectionAll(cfg as Object, item as Object) as Object
         warning: warning,
         requestId: safeToStr(item.requestId)
     }
+end function
+
+function fetchSectionFirstCharacter(cfg as Object, item as Object) as Object
+    ' /firstCharacter reports how many titles start with each letter, in the
+    ' library's title order. Running totals turn that into grid offsets, which
+    ' is what lets the A-Z rail jump straight into the middle of a big library.
+    if item = invalid then return { ok: false, error: "No library" }
+    sectionId = safeToStr(item.sectionId)
+    if sectionId = "" then sectionId = sectionIdFromKey(safeToStr(item.key))
+    if sectionId = "" then return { ok: false, error: "Missing library section id" }
+
+    sectionType = safeToStr(item.sectionType)
+    path = "/library/sections/" + sectionId + "/firstCharacter"
+    if sectionType = "movie" then
+        path = path + "?type=1"
+    else if sectionType = "show" then
+        path = path + "?type=2"
+    end if
+
+    result = plexGet(cfg, path)
+    if result.ok <> true then return result
+    if result.json = invalid or result.json.MediaContainer = invalid then
+        return { ok: false, error: "No letters reported" }
+    end if
+
+    list = result.json.MediaContainer.Directory
+    if list = invalid then list = []
+    if GetInterface(list, "ifArray") = invalid then list = [list]
+
+    letters = firstCharacterLetters(list)
+    total = 0
+    if letters.count() > 0 then
+        last = letters[letters.count() - 1]
+        total = last.offset + last.size
+    end if
+    return { ok: true, letters: letters, total: total }
+end function
+
+function firstCharacterLetters(list as Object) as Object
+    letters = []
+    offset = 0
+    for each dir in list
+        label = safeToStr(dir.title)
+        if label = "" then label = safeToStr(dir.key)
+        size = 0
+        if dir.size <> invalid then size = dir.size
+        if size > 0 then
+            letters.push({ letter: normalizeFirstCharacter(label), offset: offset, size: size })
+            offset = offset + size
+        end if
+    end for
+    return letters
+end function
+
+function normalizeFirstCharacter(label as String) as String
+    ' Plex buckets digits and symbols under "#"; anything else is a single letter
+    if Len(label) <> 1 then return "#"
+    upper = UCase(label)
+    if Instr(1, "ABCDEFGHIJKLMNOPQRSTUVWXYZ", upper) = 0 then return "#"
+    return upper
 end function
 
 function collectSectionGenres(cfg as Object, sectionId as String) as Object
