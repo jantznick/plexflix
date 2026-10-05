@@ -1,10 +1,22 @@
 sub init()
+    m.billboard = m.top.findNode("billboard")
     m.heroArt = m.top.findNode("heroArt")
     m.heroCopy = m.top.findNode("heroCopy")
     m.heroTitle = m.top.findNode("heroTitle")
     m.heroMeta = m.top.findNode("heroMeta")
     m.heroSummary = m.top.findNode("heroSummary")
     m.rowList = m.top.findNode("rowList")
+    m.homeAnim = m.top.findNode("homeAnim")
+    m.billboardMove = m.top.findNode("billboardMove")
+    m.billboardFade = m.top.findNode("billboardFade")
+    m.rowsMove = m.top.findNode("rowsMove")
+
+    ' Expanded = Netflix billboard mode (first row). Collapsed = shelves take the screen.
+    m.expandedRowY = 560
+    m.collapsedRowY = 88
+    m.heroHideY = -640
+    m.isCollapsed = false
+    m.currentRow = 0
 
     m.rowList.observeField("rowItemSelected", "onRowItemSelected")
     m.rowList.observeField("rowItemFocused", "onRowItemFocused")
@@ -49,25 +61,67 @@ sub onHomeLoaded()
     end if
 
     m.rowList.content = content
+    setBrowseMode(false, false)
     m.rowList.setFocus(true)
 
     firstRow = content.getChild(0)
     if firstRow <> invalid and firstRow.getChildCount() > 0 then
-        updateHero(firstRow.getChild(0), 0)
+        updateHeroContent(firstRow.getChild(0))
     end if
 end sub
 
 sub onRowItemFocused()
     info = m.rowList.rowItemFocused
     if info = invalid or info.count() < 2 then return
-    row = m.rowList.content.getChild(info[0])
+
+    rowIndex = info[0]
+    row = m.rowList.content.getChild(rowIndex)
     if row = invalid then return
     item = row.getChild(info[1])
     if item = invalid then return
-    updateHero(item, info[0])
+
+    m.currentRow = rowIndex
+    ' Row 0 keeps the billboard. Any lower shelf scrolls the home surface up.
+    setBrowseMode(rowIndex > 0, true)
+    updateHeroContent(item)
 end sub
 
-sub updateHero(item as Object, rowIndex = 0 as Integer)
+sub setBrowseMode(collapsed as Boolean, animate as Boolean)
+    if m.isCollapsed = collapsed and animate then return
+
+    fromHero = m.billboard.translation
+    fromRows = m.rowList.translation
+    fromOpacity = m.billboard.opacity
+
+    if collapsed then
+        toHero = [0, m.heroHideY]
+        toRows = [0, m.collapsedRowY]
+        toOpacity = 0.0
+        m.heroCopy.visible = false
+    else
+        toHero = [0, 0]
+        toRows = [0, m.expandedRowY]
+        toOpacity = 1.0
+        m.heroCopy.visible = true
+    end if
+
+    m.isCollapsed = collapsed
+
+    if not animate then
+        m.homeAnim.control = "stop"
+        m.billboard.translation = toHero
+        m.billboard.opacity = toOpacity
+        m.rowList.translation = toRows
+        return
+    end if
+
+    m.billboardMove.keyValue = [fromHero, toHero]
+    m.rowsMove.keyValue = [fromRows, toRows]
+    m.billboardFade.keyValue = [fromOpacity, toOpacity]
+    m.homeAnim.control = "start"
+end sub
+
+sub updateHeroContent(item as Object)
     if item.hdBackdropUrl <> invalid and item.hdBackdropUrl <> "" then
         m.heroArt.uri = item.hdBackdropUrl
     else if item.hdPosterUrl <> invalid then
@@ -86,17 +140,7 @@ sub updateHero(item as Object, rowIndex = 0 as Integer)
     mediaType = asString(item.mediaType)
     if mediaType <> "" then metaBits.push(titleCaseType(mediaType))
     m.heroMeta.text = joinStrings(metaBits, "  ·  ")
-
-    ' Compact the billboard copy when browsing lower shelves so more rows stay readable
-    if rowIndex = 0 then
-        m.heroSummary.visible = true
-        m.heroSummary.text = asString(item.description)
-        m.heroCopy.translation = [72, 220]
-    else
-        m.heroSummary.visible = false
-        m.heroSummary.text = ""
-        m.heroCopy.translation = [72, 280]
-    end if
+    m.heroSummary.text = asString(item.description)
 end sub
 
 function titleCaseType(mediaType as String) as String
@@ -104,6 +148,7 @@ function titleCaseType(mediaType as String) as String
     if mediaType = "show" then return "Series"
     if mediaType = "episode" then return "Episode"
     if mediaType = "season" then return "Season"
+    if Len(mediaType) = 0 then return ""
     return UCase(Left(mediaType, 1)) + Right(mediaType, Len(mediaType) - 1)
 end function
 

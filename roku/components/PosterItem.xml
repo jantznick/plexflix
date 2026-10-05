@@ -12,8 +12,8 @@
     <children>
         <Poster
             id="poster"
-            width="154"
-            height="231"
+            width="148"
+            height="222"
             loadDisplayMode="scaleToZoom"
             failedBitmapUri="pkg:/images/poster_placeholder.png"
             loadingBitmapUri="pkg:/images/poster_placeholder.png"
@@ -21,7 +21,7 @@
         />
         <Rectangle
             id="progressBg"
-            width="154"
+            width="148"
             height="5"
             translation="[0, 226]"
             color="0x404040"

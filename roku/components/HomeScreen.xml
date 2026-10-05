@@ -9,105 +9,117 @@
     <script type="text/brightscript" uri="HomeScreen.brs" />
 
     <children>
-        ' Full-bleed billboard — rows sit over the lower half (Netflix-style)
-        <Poster
-            id="heroArt"
-            width="1920"
-            height="820"
-            loadDisplayMode="scaleToFill"
-            uri="pkg:/images/splash-screen_fhd.jpg"
-        />
+        <Rectangle width="1920" height="1080" color="0x0A0A0A" />
 
-        ' Soft scrims instead of a hard black bar
-        <Rectangle
-            id="heroDim"
-            width="1920"
-            height="820"
-            color="0x000000"
-            opacity="0.25"
-        />
-        <Rectangle
-            width="980"
-            height="820"
-            color="0x000000"
-            opacity="0.45"
-        />
-        <Rectangle
-            id="heroFade"
-            width="1920"
-            height="360"
-            translation="[0, 460]"
-            color="0x0A0A0A"
-            opacity="0.92"
-        />
-        <Rectangle
-            width="1920"
-            height="280"
-            translation="[0, 800]"
-            color="0x0A0A0A"
-        />
+        ' Billboard layer — slides up and off when you browse down (Netflix behavior)
+        <Group id="billboard" translation="[0, 0]">
+            <Poster
+                id="heroArt"
+                width="1920"
+                height="780"
+                loadDisplayMode="scaleToFill"
+                uri="pkg:/images/splash-screen_fhd.jpg"
+            />
+            <Rectangle width="1920" height="780" color="0x000000" opacity="0.20" />
+            <Rectangle width="1100" height="780" color="0x000000" opacity="0.50" />
+            <Rectangle
+                width="1920"
+                height="320"
+                translation="[0, 460]"
+                color="0x0A0A0A"
+                opacity="0.95"
+            />
 
+            <Group id="heroCopy" translation="[72, 250]">
+                <Label
+                    id="heroTitle"
+                    width="980"
+                    height="100"
+                    text="Loading your library..."
+                    color="0xFFFFFF"
+                    font="font:LargeBoldSystemFont"
+                    wrap="true"
+                    maxLines="2"
+                    lineSpacing="2"
+                />
+                <Label
+                    id="heroMeta"
+                    translation="[0, 108]"
+                    width="900"
+                    height="32"
+                    text=""
+                    color="0xC7C7C7"
+                    font="font:SmallSystemFont"
+                />
+                <Label
+                    id="heroSummary"
+                    translation="[0, 148]"
+                    width="860"
+                    height="90"
+                    text=""
+                    color="0xD6D6D6"
+                    font="font:SmallSystemFont"
+                    wrap="true"
+                    maxLines="2"
+                    lineSpacing="4"
+                />
+            </Group>
+        </Group>
+
+        ' Persistent chrome
         <Label
             id="brandLabel"
-            translation="[72, 28]"
+            translation="[72, 24]"
             width="500"
-            height="48"
+            height="44"
             text="PLEXFLIX"
             color="0xE50914"
             font="font:MediumBoldSystemFont"
         />
 
-        <Group id="heroCopy" translation="[72, 220]">
-            <Label
-                id="heroTitle"
-                width="900"
-                height="96"
-                text="Loading your library..."
-                color="0xFFFFFF"
-                font="font:LargeBoldSystemFont"
-                wrap="true"
-                maxLines="2"
-                lineSpacing="2"
-            />
-            <Label
-                id="heroMeta"
-                translation="[0, 104]"
-                width="900"
-                height="32"
-                text=""
-                color="0xC7C7C7"
-                font="font:SmallSystemFont"
-            />
-            <Label
-                id="heroSummary"
-                translation="[0, 144]"
-                width="820"
-                height="84"
-                text=""
-                color="0xD0D0D0"
-                font="font:SmallSystemFont"
-                wrap="true"
-                maxLines="2"
-                lineSpacing="4"
-            />
-        </Group>
-
-        ' Start high enough that ~3 shelves fit on FHD
+        ' Shelves: sit low over the billboard when expanded; jump up when collapsed
         <RowList
             id="rowList"
-            translation="[0, 460]"
+            translation="[0, 560]"
             itemComponentName="PosterItem"
-            numRows="3"
-            rowItemSize="[[154, 231]]"
-            rowItemSpacing="[[14, 0]]"
-            itemSize="[1920, 290]"
-            itemSpacing="[0, 8]"
+            numRows="4"
+            rowItemSize="[[148, 222]]"
+            rowItemSpacing="[[16, 0]]"
+            itemSize="[1920, 275]"
+            itemSpacing="[0, 6]"
             showRowLabel="[true]"
-            rowLabelOffset="[[72, 4]]"
+            rowLabelOffset="[[72, 2]]"
             rowFocusAnimationStyle="fixedFocus"
             focusXOffset="[72]"
             drawFocusFeedback="true"
             focusBitmapUri="pkg:/images/focus_border.png"
         />
+
+        <Animation
+            id="homeAnim"
+            duration="0.28"
+            easeFunction="outCubic"
+            optional="true"
+            repeat="false"
+        >
+            <Vector2DFieldInterpolator
+                id="billboardMove"
+                key="[0.0, 1.0]"
+                keyValue="[[0, 0], [0, 0]]"
+                fieldToInterp="billboard.translation"
+            />
+            <FloatFieldInterpolator
+                id="billboardFade"
+                key="[0.0, 1.0]"
+                keyValue="[1.0, 1.0]"
+                fieldToInterp="billboard.opacity"
+            />
+            <Vector2DFieldInterpolator
+                id="rowsMove"
+                key="[0.0, 1.0]"
+                keyValue="[[0, 560], [0, 560]]"
+                fieldToInterp="rowList.translation"
+            />
+        </Animation>
     </children>
 </component>

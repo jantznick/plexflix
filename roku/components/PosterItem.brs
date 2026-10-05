@@ -2,8 +2,8 @@ sub init()
     m.poster = m.top.findNode("poster")
     m.progressBg = m.top.findNode("progressBg")
     m.progressFg = m.top.findNode("progressFg")
-    m.itemWidth = 154
-    m.itemHeight = 231
+    m.itemWidth = 148
+    m.itemHeight = 222
 end sub
 
 sub onSizeChange()
