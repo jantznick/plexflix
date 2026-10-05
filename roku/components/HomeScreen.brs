@@ -135,7 +135,8 @@ sub applyFocusedRow(force as Boolean)
     if info = invalid or info.count() < 2 then return
 
     rowIndex = info[0]
-    if not force and rowIndex = m.currentRow then return
+    rowChanged = (rowIndex <> m.currentRow)
+    if not force and not rowChanged then return
 
     row = m.rowList.content.getChild(rowIndex)
     if row = invalid then return
@@ -143,8 +144,11 @@ sub applyFocusedRow(force as Boolean)
     if item = invalid then return
 
     m.currentRow = rowIndex
-    setBrowseMode(rowIndex > 0)
-    updatePeek(rowIndex)
+    ' Only rebuild the clipped peek when the active ROW changes — never on horizontal scroll
+    if rowChanged then
+        setBrowseMode(rowIndex > 0)
+        updatePeek(rowIndex)
+    end if
     updateHeroContent(item)
 end sub
 
@@ -175,8 +179,8 @@ sub updatePeek(rowIndex as Integer)
 
     clearPeekPosters()
 
-    ' Netflix-style stagger: random horizontal offset so the peek doesn't align with the row below
-    stagger = Int(Rnd(0) * 140) - 70
+    ' Stable per-row stagger (not random-on-rebuild) so peeks stay put while browsing
+    stagger = ((rowIndex * 53) MOD 121) - 60
     maxN = prev.getChildCount()
     if maxN > 10 then maxN = 10
     x = stagger
@@ -199,6 +203,7 @@ sub updatePeek(rowIndex as Integer)
         end if
     end for
 
+    m.peekRow = rowIndex
     m.peekStrip.visible = true
 end sub
 

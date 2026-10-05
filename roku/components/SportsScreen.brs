@@ -9,10 +9,10 @@ sub init()
 
     if m.previewArt <> invalid then
         m.previewArt.loadDisplayMode = "scaleToZoom"
-        m.previewArt.loadWidth = 1280
-        m.previewArt.loadHeight = 720
-        m.previewArt.width = 480
-        m.previewArt.height = 270
+        m.previewArt.loadWidth = 1400
+        m.previewArt.loadHeight = 500
+        m.previewArt.width = 700
+        m.previewArt.height = 250
     end if
 
     m.events = []
