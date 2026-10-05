@@ -75,7 +75,7 @@ below. Down drops into the shelves, Up comes back to the button.
 
 **View all** opens the full library grid:
 
-- one scrolling 7-wide × 5-row poster grid, Up from the top row reaches the toolbar
+- one scrolling 7-wide × 4-row poster grid, Up from the top row reaches the toolbar
 - **Filter** — genre, decade, unwatched only, clear all (the `*` key opens it too)
 - **Search** — on-screen keyboard, matches titles inside the library
 - **Order by** — title A–Z / Z–A, recently added, year, rating, recently watched

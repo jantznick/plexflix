@@ -33,20 +33,20 @@
             <FocusButton id="sortBtn" translation="[1260, 0]" text="Order by: Title A–Z" buttonWidth="300" fontSize="20" />
         </Group>
 
-        <!-- 7 across × 5 visible rows; posters sized to fit FHD under the toolbar -->
+        <!-- 7 across × 4 visible rows — posters sized to fill left margin → A–Z rail -->
         <MarkupGrid
             id="grid"
-            translation="[96, 100]"
+            translation="[96, 108]"
             itemComponentName="PosterItem"
-            itemSize="[124, 186]"
-            itemSpacing="[18, 8]"
+            itemSize="[200, 230]"
+            itemSpacing="[30, 18]"
             numColumns="7"
-            numRows="5"
+            numRows="4"
             vertFocusAnimationStyle="floatingFocus"
             drawFocusFeedback="false"
         />
 
-        <AlphaRail id="alphaRail" translation="[1700, 96]" visible="false" />
+        <AlphaRail id="alphaRail" translation="[1688, 100]" visible="false" />
 
         <Label id="emptyLabel" translation="[96, 420]" width="1580" height="120" text="" horizAlign="center" wrap="true" maxLines="3" color="0xC8C8D0" visible="false">
             <Font role="font" uri="pkg:/fonts/Outfit-Medium.ttf" size="28" />
