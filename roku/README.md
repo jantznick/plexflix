@@ -98,6 +98,11 @@ once every hundred-odd rows rather than every few pages.
 - **Left** opens the sidebar from Home, Libraries, Live Sports (and sports detail via Back first); **Right** or **Back** hides it
 - Libraries appear as flat items in the sidebar (no wrapping cycle at the ends)
 - Arrow keys move across poster rows
+- Every list, grid and shelf uses `vertFocusAnimationStyle="floatingFocus"`: Up and
+  Down move the highlight between the rows already on screen and only scroll once
+  it would leave them. Omitting the field gives a pinned highlight that scrolls the
+  content on every press, which makes the lower rows unreachable as a highlight
+  position and is very jarring.
 - Focused title updates the hero billboard
 - OK opens the detail screen (episodes open the show with that episode selected)
 - Play / OK starts playback
