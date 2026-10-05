@@ -180,10 +180,9 @@ sub updatePeek(rowIndex as Integer)
 
     clearPeekPosters()
 
-    ' Opposite of the focused row's half-tile stagger so peek never shares columns.
-    ' Even focused (x=0) → peek at -86; odd focused (x=-86) → peek at 0
+    ' Peek only: half-tile left overhang so it doesn't line up with the focused shelf.
+    ' (Whole-shelf stagger is not used — it pulls the focused poster off-screen.)
     stagger = -86
-    if (rowIndex MOD 2) = 1 then stagger = 0
 
     maxN = 10
     drawn = 0
@@ -191,7 +190,7 @@ sub updatePeek(rowIndex as Integer)
     for i = 0 to prev.getChildCount() - 1
         if drawn >= maxN then exit for
         it = prev.getChild(i)
-        if it <> invalid and it.isSpacer <> true then
+        if it <> invalid then
             p = createObject("roSGNode", "Poster")
             p.width = 150
             p.height = 225

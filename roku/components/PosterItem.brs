@@ -95,8 +95,6 @@ sub onContentChange()
     item = m.top.itemContent
     if item = invalid then return
 
-    applyRowStagger()
-
     if item.hdPosterUrl <> invalid and item.hdPosterUrl <> "" then
         m.poster.uri = item.hdPosterUrl
     else
