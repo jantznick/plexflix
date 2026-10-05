@@ -17,6 +17,7 @@ sub init()
     m.relatedPanel = m.top.findNode("relatedPanel")
     m.relatedRows = m.top.findNode("relatedRows")
     m.relatedRows.observeField("rowItemSelected", "onRelatedSelected")
+    m.softStatus = m.top.findNode("softStatus")
 
     m.focusIndex = 0
     m.isShow = false
@@ -25,7 +26,8 @@ sub init()
     m.seasonContent = invalid
     m.pendingSeason = invalid
     m.relatedContent = invalid
-    m.prefetchAhead = 2
+    m.focusEpisodeKey = ""
+    m.focusSeasonKey = ""
 
     updateMovieButtonFocus()
 end sub
@@ -34,8 +36,12 @@ sub onContentSet()
     item = m.top.content
     if item = invalid then return
 
+    m.focusEpisodeKey = asString(item.focusEpisodeKey)
+    m.focusSeasonKey = asString(item.focusSeasonKey)
+
     m.titleLabel.text = asString(item.title)
     m.summaryLabel.text = asString(item.description)
+    if m.softStatus <> invalid then m.softStatus.text = ""
 
     metaBits = []
     year = asString(item.year)
@@ -80,29 +86,29 @@ sub showTvMode()
     m.tvPanel.visible = true
     m.poster.width = 200
     m.poster.height = 300
-    m.poster.translation = [80, 48]
-    m.titleLabel.translation = [320, 56]
-    m.metaLabel.translation = [320, 136]
-    m.summaryLabel.translation = [320, 180]
-    m.summaryLabel.height = 80
-    m.summaryLabel.maxLines = 2
+    m.poster.translation = [48, 36]
+    m.titleLabel.translation = [280, 40]
+    m.metaLabel.translation = [280, 112]
+    m.summaryLabel.translation = [280, 152]
+    m.summaryLabel.height = 72
 end sub
 
 sub showMovieMode()
     m.movieActions.visible = true
     m.tvPanel.visible = false
-    m.relatedPanel.visible = true
+    m.relatedPanel.visible = false
     m.playLabel.text = "Play"
-    m.poster.width = 260
-    m.poster.height = 390
-    m.poster.translation = [80, 56]
-    m.titleLabel.translation = [400, 64]
-    m.metaLabel.translation = [400, 144]
-    m.summaryLabel.translation = [400, 190]
-    m.summaryLabel.height = 96
-    m.summaryLabel.maxLines = 3
+    m.poster.width = 200
+    m.poster.height = 300
+    m.poster.translation = [48, 36]
+    m.titleLabel.translation = [280, 40]
+    m.metaLabel.translation = [280, 112]
+    m.summaryLabel.translation = [280, 152]
     m.relatedContent = createObject("roSGNode", "ContentNode")
     m.relatedRows.content = m.relatedContent
+    m.focusIndex = 0
+    updateMovieButtonFocus()
+    m.top.setFocus(true)
 end sub
 
 sub loadChildren(item as Object, mode as String)
@@ -117,6 +123,7 @@ sub loadChildren(item as Object, mode as String)
 end sub
 
 sub loadExtras(item as Object)
+    if m.softStatus <> invalid then m.softStatus.text = "Loading related..."
     m.extrasTask = createObject("roSGNode", "PlexTask")
     m.extrasTask.config = m.top.config
     m.extrasTask.action = "extras"
@@ -147,13 +154,49 @@ sub onChildrenLoaded()
         end for
         m.seasonRows.content = m.seasonContent
         if items.count() = 0 then return
-        ' Prefetch first few seasons right away
+        ' Prefer the Continue Watching season first so focus lands sooner
+        prioritizeFocusSeason()
         loadSeasonEpisodes()
     else if m.loadMode = "episodes" then
         fillSeasonRow(m.seasonQueue, m.pendingSeason, items)
         m.seasonQueue = m.seasonQueue + 1
         loadSeasonEpisodes()
     end if
+end sub
+
+sub prioritizeFocusSeason()
+    if m.focusSeasonKey = "" or m.seasons = invalid then return
+    target = -1
+    for i = 0 to m.seasons.count() - 1
+        if asString(m.seasons[i].ratingKey) = m.focusSeasonKey then
+            target = i
+            exit for
+        end if
+    end for
+    if target <= 0 then return
+
+    ' Rotate so the focus season is loaded first, then wrap around
+    reordered = []
+    for i = target to m.seasons.count() - 1
+        reordered.push(m.seasons[i])
+    end for
+    for i = 0 to target - 1
+        reordered.push(m.seasons[i])
+    end for
+    m.seasons = reordered
+
+    ' Keep ContentNode row titles aligned with the new order
+    if m.seasonContent = invalid then return
+    while m.seasonContent.getChildCount() > 0
+        m.seasonContent.removeChildIndex(0)
+    end while
+    for each season in m.seasons
+        row = m.seasonContent.createChild("ContentNode")
+        title = asString(season.title)
+        if title = "" then title = "Season"
+        row.title = title
+    end for
+    m.seasonRows.content = m.seasonContent
 end sub
 
 sub loadSeasonEpisodes()
@@ -197,7 +240,36 @@ sub fillSeasonRow(index as Integer, season as Object, episodes as Object)
     end for
 
     m.seasonRows.content = m.seasonContent
-    if index = 0 then m.seasonRows.setFocus(true)
+    maybeFocusEpisode(index)
+end sub
+
+sub maybeFocusEpisode(seasonIndex as Integer)
+    if m.focusEpisodeKey = "" then return
+    if m.seasonContent = invalid then return
+    if seasonIndex < 0 or seasonIndex >= m.seasonContent.getChildCount() then return
+
+    season = m.seasons[seasonIndex]
+    if m.focusSeasonKey <> "" and season <> invalid then
+        if asString(season.ratingKey) <> m.focusSeasonKey then return
+    end if
+
+    row = m.seasonContent.getChild(seasonIndex)
+    if row = invalid then return
+    epIndex = 0
+    found = false
+    count = row.getChildCount()
+    for i = 0 to count - 1
+        child = row.getChild(i)
+        if child <> invalid and asString(child.ratingKey) = m.focusEpisodeKey then
+            epIndex = i
+            found = true
+            exit for
+        end if
+    end for
+    if not found and m.focusSeasonKey = "" then return
+
+    m.seasonRows.jumpToRowItem = [seasonIndex, epIndex]
+    m.seasonRows.setFocus(true)
 end sub
 
 sub appendSeasonRow(season as Object, episodes as Object)
@@ -236,7 +308,27 @@ end sub
 
 sub onExtrasLoaded()
     response = m.extrasTask.response
+    if m.softStatus <> invalid then m.softStatus.text = ""
     if response = invalid or response.ok <> true then return
+
+    ' Enrich header from full metadata (important when opened from Continue Watching episode)
+    detail = response.detail
+    if detail <> invalid then
+        if asString(detail.title) <> "" then m.titleLabel.text = asString(detail.title)
+        if asString(detail.description) <> "" then m.summaryLabel.text = asString(detail.description)
+        if asString(detail.hdPosterUrl) <> "" then m.poster.uri = detail.hdPosterUrl
+        if asString(detail.hdBackdropUrl) <> "" then m.backdrop.uri = detail.hdBackdropUrl
+        metaBits = []
+        year = asString(detail.year)
+        if year <> "" then metaBits.push(year)
+        contentRating = asString(detail.contentRating)
+        if contentRating <> "" then metaBits.push(contentRating)
+        rating = asString(detail.rating)
+        if rating <> "" then metaBits.push(rating + " ★")
+        mediaType = asString(detail.mediaType)
+        if mediaType <> "" then metaBits.push(titleCaseType(mediaType))
+        if metaBits.count() > 0 then m.metaLabel.text = joinStrings(metaBits, "  ·  ")
+    end if
 
     castItems = response.cast
     similarItems = response.similar
@@ -244,7 +336,6 @@ sub onExtrasLoaded()
     if similarItems = invalid then similarItems = []
 
     if m.isShow then
-        ' Append extras under season rails once seasons exist
         if m.seasonContent = invalid then
             m.seasonContent = createObject("roSGNode", "ContentNode")
         end if
@@ -258,7 +349,15 @@ sub onExtrasLoaded()
         appendItemsRow(m.relatedContent, "Cast", castItems)
         appendItemsRow(m.relatedContent, "More Like This", similarItems)
         m.relatedRows.content = m.relatedContent
-        m.relatedPanel.visible = true
+        if castItems.count() > 0 or similarItems.count() > 0 then
+            m.relatedPanel.visible = true
+        end if
+        ' Keep Play focused — extras should never steal control
+        if not m.relatedRows.hasFocus() then
+            m.focusIndex = 0
+            updateMovieButtonFocus()
+            m.top.setFocus(true)
+        end if
     end if
 end sub
 

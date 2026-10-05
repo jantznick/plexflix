@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<component name="SportsScreen" extends="Group">
+    <interface>
+        <field id="config" type="assocarray" onChange="onConfigReady" />
+        <field id="selectedItem" type="assocarray" />
+        <field id="loadingMessage" type="string" />
+    </interface>
+
+    <script type="text/brightscript" uri="SportsScreen.brs" />
+
+    <children>
+        <Rectangle width="1640" height="1080" color="0x08080A" />
+        <Label translation="[48, 40]" width="1000" height="50" text="Live Sports" color="0xFFFFFF" font="font:LargeBoldSystemFont" />
+        <Label id="statusLabel" translation="[48, 100]" width="1500" height="40" text="Loading sports feed..." color="0xAAAAAA" font="font:SmallSystemFont" />
+
+        <RowList
+            id="sportsRows"
+            translation="[0, 160]"
+            itemComponentName="EpisodeItem"
+            numRows="3"
+            rowItemSize="[[320, 180]]"
+            rowItemSpacing="[[24, 0]]"
+            itemSize="[1640, 250]"
+            itemSpacing="[0, 24]"
+            showRowLabel="[true]"
+            rowLabelOffset="[[48, 8]]"
+            focusXOffset="[48]"
+            drawFocusFeedback="false"
+        />
+    </children>
+</component>

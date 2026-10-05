@@ -9,20 +9,20 @@
     <script type="text/brightscript" uri="HomeScreen.brs" />
 
     <children>
-        <Rectangle width="1920" height="1080" color="0x08080A" />
+        <Rectangle width="1640" height="1080" color="0x08080A" />
 
         <Group id="billboard" translation="[0, 0]">
             <Poster
                 id="heroArt"
-                width="1920"
+                width="1640"
                 height="760"
                 loadDisplayMode="scaleToFill"
                 uri="pkg:/images/splash-screen_fhd.jpg"
             />
-            <Rectangle width="1920" height="760" color="0x000000" opacity="0.18" />
-            <Rectangle width="1040" height="760" color="0x000000" opacity="0.42" />
+            <Rectangle width="1640" height="760" color="0x000000" opacity="0.18" />
+            <Rectangle width="900" height="760" color="0x000000" opacity="0.42" />
             <Rectangle
-                width="1920"
+                width="1640"
                 height="280"
                 translation="[0, 480]"
                 color="0x08080A"
@@ -73,15 +73,16 @@
             text="PLEXFLIX"
             color="0xE50914"
             font="font:MediumBoldSystemFont"
+            visible="false"
         />
 
         <Label
             id="buildLabel"
-            translation="[1600, 32]"
-            width="250"
+            translation="[1320, 32]"
+            width="280"
             height="36"
             horizAlign="right"
-            text="v0.3.2"
+            text="v0.3.3"
             color="0x555555"
             font="font:SmallestSystemFont"
         />
@@ -93,12 +94,12 @@
             numRows="3"
             rowItemSize="[[180, 270]]"
             rowItemSpacing="[[28, 0]]"
-            itemSize="[1920, 340]"
+            itemSize="[1640, 340]"
             itemSpacing="[0, 28]"
             showRowLabel="[true]"
-            rowLabelOffset="[[80, 8]]"
+            rowLabelOffset="[[48, 8]]"
             rowFocusAnimationStyle="fixedFocus"
-            focusXOffset="[80]"
+            focusXOffset="[48]"
             drawFocusFeedback="false"
         />
 

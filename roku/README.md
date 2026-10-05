@@ -7,9 +7,12 @@ This is intentionally a **design/UX shell** on top of existing Plex data. Creden
 ## What you get
 
 - Dark Netflix-like home: billboard hero + horizontal shelves
+- Left sidebar: **Home**, **Playlists**, **Live Sports**
 - **Continue Watching**, **Recently Added**, Plex home hubs, and library shelves
-- Title detail screen
+- Continue Watching episodes open the parent show with that episode focused
+- Title detail screen (Cast + More Like This)
 - Playback via Plex universal transcoder (HLS)
+- Live sports from a configurable JSON feed URL
 
 ## Configure before sideload
 
@@ -18,8 +21,10 @@ Edit `roku/source/PlexConfig.brs`:
 ```brightscript
 baseUrl: "http://192.168.x.x:32400"
 token: "YOUR_PLEX_TOKEN"
+sportsFeedUrl: "https://roku-hockey.s3.us-west-004.backblazeb2.com/secretfeedfilename.json"
 ```
 
+`sportsFeedUrl` can point at any JSON feed. Category maps like `{ "FOOTBALL": [ { title, thumbnail, content.videos[].url } ] }` are supported.
 Notes:
 
 - Use the Plex server IP reachable from your Roku (usually LAN HTTP on `32400`)
@@ -53,12 +58,13 @@ Optional CLI (if `ROKU_IP` / `ROKU_PASSWORD` are set):
 
 ## Remote / focus
 
+- Left on Home/Playlists/Sports focuses the sidebar
 - Arrow keys move across poster rows
 - Focused title updates the hero billboard
-- OK opens the detail screen
+- OK opens the detail screen (episodes open the show with that episode selected)
 - Play / OK starts playback
 - Back returns to the previous screen
-
+- Loading uses a bottom banner only — the UI stays navigable
 ## Out of scope for this MVP
 
 - Account login / PIN pairing UI

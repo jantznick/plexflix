@@ -10,12 +10,41 @@ sub onContentSet()
     if item = invalid or cfg = invalid then return
 
     m.statusLabel.text = "Preparing " + valueOrEmpty(item.title) + "..."
+
+    ' Live sports / direct URLs skip Plex transcoder
+    mediaType = valueOrEmpty(item.mediaType)
+    directUrl = ""
+    if item.streamUrl <> invalid then directUrl = valueOrEmpty(item.streamUrl)
+    if directUrl = "" and mediaType = "sport" then directUrl = valueOrEmpty(item.key)
+    if directUrl <> "" and Left(directUrl, 4) = "http" then
+        playDirect(directUrl, item)
+        return
+    end if
+
     m.task = createObject("roSGNode", "PlexTask")
     m.task.config = cfg
     m.task.action = "streamUrl"
     m.task.item = item
     m.task.observeField("response", "onStreamReady")
     m.task.control = "RUN"
+end sub
+
+sub playDirect(url as String, item as Object)
+    contentNode = createObject("roSGNode", "ContentNode")
+    contentNode.url = url
+    contentNode.title = valueOrEmpty(item.title)
+    lowerUrl = LCase(url)
+    if Right(lowerUrl, 5) = ".m3u8" or Instr(1, lowerUrl, "m3u8") > 0 then
+        contentNode.streamFormat = "hls"
+    else if Right(lowerUrl, 4) = ".mpd" then
+        contentNode.streamFormat = "dash"
+    else
+        contentNode.streamFormat = "mp4"
+    end if
+    m.video.content = contentNode
+    m.video.control = "play"
+    m.statusLabel.visible = false
+    m.video.setFocus(true)
 end sub
 
 sub onStreamReady()

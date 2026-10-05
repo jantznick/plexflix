@@ -74,7 +74,7 @@ sub onHomeLoaded()
     end if
 
     rowCount = content.getChildCount()
-    m.buildLabel.text = "v0.3.2 · " + safeToStr(rowCount) + " rows"
+    m.buildLabel.text = "v0.3.3 · " + safeToStr(rowCount) + " rows"
 
     m.rowList.content = content
     m.currentRow = -1
@@ -251,7 +251,12 @@ sub onRowItemSelected()
         duration: item.duration,
         viewOffset: item.viewOffset,
         leafCount: item.leafCount,
-        childCount: item.childCount
+        childCount: item.childCount,
+        grandparentRatingKey: item.grandparentRatingKey,
+        parentRatingKey: item.parentRatingKey,
+        grandparentTitle: item.grandparentTitle,
+        index: item.index,
+        shortTitle: item.shortTitle
     }
 end sub
 

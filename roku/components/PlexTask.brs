@@ -15,6 +15,12 @@ sub exec()
         m.top.response = fetchChildren(cfg, m.top.item)
     else if action = "extras" then
         m.top.response = fetchExtras(cfg, m.top.item)
+    else if action = "playlists" then
+        m.top.response = fetchPlaylists(cfg)
+    else if action = "playlistItems" then
+        m.top.response = fetchPlaylistItems(cfg, m.top.item)
+    else if action = "sportsFeed" then
+        m.top.response = fetchSportsFeed(cfg)
     else if action = "streamUrl" then
         m.top.response = buildStreamUrl(cfg, m.top.item)
     else
@@ -128,12 +134,17 @@ function metadataToItem(cfg as Object, meta as Object) as Object
     title = rawTitle
 
     ' Episodes: prefer grandparent/parent context in title for home shelves
+    grandparentRatingKey = ""
+    parentRatingKey = ""
+    grandparentTitle = ""
     if mediaType = "episode" then
-        showTitle = safeToStr(meta.grandparentTitle)
+        grandparentTitle = safeToStr(meta.grandparentTitle)
+        grandparentRatingKey = safeToStr(meta.grandparentRatingKey)
+        parentRatingKey = safeToStr(meta.parentRatingKey)
         season = safeToStr(meta.parentIndex)
         episode = safeToStr(meta.index)
-        if showTitle <> "" then
-            title = showTitle + " — S" + season + "E" + episode + " " + rawTitle
+        if grandparentTitle <> "" then
+            title = grandparentTitle + " — S" + season + "E" + episode + " " + rawTitle
         end if
         if meta.grandparentThumb <> invalid and thumb = "" then thumb = safeToStr(meta.grandparentThumb)
         if meta.grandparentArt <> invalid and art = "" then art = safeToStr(meta.grandparentArt)
@@ -191,7 +202,10 @@ function metadataToItem(cfg as Object, meta as Object) as Object
         leafCount: meta.leafCount,
         childCount: meta.childCount,
         index: indexVal,
-        parentIndex: parentIndexVal
+        parentIndex: parentIndexVal,
+        grandparentRatingKey: grandparentRatingKey,
+        parentRatingKey: parentRatingKey,
+        grandparentTitle: grandparentTitle
     }
 end function
 
@@ -440,7 +454,217 @@ function fetchExtras(cfg as Object, item as Object) as Object
         similarItems = collectMetadata(cfg, similar.json)
     end if
 
-    return { ok: true, cast: castItems, similar: similarItems }
+    detail = invalid
+    if details.ok = true then
+        mapped = collectMetadata(cfg, details.json)
+        if mapped.count() > 0 then detail = mapped[0]
+    end if
+
+    return { ok: true, cast: castItems, similar: similarItems, detail: detail }
+end function
+
+function fetchPlaylists(cfg as Object) as Object
+    result = plexGet(cfg, "/playlists/all")
+    if result.ok <> true then return result
+    items = []
+    container = result.json
+    metaList = invalid
+    if container <> invalid and container.MediaContainer <> invalid then
+        metaList = container.MediaContainer.Metadata
+        if metaList = invalid then metaList = container.MediaContainer.Directory
+    end if
+    if metaList = invalid then return { ok: true, items: [] }
+    if GetInterface(metaList, "ifArray") = invalid then metaList = [metaList]
+    for each meta in metaList
+        items.push({
+            title: safeToStr(meta.title),
+            ratingKey: safeToStr(meta.ratingKey),
+            key: safeToStr(meta.key),
+            mediaType: "playlist",
+            leafCount: meta.leafCount,
+            summary: safeToStr(meta.summary)
+        })
+    end for
+    return { ok: true, items: items }
+end function
+
+function fetchPlaylistItems(cfg as Object, item as Object) as Object
+    if item = invalid then return { ok: false, error: "No playlist" }
+    ratingKey = safeToStr(item.ratingKey)
+    key = safeToStr(item.key)
+    path = ""
+    if key <> "" then
+        path = key
+    else if ratingKey <> "" then
+        path = "/playlists/" + ratingKey + "/items"
+    else
+        return { ok: false, error: "Missing playlist key" }
+    end if
+    if Left(path, 1) <> "/" then path = "/" + path
+    result = plexGet(cfg, path)
+    if result.ok <> true then return result
+    return { ok: true, items: collectMetadata(cfg, result.json) }
+end function
+
+function fetchSportsFeed(cfg as Object) as Object
+    feedUrl = ""
+    if cfg.sportsFeedUrl <> invalid then feedUrl = cfg.sportsFeedUrl
+    if feedUrl = "" then return { ok: false, error: "sportsFeedUrl is empty in PlexConfig.brs" }
+
+    request = CreateObject("roUrlTransfer")
+    port = CreateObject("roMessagePort")
+    request.SetMessagePort(port)
+    request.SetUrl(feedUrl)
+    request.SetRequest("GET")
+    request.EnableEncodings(true)
+    request.RetainBodyOnError(true)
+    request.AddHeader("Accept", "application/json")
+    if Left(feedUrl, 8) = "https://" then
+        request.SetCertificatesFile("common:/certs/ca-bundle.crt")
+        request.InitClientCertificates()
+    end if
+
+    if not request.AsyncGetToString() then
+        return { ok: false, error: "Failed to start sports feed request" }
+    end if
+
+    while true
+        msg = wait(20000, port)
+        if msg = invalid then
+            request.AsyncCancel()
+            return { ok: false, error: "Timed out loading sports feed" }
+        end if
+        if type(msg) = "roUrlEvent" then
+            code = msg.GetResponseCode()
+            body = msg.GetString()
+            if code < 200 or code >= 300 then
+                return { ok: false, error: "Sports feed HTTP " + safeToStr(code) }
+            end if
+            parsed = ParseJson(body)
+            if parsed = invalid then
+                return { ok: false, error: "Could not parse sports feed JSON" }
+            end if
+            return { ok: true, rows: normalizeSportsFeed(parsed) }
+        end if
+    end while
+end function
+
+function normalizeSportsFeed(parsed as Object) as Object
+    rows = []
+    if parsed = invalid then return rows
+
+    ' Shape A: category map — { "FOOTBALL": [events...], "24/7 Channels": [...] }
+    if GetInterface(parsed, "ifAssociativeArray") <> invalid then
+        skipKeys = { providerName: true, lastUpdated: true, language: true, scriptDuration: true }
+        for each keyName in parsed
+            if not skipKeys.DoesExist(keyName) then
+                bucket = parsed[keyName]
+                if GetInterface(bucket, "ifArray") <> invalid then
+                    items = mapSportsEntries(bucket)
+                    if items.count() > 0 then
+                        rows.push({ title: keyName, items: items })
+                    end if
+                end if
+            end if
+        end for
+        if rows.count() > 0 then return rows
+
+        ' Shape B: single list under a known key
+        list = invalid
+        if parsed.games <> invalid then
+            list = parsed.games
+        else if parsed.events <> invalid then
+            list = parsed.events
+        else if parsed.streams <> invalid then
+            list = parsed.streams
+        else if parsed.items <> invalid then
+            list = parsed.items
+        else if parsed.data <> invalid then
+            list = parsed.data
+        end if
+        if list <> invalid then
+            items = mapSportsEntries(list)
+            if items.count() > 0 then rows.push({ title: "Live now", items: items })
+            return rows
+        end if
+    end if
+
+    ' Shape C: bare array of events
+    if GetInterface(parsed, "ifArray") <> invalid then
+        items = mapSportsEntries(parsed)
+        if items.count() > 0 then rows.push({ title: "Live now", items: items })
+    end if
+    return rows
+end function
+
+function mapSportsEntries(list as Object) as Object
+    items = []
+    if list = invalid then return items
+    if GetInterface(list, "ifArray") = invalid then list = [list]
+
+    for each entry in list
+        if GetInterface(entry, "ifAssociativeArray") <> invalid then
+            title = firstString(entry, ["title", "name", "event", "matchup", "label"])
+            streamUrl = extractSportsStreamUrl(entry)
+            thumb = firstString(entry, ["thumbnail", "logo", "image", "poster", "thumb", "icon"])
+            league = firstString(entry, ["league", "sport", "category", "shortDescription"])
+            if title = "" then title = "Live event"
+            if streamUrl <> "" then
+                items.push({
+                    title: title,
+                    description: league,
+                    mediaType: "sport",
+                    key: streamUrl,
+                    streamUrl: streamUrl,
+                    hdPosterUrl: thumb,
+                    hdBackdropUrl: thumb,
+                    ratingKey: "",
+                    duration: 0,
+                    viewOffset: 0,
+                    year: "",
+                    rating: "",
+                    contentRating: ""
+                })
+            end if
+        end if
+    end for
+    return items
+end function
+
+function extractSportsStreamUrl(entry as Object) as String
+    ' Prefer proxied HLS from content.videos[]
+    if entry.content <> invalid and entry.content.videos <> invalid then
+        videos = entry.content.videos
+        if GetInterface(videos, "ifArray") = invalid then videos = [videos]
+        for each video in videos
+            if video <> invalid then
+                url = safeToStr(video.url)
+                if url <> "" then return url
+            end if
+        end for
+    end if
+
+    direct = firstString(entry, ["url", "stream", "streamUrl", "src", "link", "playbackUrl"])
+    if direct <> "" then return direct
+
+    ' streamSignature may be pipe-delimited backup URLs
+    sig = safeToStr(entry.streamSignature)
+    if sig <> "" then
+        pipe = Instr(1, sig, "|")
+        if pipe > 0 then return Left(sig, pipe - 1)
+        return sig
+    end if
+    return ""
+end function
+
+function firstString(obj as Object, keys as Object) as String
+    for each keyName in keys
+        if obj.DoesExist(keyName) and obj[keyName] <> invalid then
+            value = safeToStr(obj[keyName])
+            if value <> "" then return value
+        end if
+    end for
+    return ""
 end function
 
 function buildStreamUrl(cfg as Object, item as Object) as Object

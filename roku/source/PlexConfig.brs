@@ -1,4 +1,4 @@
-' Hardcoded Plex connection for local MVP testing.
+' Hardcoded connection settings for local MVP testing.
 ' Update these values before sideloading to your Roku.
 function GetPlexConfig() as Object
     return {
@@ -12,9 +12,12 @@ function GetPlexConfig() as Object
         clientId: "plexflix-roku-mvp-001",
 
         product: "PlexFlix",
-        version: "0.1.0",
+        version: "0.3.3",
 
         ' How many items to request per row
-        rowSize: 36
+        rowSize: 36,
+
+        ' Live sports JSON feed (editable). Expected objects with title/name + url/stream fields.
+        sportsFeedUrl: "https://roku-hockey.s3.us-west-004.backblazeb2.com/secretfeedfilename.json"
     }
 end function

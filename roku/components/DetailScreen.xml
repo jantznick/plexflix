@@ -12,32 +12,32 @@
     <script type="text/brightscript" uri="DetailScreen.brs" />
 
     <children>
-        <Rectangle width="1920" height="1080" color="0x08080A" />
+        <Rectangle width="1640" height="1080" color="0x08080A" />
 
         <Poster
             id="backdrop"
-            width="1920"
-            height="560"
+            width="1640"
+            height="520"
             loadDisplayMode="scaleToFill"
             opacity="0.34"
         />
-        <Rectangle width="1920" height="560" color="0x08080A" opacity="0.55" />
-        <Rectangle width="1920" height="420" translation="[0, 360]" color="0x08080A" opacity="0.92" />
+        <Rectangle width="1640" height="520" color="0x08080A" opacity="0.55" />
+        <Rectangle width="1640" height="740" translation="[0, 340]" color="0x08080A" opacity="0.96" />
 
         <Poster
             id="poster"
-            translation="[80, 56]"
-            width="260"
-            height="390"
+            translation="[48, 36]"
+            width="200"
+            height="300"
             loadDisplayMode="scaleToZoom"
             uri="pkg:/images/poster_placeholder.png"
         />
 
         <Label
             id="titleLabel"
-            translation="[400, 64]"
-            width="1440"
-            height="70"
+            translation="[280, 40]"
+            width="1300"
+            height="64"
             color="0xFFFFFF"
             font="font:LargeBoldSystemFont"
             wrap="true"
@@ -45,31 +45,31 @@
         />
         <Label
             id="metaLabel"
-            translation="[400, 144]"
-            width="1440"
-            height="36"
+            translation="[280, 112]"
+            width="1300"
+            height="32"
             color="0xB3B3B3"
             font="font:SmallSystemFont"
         />
         <Label
             id="summaryLabel"
-            translation="[400, 190]"
-            width="1400"
-            height="96"
+            translation="[280, 152]"
+            width="1280"
+            height="72"
             color="0xD6D6D6"
             font="font:SmallSystemFont"
             wrap="true"
-            maxLines="3"
+            maxLines="2"
             lineSpacing="4"
         />
 
-        <Group id="movieActions" translation="[400, 310]" visible="true">
+        <Group id="movieActions" translation="[280, 244]" visible="true">
             <Group id="playBtn" translation="[0, 0]">
-                <Rectangle id="playBg" width="240" height="64" color="0xE50914" />
+                <Rectangle id="playBg" width="220" height="56" color="0xE50914" />
                 <Label
                     id="playLabel"
-                    width="240"
-                    height="64"
+                    width="220"
+                    height="56"
                     horizAlign="center"
                     vertAlign="center"
                     text="Play"
@@ -77,12 +77,12 @@
                     font="font:MediumBoldSystemFont"
                 />
             </Group>
-            <Group id="backBtn" translation="[268, 0]">
-                <Rectangle id="backBg" width="180" height="64" color="0x2A2A2A" />
+            <Group id="backBtn" translation="[240, 0]">
+                <Rectangle id="backBg" width="160" height="56" color="0x2A2A2A" />
                 <Label
                     id="backLabel"
-                    width="180"
-                    height="64"
+                    width="160"
+                    height="56"
                     horizAlign="center"
                     vertAlign="center"
                     text="Back"
@@ -92,40 +92,49 @@
             </Group>
         </Group>
 
-        ' TV seasons/episodes — starts below the header block
-        <Group id="tvPanel" translation="[0, 470]" visible="false">
+        <Label
+            id="softStatus"
+            translation="[280, 316]"
+            width="1200"
+            height="28"
+            text=""
+            color="0x777777"
+            font="font:SmallestSystemFont"
+        />
+
+        <!-- Rails start well below poster bottom (y=336) so Cast never sits under the art -->
+        <Group id="tvPanel" translation="[0, 380]" visible="false">
             <RowList
                 id="seasonRows"
                 translation="[0, 0]"
                 itemComponentName="EpisodeItem"
                 numRows="2"
-                rowItemSize="[[320, 180]]"
-                rowItemSpacing="[[24, 0]]"
-                itemSize="[1920, 250]"
-                itemSpacing="[0, 24]"
+                rowItemSize="[[300, 170]]"
+                rowItemSpacing="[[22, 0]]"
+                itemSize="[1640, 240]"
+                itemSpacing="[0, 22]"
                 showRowLabel="[true]"
-                rowLabelOffset="[[80, 8]]"
+                rowLabelOffset="[[48, 8]]"
                 rowFocusAnimationStyle="fixedFocus"
-                focusXOffset="[80]"
+                focusXOffset="[48]"
                 drawFocusFeedback="false"
             />
         </Group>
 
-        ' Movies / extras — cast + more like this
-        <Group id="relatedPanel" translation="[0, 420]" visible="false">
+        <Group id="relatedPanel" translation="[0, 380]" visible="false">
             <RowList
                 id="relatedRows"
                 translation="[0, 0]"
                 itemComponentName="PosterItem"
                 numRows="2"
-                rowItemSize="[[160, 240]]"
-                rowItemSpacing="[[22, 0]]"
-                itemSize="[1920, 300]"
-                itemSpacing="[0, 20]"
+                rowItemSize="[[140, 210]]"
+                rowItemSpacing="[[18, 0]]"
+                itemSize="[1640, 270]"
+                itemSpacing="[0, 16]"
                 showRowLabel="[true]"
-                rowLabelOffset="[[80, 8]]"
+                rowLabelOffset="[[48, 8]]"
                 rowFocusAnimationStyle="fixedFocus"
-                focusXOffset="[80]"
+                focusXOffset="[48]"
                 drawFocusFeedback="false"
             />
         </Group>
