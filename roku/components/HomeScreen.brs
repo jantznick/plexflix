@@ -145,15 +145,6 @@ sub applyFocusedRow(force as Boolean)
     item = row.getChild(colIndex)
     if item = invalid then return
 
-    ' Skip invisible stagger spacers — jump to the next real poster
-    if item.isSpacer = true then
-        nextCol = colIndex + 1
-        if nextCol < row.getChildCount() then
-            m.rowList.jumpToRowItem = [rowIndex, nextCol]
-        end if
-        return
-    end if
-
     m.currentRow = rowIndex
     if rowChanged then
         setBrowseMode(rowIndex > 0)
@@ -175,7 +166,7 @@ sub clearPeekPosters()
 end sub
 
 sub updatePeek(rowIndex as Integer)
-    ' Peek = previous shelf only. Never focusable. Offset so columns don't align.
+    ' Peek = previous shelf only. Never focusable.
     if rowIndex < 1 or m.isCollapsed <> true then
         hidePeek()
         return
@@ -189,9 +180,10 @@ sub updatePeek(rowIndex as Integer)
 
     clearPeekPosters()
 
-    ' Always half-tile off the focused row's left edge so EVERY peek is staggered
+    ' Netflix peek: shift RIGHT by half a tile so columns never line up with the row below.
+    ' MUST be positive — negative X is clipped away by peekStrip and looks left-aligned.
     stagger = Int(m.tileStep / 2)
-    if (rowIndex MOD 2) = 0 then stagger = -stagger
+    if stagger < 80 then stagger = 86
 
     maxN = 10
     drawn = 0
@@ -339,7 +331,6 @@ sub onRowItemSelected()
     if row = invalid then return
     item = row.getChild(info[1])
     if item = invalid then return
-    if item.isSpacer = true then return
 
     m.top.selectedItem = {
         title: item.title,

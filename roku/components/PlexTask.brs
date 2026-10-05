@@ -468,30 +468,9 @@ function buildHome(cfg as Object) as Object
     end if
 
     shuffleHomeRows(root)
-    staggerHomeRows(root)
 
     return { ok: true, content: root }
 end function
-
-sub staggerHomeRows(root as Object)
-    ' Netflix-style: every other shelf starts one tile later so columns don't form a grid.
-    if root = invalid then return
-    for i = 0 to root.getChildCount() - 1
-        if (i MOD 2) = 1 then
-            row = root.getChild(i)
-            if row <> invalid and row.getChildCount() > 0 then
-                first = row.getChild(0)
-                if first = invalid or first.isSpacer <> true then
-                    spacer = createObject("roSGNode", "ContentNode")
-                    spacer.title = ""
-                    spacer.hdPosterUrl = ""
-                    spacer.addFields({ isSpacer: true, mediaType: "spacer" })
-                    row.insertChild(spacer, 0)
-                end if
-            end if
-        end if
-    end for
-end sub
 
 sub shuffleHomeRows(root as Object)
     count = root.getChildCount()
