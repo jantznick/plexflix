@@ -4,6 +4,7 @@
         <field id="config" type="assocarray" />
         <field id="source" type="assocarray" onChange="onSourceSet" />
         <field id="selectedItem" type="assocarray" />
+        <field id="viewAllRequested" type="assocarray" alwaysNotify="true" />
         <field id="closed" type="boolean" alwaysNotify="true" />
         <field id="close" type="boolean" alwaysNotify="true" onChange="onCloseRequested" />
         <field id="loadingMessage" type="string" />
@@ -17,32 +18,61 @@
     <children>
         <Rectangle width="1920" height="1080" color="0x07070B" />
 
-        <Group translation="[96, 64]">
-            <Label id="titleLabel" width="1400" height="56" text="Library" color="0xFFFFFF">
-                <Font role="font" uri="pkg:/fonts/Outfit-Bold.ttf" size="44" />
+        <!-- Mosaic hero -->
+        <Group id="hero" translation="[0, 0]">
+            <Rectangle width="1920" height="480" color="0x121218" />
+            <Poster id="tile0" translation="[96, 48]" width="200" height="300" loadDisplayMode="scaleToZoom" uri="pkg:/images/poster_placeholder.png" opacity="0.85" />
+            <Poster id="tile1" translation="[312, 72]" width="180" height="270" loadDisplayMode="scaleToZoom" uri="pkg:/images/poster_placeholder.png" opacity="0.75" />
+            <Poster id="tile2" translation="[508, 40]" width="220" height="330" loadDisplayMode="scaleToZoom" uri="pkg:/images/poster_placeholder.png" opacity="0.9" />
+            <Poster id="tile3" translation="[744, 88]" width="170" height="255" loadDisplayMode="scaleToZoom" uri="pkg:/images/poster_placeholder.png" opacity="0.7" />
+            <Poster id="tile4" translation="[928, 56]" width="190" height="285" loadDisplayMode="scaleToZoom" uri="pkg:/images/poster_placeholder.png" opacity="0.8" />
+            <Poster id="tile5" translation="[1136, 96]" width="160" height="240" loadDisplayMode="scaleToZoom" uri="pkg:/images/poster_placeholder.png" opacity="0.65" />
+            <Poster id="tile6" translation="[1312, 48]" width="210" height="315" loadDisplayMode="scaleToZoom" uri="pkg:/images/poster_placeholder.png" opacity="0.85" />
+            <Poster id="tile7" translation="[1536, 80]" width="180" height="270" loadDisplayMode="scaleToZoom" uri="pkg:/images/poster_placeholder.png" opacity="0.75" />
+            <Rectangle width="1920" height="480" color="0x07070B" opacity="0.55" />
+            <Rectangle width="900" height="480" color="0x07070B" opacity="0.72" />
+
+            <Label id="titleLabel" translation="[96, 64]" width="820" height="70" text="Library" color="0xFFFFFF" wrap="true" maxLines="2">
+                <Font role="font" uri="pkg:/fonts/Outfit-Bold.ttf" size="52" />
             </Label>
-            <Label id="statusLabel" translation="[0, 58]" width="1500" height="32" text="" color="0x777780">
+            <Label id="heroHint" translation="[96, 140]" width="780" height="80" text="Browse everything in this library — search, filter, and play." color="0xC8C8D0" wrap="true" maxLines="2" lineSpacing="4">
+                <Font role="font" uri="pkg:/fonts/Outfit-Regular.ttf" size="22" />
+            </Label>
+
+            <Group id="viewAllBtn" translation="[96, 240]">
+                <Rectangle id="viewAllBg" width="280" height="60" color="0xE50914" />
+                <Label width="280" height="60" horizAlign="center" vertAlign="center" text="View all" color="0xFFFFFF">
+                    <Font role="font" uri="pkg:/fonts/Outfit-SemiBold.ttf" size="28" />
+                </Label>
+            </Group>
+            <Group id="searchBtn" translation="[396, 240]">
+                <Rectangle id="searchBg" width="220" height="60" color="0x2A2A32" />
+                <Label width="220" height="60" horizAlign="center" vertAlign="center" text="Search" color="0xFFFFFF">
+                    <Font role="font" uri="pkg:/fonts/Outfit-Medium.ttf" size="26" />
+                </Label>
+            </Group>
+            <Label id="statusLabel" translation="[96, 320]" width="900" height="32" text="" color="0x777780">
                 <Font role="font" uri="pkg:/fonts/Outfit-Regular.ttf" size="20" />
             </Label>
-
-            <ShimmerRow id="shimmer" translation="[0, 120]" />
-
-            <ShelfRowList
-                id="rowList"
-                translation="[0, 120]"
-                itemComponentName="PosterItem"
-                numRows="4"
-                rowItemSize="[[168, 252]]"
-                rowItemSpacing="[[28, 0]]"
-                itemSize="[1728, 320]"
-                itemSpacing="[0, 32]"
-                showRowLabel="[true]"
-                rowLabelOffset="[[0, 8]]"
-                rowFocusAnimationStyle="fixedFocus"
-                focusXOffset="[0]"
-                drawFocusFeedback="false"
-                visible="false"
-            />
         </Group>
+
+        <ShimmerRow id="shimmer" translation="[96, 520]" />
+
+        <ShelfRowList
+            id="rowList"
+            translation="[96, 520]"
+            itemComponentName="PosterItem"
+            numRows="2"
+            rowItemSize="[[168, 252]]"
+            rowItemSpacing="[[28, 0]]"
+            itemSize="[1728, 320]"
+            itemSpacing="[0, 32]"
+            showRowLabel="[true]"
+            rowLabelOffset="[[0, 8]]"
+            rowFocusAnimationStyle="fixedFocus"
+            focusXOffset="[0]"
+            drawFocusFeedback="false"
+            visible="false"
+        />
     </children>
 </component>

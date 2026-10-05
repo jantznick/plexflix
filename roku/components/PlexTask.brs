@@ -18,7 +18,9 @@ sub exec()
     else if action = "pinnedSources" then
         m.top.response = fetchPinnedSources(cfg)
     else if action = "sectionBrowse" then
-        m.top.response = fetchSectionBrowse(cfg, m.top.item)
+        m.top.response = fetchSectionHub(cfg, m.top.item)
+    else if action = "sectionAll" then
+        m.top.response = fetchSectionAll(cfg, m.top.item)
     else if action = "resolveEpisodeShow" then
         m.top.response = resolveEpisodeShow(cfg, m.top.item)
     else if action = "personDetail" then
@@ -432,7 +434,57 @@ function buildHome(cfg as Object) as Object
         return { ok: false, error: err }
     end if
 
+    shuffleHomeRows(root)
+
     return { ok: true, content: root }
+end function
+
+sub shuffleHomeRows(root as Object)
+    count = root.getChildCount()
+    if count <= 2 then return
+
+    pinned = []
+    others = []
+    for i = 0 to count - 1
+        row = root.getChild(i)
+        if row <> invalid then
+            title = LCase(safeToStr(row.title))
+            if title = "continue watching" then
+                pinned.push(row)
+            else
+                others.push(row)
+            end if
+        end if
+    end for
+
+    others = shuffleArray(others)
+
+    while root.getChildCount() > 0
+        root.removeChildIndex(0)
+    end while
+
+    for each row in pinned
+        root.appendChild(row)
+    end for
+    for each row in others
+        root.appendChild(row)
+    end for
+end sub
+
+function shuffleArray(list as Object) as Object
+    if list = invalid or list.count() <= 1 then return list
+    arr = []
+    for each x in list
+        arr.push(x)
+    end for
+    n = arr.count()
+    for i = n - 1 to 1 step -1
+        j = Int(Rnd() * (i + 1))
+        tmp = arr[i]
+        arr[i] = arr[j]
+        arr[j] = tmp
+    end for
+    return arr
 end function
 
 sub appendGenreRows(root as Object, seenTitles as Object, cfg as Object, movieKeys as Object, showKeys as Object)
@@ -825,32 +877,131 @@ function fetchPinnedSources(cfg as Object) as Object
     return { ok: true, items: items }
 end function
 
-function fetchSectionBrowse(cfg as Object, item as Object) as Object
+function fetchSectionHub(cfg as Object, item as Object) as Object
     if item = invalid then return { ok: false, error: "No library" }
     sectionId = safeToStr(item.sectionId)
     if sectionId = "" then sectionId = sectionIdFromKey(safeToStr(item.key))
     if sectionId = "" then return { ok: false, error: "Missing library section id" }
 
-    root = createObject("roSGNode", "ContentNode")
-    seenTitles = {}
     title = safeToStr(item.title)
     if title = "" then title = "Library"
 
+    heroPosters = []
+    pool = []
+    sample = plexGet(cfg, "/library/sections/" + sectionId + "/all?sort=addedAt:desc")
+    if sample.ok = true then pool = collectMetadata(cfg, sample.json)
+    heroPosters = pickRandomPosterUrls(pool, 10)
+
+    root = createObject("roSGNode", "ContentNode")
+    seenTitles = {}
+
+    recent = plexGet(cfg, "/library/sections/" + sectionId + "/recentlyAdded")
+    if recent.ok = true then
+        addUniqueRowLoose(root, seenTitles, "Recently Added", collectMetadata(cfg, recent.json))
+    end if
+
     hubs = plexGet(cfg, "/hubs/sections/" + sectionId + "?count=" + safeToStr(cfg.rowSize))
     if hubs.ok = true and hubs.json <> invalid and hubs.json.MediaContainer <> invalid then
-        appendHubRows(root, seenTitles, hubs.json.MediaContainer.Hub, cfg)
+        hubList = hubs.json.MediaContainer.Hub
+        if hubList <> invalid then
+            if GetInterface(hubList, "ifArray") = invalid then hubList = [hubList]
+            for each hub in hubList
+                hubTitle = safeToStr(hub.title)
+                if hubTitle = "" then hubTitle = "Browse"
+                if hub.Metadata <> invalid then
+                    addUniqueRowLoose(root, seenTitles, hubTitle, collectMetadata(cfg, hub))
+                end if
+            end for
+        end if
     end if
 
-    allItems = plexGet(cfg, "/library/sections/" + sectionId + "/all?sort=addedAt:desc")
-    if allItems.ok = true then
-        label = title + " · All"
-        addUniqueRow(root, seenTitles, label, collectMetadata(cfg, allItems.json))
+    onDeck = plexGet(cfg, "/library/sections/" + sectionId + "/onDeck")
+    if onDeck.ok = true then
+        addUniqueRowLoose(root, seenTitles, "Continue Watching", collectMetadata(cfg, onDeck.json))
     end if
 
-    if root.getChildCount() = 0 then
+    genres = collectSectionGenres(cfg, sectionId)
+
+    if root.getChildCount() = 0 and heroPosters.count() = 0 then
         return { ok: false, error: "No titles found in " + title }
     end if
-    return { ok: true, content: root, title: title }
+    return { ok: true, content: root, title: title, sectionId: sectionId, heroPosters: heroPosters, genres: genres }
+end function
+
+function fetchSectionAll(cfg as Object, item as Object) as Object
+    if item = invalid then return { ok: false, error: "No library" }
+    sectionId = safeToStr(item.sectionId)
+    if sectionId = "" then sectionId = sectionIdFromKey(safeToStr(item.key))
+    if sectionId = "" then return { ok: false, error: "Missing library section id" }
+
+    title = safeToStr(item.title)
+    if title = "" then title = "Library"
+    genre = safeToStr(item.genre)
+    search = safeToStr(item.search)
+
+    path = "/library/sections/" + sectionId + "/all?sort=titleSort"
+    if genre <> "" and genre <> "All" then
+        path = path + "&genre=" + requestEncode(genre)
+    end if
+    if search <> "" then
+        path = path + "&title=" + requestEncode(search)
+    end if
+
+    result = plexGet(cfg, path)
+    if result.ok <> true then return result
+
+    items = collectMetadata(cfg, result.json)
+    grid = createObject("roSGNode", "ContentNode")
+    for each it in items
+        child = grid.createChild("ContentNode")
+        child.title = it.title
+        child.description = it.description
+        child.hdPosterUrl = it.hdPosterUrl
+        child.hdBackdropUrl = it.hdBackdropUrl
+        child.addFields({
+            year: it.year,
+            rating: it.rating,
+            contentRating: it.contentRating,
+            mediaType: it.mediaType,
+            ratingKey: it.ratingKey,
+            key: it.key,
+            duration: it.duration,
+            viewOffset: it.viewOffset,
+            shortTitle: it.shortTitle
+        })
+    end for
+
+    return { ok: true, content: grid, title: title, sectionId: sectionId, count: items.count(), genre: genre, search: search }
+end function
+
+function collectSectionGenres(cfg as Object, sectionId as String) as Object
+    genres = [{ title: "All", tag: "" }]
+    result = plexGet(cfg, "/library/sections/" + sectionId + "/genre")
+    if result.ok <> true or result.json = invalid then return genres
+    container = result.json.MediaContainer
+    if container = invalid then return genres
+    list = container.Directory
+    if list = invalid then return genres
+    if GetInterface(list, "ifArray") = invalid then list = [list]
+    for each g in list
+        tag = safeToStr(g.title)
+        if tag = "" then tag = safeToStr(g.tag)
+        if tag <> "" then genres.push({ title: tag, tag: tag })
+    end for
+    return genres
+end function
+
+function pickRandomPosterUrls(items as Object, maxCount as Integer) as Object
+    urls = []
+    if items = invalid or items.count() = 0 then return urls
+    shuffled = shuffleArray(items)
+    for each it in shuffled
+        url = safeToStr(it.hdPosterUrl)
+        if url = "" then url = safeToStr(it.hdBackdropUrl)
+        if url <> "" then urls.push(url)
+        if urls.count() >= maxCount then exit for
+    end for
+    return urls
 end function
 
 function resolveEpisodeShow(cfg as Object, item as Object) as Object

@@ -14,6 +14,8 @@ sub init()
     m.detailScreen = invalid
     m.videoScreen = invalid
     m.libraryBrowseScreen = invalid
+    m.libraryAllScreen = invalid
+    m.libraryHubSource = invalid
     m.sportsScreen = invalid
     m.sportsDetailScreen = invalid
     m.castDetailScreen = invalid
@@ -55,6 +57,8 @@ sub clearScreens()
     m.detailScreen = invalid
     m.videoScreen = invalid
     m.libraryBrowseScreen = invalid
+    m.libraryAllScreen = invalid
+    m.libraryHubSource = invalid
     m.sportsScreen = invalid
     m.sportsDetailScreen = invalid
     m.castDetailScreen = invalid
@@ -107,15 +111,52 @@ end sub
 
 sub showLibraryBrowse(source as Object)
     clearScreens()
+    m.libraryHubSource = source
     m.libraryBrowseScreen = createObject("roSGNode", "LibraryBrowseScreen")
     m.libraryBrowseScreen.config = m.config
     m.libraryBrowseScreen.source = source
     m.libraryBrowseScreen.observeField("selectedItem", "onBrowseSelected")
+    m.libraryBrowseScreen.observeField("viewAllRequested", "onLibraryViewAll")
     m.libraryBrowseScreen.observeField("closed", "onLibraryBrowseClosed")
     m.libraryBrowseScreen.observeField("loadingMessage", "onSoftLoading")
     m.libraryBrowseScreen.observeField("openMenu", "onOpenMenu")
     m.screens.appendChild(m.libraryBrowseScreen)
     m.libraryBrowseScreen.setFocus(true)
+end sub
+
+sub onLibraryViewAll()
+    payload = m.libraryBrowseScreen.viewAllRequested
+    if payload = invalid then return
+    showLibraryAll(payload)
+end sub
+
+sub showLibraryAll(source as Object)
+    if m.libraryAllScreen <> invalid then
+        m.screens.removeChild(m.libraryAllScreen)
+        m.libraryAllScreen = invalid
+    end if
+    m.libraryAllScreen = createObject("roSGNode", "LibraryAllScreen")
+    m.libraryAllScreen.config = m.config
+    m.libraryAllScreen.source = source
+    m.libraryAllScreen.observeField("selectedItem", "onBrowseSelected")
+    m.libraryAllScreen.observeField("closed", "onLibraryAllClosed")
+    m.libraryAllScreen.observeField("loadingMessage", "onSoftLoading")
+    m.libraryAllScreen.observeField("openMenu", "onOpenMenu")
+    m.screens.appendChild(m.libraryAllScreen)
+    m.libraryAllScreen.setFocus(true)
+end sub
+
+sub onLibraryAllClosed()
+    if m.libraryAllScreen <> invalid then
+        m.screens.removeChild(m.libraryAllScreen)
+        m.libraryAllScreen = invalid
+    end if
+    if m.libraryBrowseScreen <> invalid then
+        m.libraryBrowseScreen.refocus = true
+        m.libraryBrowseScreen.setFocus(true)
+    else if m.libraryHubSource <> invalid then
+        showLibraryBrowse(m.libraryHubSource)
+    end if
 end sub
 
 sub onLibraryBrowseClosed()
@@ -383,7 +424,9 @@ sub onVideoClosed()
 end sub
 
 sub restoreSectionFocus()
-    if m.section = "library" and m.libraryBrowseScreen <> invalid then
+    if m.section = "library" and m.libraryAllScreen <> invalid then
+        m.libraryAllScreen.setFocus(true)
+    else if m.section = "library" and m.libraryBrowseScreen <> invalid then
         m.libraryBrowseScreen.refocus = true
         m.libraryBrowseScreen.setFocus(true)
     else if m.section = "livetv" and m.liveTvScreen <> invalid then
@@ -415,6 +458,9 @@ function onKeyEvent(key as String, press as Boolean) as Boolean
             return true
         else if m.detailScreen <> invalid then
             m.detailScreen.close = true
+            return true
+        else if m.libraryAllScreen <> invalid then
+            m.libraryAllScreen.close = true
             return true
         else if m.libraryBrowseScreen <> invalid then
             m.libraryBrowseScreen.close = true

@@ -9,7 +9,8 @@ This is intentionally a **design/UX shell** on top of existing Plex data. Creden
 - Dark Netflix-like home: billboard hero + horizontal shelves
 - **Collapsible sidebar** (Left to open): Home, your **Libraries**, **Live TV**, Live Sports
 - Selecting a library in the sidebar opens that library’s shelves
-- **Live TV**: Guide layout — program info top-left, live preview top-right, channel guide bottom third (DVR recordings later)
+- **Live TV**: Guide layout always visible (columns + placeholder rows while syncing); program info top-left, preview top-right
+- **Libraries**: Mosaic hero + **View all** / **Search**; full grid with genre filter
 - **Continue Watching**, **Recently Added**, Plex hubs, library shelves, **genre rows**, and **Discover** trending (Netflix/Disney+/etc.)
 - Home shelves require **15–30** items (except Continue Watching) and **loop** horizontally
 - Continue Watching episodes open the parent show with that episode focused

@@ -3,16 +3,17 @@ sub init()
     m.channelMeta = m.top.findNode("channelMeta")
     m.programSummary = m.top.findNode("programSummary")
     m.statusLabel = m.top.findNode("statusLabel")
+    m.statusSpinner = m.top.findNode("statusSpinner")
     m.watchBg = m.top.findNode("watchBg")
     m.previewArt = m.top.findNode("previewArt")
     m.previewVideo = m.top.findNode("previewVideo")
     m.guideList = m.top.findNode("guideList")
-    m.spinner = m.top.findNode("spinner")
 
     m.channels = []
-    m.focusZone = "guide" ' guide | watch
+    m.focusZone = "guide"
     m.currentIndex = 0
     m.previewSession = ""
+    m.guideLoaded = false
 
     m.guideList.observeField("itemFocused", "onGuideFocused")
     m.guideList.observeField("itemSelected", "onGuideSelected")
@@ -21,6 +22,31 @@ sub init()
     m.tuneTimer.repeat = false
     m.tuneTimer.duration = 0.85
     m.tuneTimer.observeField("fire", "onTunePreview")
+
+    showGuideSkeleton()
+end sub
+
+sub showGuideSkeleton()
+    ' Full guide chrome even before Plex responds
+    placeholders = [
+        "—   ·   Loading channels…",
+        "—   ·   …",
+        "—   ·   …",
+        "—   ·   …",
+        "—   ·   …",
+        "—   ·   …",
+        "—   ·   …"
+    ]
+    root = createObject("roSGNode", "ContentNode")
+    for each line in placeholders
+        child = root.createChild("ContentNode")
+        child.title = line
+    end for
+    m.guideList.content = root
+    m.guideList.jumpToItem = 0
+    m.guideList.setFocus(true)
+    m.focusZone = "guide"
+    paintWatchFocus()
 end sub
 
 sub onConfigReady()
@@ -28,14 +54,25 @@ sub onConfigReady()
     loadGuide()
 end sub
 
-sub loadGuide()
-    m.statusLabel.text = "Loading guide..."
-    m.top.loadingMessage = "Loading Live TV..."
-    if m.spinner <> invalid then
-        m.spinner.visible = true
-        m.spinner.control = "start"
+sub setLoadingState(active as Boolean, message as String)
+    if active then
+        m.top.loadingMessage = message
+        if m.statusSpinner <> invalid then
+            m.statusSpinner.visible = true
+            m.statusSpinner.control = "start"
+        end if
+        if message <> "" then m.statusLabel.text = message
+    else
+        m.top.loadingMessage = ""
+        if m.statusSpinner <> invalid then
+            m.statusSpinner.control = "stop"
+            m.statusSpinner.visible = false
+        end if
     end if
+end sub
 
+sub loadGuide()
+    setLoadingState(true, "Syncing guide…")
     m.task = createObject("roSGNode", "PlexTask")
     m.task.config = m.top.config
     m.task.action = "liveTvGuide"
@@ -45,22 +82,29 @@ end sub
 
 sub onGuideLoaded()
     response = m.task.response
-    m.top.loadingMessage = ""
-    if m.spinner <> invalid then
-        m.spinner.control = "stop"
-        m.spinner.visible = false
-    end if
+    setLoadingState(false, "")
 
     if response = invalid or response.ok <> true then
-        err = "Could not load Live TV guide"
+        err = "Could not load channels"
         if response <> invalid and response.error <> invalid then err = response.error
         m.statusLabel.text = err
-        m.programTitle.text = "Live TV unavailable"
+        m.programTitle.text = "Live TV"
+        m.channelMeta.text = "Guide unavailable"
+        m.programSummary.text = err + " — check Plex Live TV / DVR on your server."
+        showEmptyGuide(err)
         return
     end if
 
     m.channels = response.channels
     if m.channels = invalid then m.channels = []
+
+    if m.channels.count() = 0 then
+        m.statusLabel.text = "No channels configured"
+        m.programTitle.text = "No channels yet"
+        m.programSummary.text = "Enable Live TV / DVR on Plex, then refresh this screen."
+        showEmptyGuide("No channels found")
+        return
+    end if
 
     root = createObject("roSGNode", "ContentNode")
     for each ch in m.channels
@@ -68,12 +112,7 @@ sub onGuideLoaded()
         child.title = formatGuideLine(ch)
     end for
     m.guideList.content = root
-
-    if m.channels.count() = 0 then
-        m.statusLabel.text = "No channels found"
-        m.programTitle.text = "No channels"
-        return
-    end if
+    m.guideLoaded = true
 
     m.statusLabel.text = ""
     m.guideList.jumpToItem = 0
@@ -81,6 +120,27 @@ sub onGuideLoaded()
     m.focusZone = "guide"
     updateInfo(0)
     schedulePreviewTune()
+end sub
+
+sub showEmptyGuide(hint as String)
+    root = createObject("roSGNode", "ContentNode")
+    lines = [
+        "—   ·   " + hint,
+        "—   ·   Check Plex DVR settings",
+        "—   ·   —",
+        "—   ·   —",
+        "—   ·   —",
+        "—   ·   —",
+        "—   ·   —"
+    ]
+    for each line in lines
+        child = root.createChild("ContentNode")
+        child.title = line
+    end for
+    m.guideList.content = root
+    m.channels = []
+    m.guideLoaded = false
+    m.guideList.setFocus(true)
 end sub
 
 function formatGuideLine(ch as Object) as String
@@ -98,14 +158,28 @@ function formatGuideLine(ch as Object) as String
     else
         left = asString(ch.title)
     end if
-    if Len(left) > 28 then left = Left(left, 28)
-    ' pad-ish separator
-    return left + "   ·   " + program
+    if Len(left) > 26 then left = Left(left, 26)
+    timeTxt = asString(ch.timeRange)
+    if timeTxt = "" then timeTxt = "Live"
+    progShort = program
+    if Len(progShort) > 48 then progShort = Left(progShort, 48)
+    ' Fixed-width-ish columns via padding (LabelList is single line)
+    return padRight(left, 32) + progShort + "     " + timeTxt
+end function
+
+function padRight(text as String, width as Integer) as String
+    if Len(text) >= width then return text
+    out = text
+    while Len(out) < width
+        out = out + " "
+    end while
+    return out
 end function
 
 sub onGuideFocused()
     idx = m.guideList.itemFocused
-    if idx = invalid or idx < 0 or idx >= m.channels.count() then return
+    if idx = invalid or idx < 0 then return
+    if not m.guideLoaded or idx >= m.channels.count() then return
     m.currentIndex = idx
     updateInfo(idx)
     schedulePreviewTune()
@@ -125,17 +199,18 @@ sub updateInfo(idx as Integer)
     m.channelMeta.text = joinStrings(metaBits, "  ·  ")
 
     summary = asString(ch.description)
-    if summary = "" then summary = asString(ch.title)
+    if summary = "" then summary = "Now playing on " + asString(ch.callSign)
     m.programSummary.text = summary
 
     if asString(ch.hdPosterUrl) <> "" then
         m.previewArt.uri = ch.hdPosterUrl
+        m.previewArt.opacity = 1.0
         m.previewArt.visible = true
     end if
 end sub
 
 sub schedulePreviewTune()
-    ' Debounce so scrolling the guide doesn't spam tuners
+    if not m.guideLoaded then return
     m.tuneTimer.control = "stop"
     m.tuneTimer.control = "start"
 end sub
@@ -144,7 +219,7 @@ sub onTunePreview()
     if m.channels.count() = 0 then return
     ch = m.channels[m.currentIndex]
     if ch = invalid then return
-    m.statusLabel.text = "Tuning preview..."
+    m.statusLabel.text = "Tuning preview…"
     m.previewTask = createObject("roSGNode", "PlexTask")
     m.previewTask.config = m.top.config
     m.previewTask.action = "tuneLiveChannel"
@@ -180,7 +255,6 @@ sub requestWatch()
     if m.channels.count() = 0 then return
     ch = m.channels[m.currentIndex]
     if ch = invalid then return
-    ' Fullscreen playback via parent
     m.top.selectedItem = {
         title: asString(ch.programTitle),
         description: asString(ch.description),

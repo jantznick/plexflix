@@ -3,22 +3,39 @@ sub init()
     m.statusLabel = m.top.findNode("statusLabel")
     m.rowList = m.top.findNode("rowList")
     m.shimmer = m.top.findNode("shimmer")
+    m.viewAllBg = m.top.findNode("viewAllBg")
+    m.searchBg = m.top.findNode("searchBg")
+    m.heroTiles = []
+    for i = 0 to 7
+        tile = m.top.findNode("tile" + StrI(i).Trim())
+        if tile <> invalid then m.heroTiles.push(tile)
+    end for
+
+    m.sectionId = ""
+    m.genres = []
+    m.focusZone = "hero" ' hero | rows
+    m.heroBtn = "viewAll"
+
     m.rowList.observeField("rowItemSelected", "onRowItemSelected")
     m.rowList.observeField("escapeLeft", "onEscapeLeft")
-    m.rowList.observeField("escapeBack", "onEscapeBack")
+    m.rowList.observeField("escapeUp", "onEscapeUp")
 end sub
 
 sub onEscapeLeft()
     m.top.openMenu = true
 end sub
 
-sub onEscapeBack()
-    m.top.closed = true
+sub onEscapeUp()
+    m.focusZone = "hero"
+    paintHeroFocus()
+    m.top.setFocus(true)
 end sub
 
 sub onRefocus()
-    if m.top.refocus = true and m.rowList <> invalid then
-        m.rowList.setFocus(true)
+    if m.top.refocus = true then
+        m.focusZone = "hero"
+        paintHeroFocus()
+        m.top.setFocus(true)
     end if
 end sub
 
@@ -31,7 +48,7 @@ sub onSourceSet()
 end sub
 
 sub loadBrowse()
-    m.statusLabel.text = "Loading shelves..."
+    m.statusLabel.text = "Loading…"
     m.top.loadingMessage = "Loading " + m.titleLabel.text + "..."
     if m.shimmer <> invalid then m.shimmer.active = true
     m.rowList.visible = false
@@ -55,16 +72,89 @@ sub onBrowseLoaded()
         return
     end if
 
+    m.sectionId = asString(response.sectionId)
+    if m.sectionId = "" then m.sectionId = asString(m.top.source.sectionId)
+    m.genres = response.genres
+    if m.genres = invalid then m.genres = []
+
+    applyHeroTiles(response.heroPosters)
+
     content = response.content
-    if content = invalid or content.getChildCount() = 0 then
-        m.statusLabel.text = "This library is empty"
-        return
+    if content <> invalid and content.getChildCount() > 0 then
+        m.statusLabel.text = ""
+        m.rowList.content = content
+        m.rowList.visible = true
+    else
+        m.statusLabel.text = "Use View all to browse this library"
     end if
 
-    m.statusLabel.text = ""
-    m.rowList.content = content
-    m.rowList.visible = true
-    m.rowList.setFocus(true)
+    m.focusZone = "hero"
+    paintHeroFocus()
+    m.top.setFocus(true)
+end sub
+
+sub applyHeroTiles(urls as Object)
+    if urls = invalid then urls = []
+    for i = 0 to m.heroTiles.count() - 1
+        tile = m.heroTiles[i]
+        if i < urls.count() and asString(urls[i]) <> "" then
+            tile.uri = urls[i]
+            tile.opacity = 0.88
+        else
+            tile.uri = "pkg:/images/poster_placeholder.png"
+            tile.opacity = 0.35
+        end if
+    end for
+end sub
+
+sub paintHeroFocus()
+    if m.viewAllBg = invalid then return
+    if m.focusZone = "hero" then
+        if m.heroBtn = "search" then
+            m.viewAllBg.color = "0xE50914"
+            m.searchBg.color = "0xFFFFFF"
+        else
+            m.viewAllBg.color = "0xFFFFFF"
+            m.searchBg.color = "0x2A2A32"
+        end if
+    else
+        m.viewAllBg.color = "0xE50914"
+        m.searchBg.color = "0x2A2A32"
+    end if
+end sub
+
+sub requestViewAll()
+    src = m.top.source
+    if src = invalid then src = {}
+    payload = {
+        title: m.titleLabel.text,
+        sectionId: m.sectionId,
+        key: asString(src.key),
+        genres: m.genres
+    }
+    m.top.viewAllRequested = payload
+end sub
+
+sub runSearch()
+    m.searchTask = createObject("roSGNode", "SearchKeyboardTask")
+    m.searchTask.prompt = "Search " + m.titleLabel.text
+    m.searchTask.observeField("result", "onSearchDone")
+    m.searchTask.control = "RUN"
+end sub
+
+sub onSearchDone()
+    if m.searchTask.cancelled = true then return
+    query = asString(m.searchTask.result)
+    if query = "" then return
+    src = m.top.source
+    if src = invalid then src = {}
+    m.top.viewAllRequested = {
+        title: m.titleLabel.text,
+        sectionId: m.sectionId,
+        key: asString(src.key),
+        genres: m.genres,
+        search: query
+    }
 end sub
 
 sub onRowItemSelected()
@@ -105,13 +195,40 @@ end sub
 
 function onKeyEvent(key as String, press as Boolean) as Boolean
     if not press then return false
-    if key = "back" then
+
+    if m.focusZone = "hero" then
+        if key = "left" then
+            m.top.openMenu = true
+            return true
+        else if key = "right" then
+            if m.heroBtn = "search" then
+                m.heroBtn = "viewAll"
+            else
+                m.heroBtn = "search"
+            end if
+            if m.heroBtn = invalid then m.heroBtn = "viewAll"
+            paintHeroFocus()
+            return true
+        else if key = "down" then
+            if m.rowList.visible = true and m.rowList.content <> invalid and m.rowList.content.getChildCount() > 0 then
+                m.focusZone = "rows"
+                paintHeroFocus()
+                m.rowList.setFocus(true)
+                return true
+            end if
+        else if key = "OK" then
+            if m.heroBtn = "search" then
+                runSearch()
+            else
+                requestViewAll()
+            end if
+            return true
+        end if
+    else if key = "back" then
         m.top.closed = true
         return true
-    else if key = "left" then
-        m.top.openMenu = true
-        return true
     end if
+
     return false
 end function
 

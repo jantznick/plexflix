@@ -90,7 +90,7 @@ sub onHomeLoaded()
     end if
 
     rowCount = content.getChildCount()
-    m.buildLabel.text = "v0.4.0 · " + safeToStr(rowCount) + " rows"
+    m.buildLabel.text = "v0.4.1 · " + safeToStr(rowCount) + " rows"
 
     if m.loadingPanel <> invalid then m.loadingPanel.visible = false
     if m.frame <> invalid then m.frame.visible = true

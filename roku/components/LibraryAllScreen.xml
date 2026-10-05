@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<component name="LibraryAllScreen" extends="Group">
+    <interface>
+        <field id="config" type="assocarray" />
+        <field id="source" type="assocarray" onChange="onSourceSet" />
+        <field id="selectedItem" type="assocarray" />
+        <field id="closed" type="boolean" alwaysNotify="true" />
+        <field id="close" type="boolean" alwaysNotify="true" onChange="onCloseRequested" />
+        <field id="loadingMessage" type="string" />
+        <field id="openMenu" type="boolean" alwaysNotify="true" />
+    </interface>
+
+    <script type="text/brightscript" uri="LibraryAllScreen.brs" />
+    <script type="text/brightscript" uri="pkg:/source/Fonts.brs" />
+
+    <children>
+        <Rectangle width="1920" height="1080" color="0x07070B" />
+
+        <Group translation="[96, 48]">
+            <Label id="titleLabel" width="1200" height="52" text="Library" color="0xFFFFFF">
+                <Font role="font" uri="pkg:/fonts/Outfit-Bold.ttf" size="40" />
+            </Label>
+            <Label id="metaLabel" translation="[0, 54]" width="1200" height="32" text="" color="0x777780">
+                <Font role="font" uri="pkg:/fonts/Outfit-Regular.ttf" size="20" />
+            </Label>
+
+            <Group id="searchBtn" translation="[1280, 0]">
+                <Rectangle id="searchBg" width="200" height="52" color="0x2A2A32" />
+                <Label width="200" height="52" horizAlign="center" vertAlign="center" text="Search" color="0xFFFFFF">
+                    <Font role="font" uri="pkg:/fonts/Outfit-Medium.ttf" size="24" />
+                </Label>
+            </Group>
+            <Group id="clearBtn" translation="[1500, 0]">
+                <Rectangle id="clearBg" width="160" height="52" color="0x2A2A32" />
+                <Label width="160" height="52" horizAlign="center" vertAlign="center" text="Clear" color="0xFFFFFF">
+                    <Font role="font" uri="pkg:/fonts/Outfit-Medium.ttf" size="24" />
+                </Label>
+            </Group>
+        </Group>
+
+        <Label translation="[96, 120]" width="200" height="32" text="Filter" color="0xA8A8B0">
+            <Font role="font" uri="pkg:/fonts/Outfit-Medium.ttf" size="20" />
+        </Label>
+        <LabelList
+            id="genreList"
+            translation="[96, 156]"
+            itemSize="[240, 44]"
+            itemSpacing="[0, 4]"
+            numRows="18"
+            color="0xBBBBBB"
+            focusedColor="0xFFFFFF"
+            drawFocusFeedback="true"
+        />
+
+        <BusySpinner id="spinner" translation="[960, 540]" uri="pkg:/images/spinner.png" visible="false" />
+
+        <MarkupGrid
+            id="grid"
+            translation="[360, 120]"
+            itemComponentName="PosterItem"
+            itemSize="[168, 252]"
+            numColumns="8"
+            numRows="3"
+            drawFocusFeedback="false"
+            visible="false"
+        />
+    </children>
+</component>

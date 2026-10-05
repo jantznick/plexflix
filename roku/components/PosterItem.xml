@@ -79,5 +79,29 @@
             color="0xE50914"
             visible="false"
         />
+
+        <Rectangle
+            id="titleBar"
+            width="168"
+            height="56"
+            translation="[0, 196]"
+            color="0x000000"
+            opacity="0.72"
+            visible="false"
+        />
+        <Label
+            id="titleLabel"
+            width="160"
+            height="48"
+            translation="[4, 200]"
+            horizAlign="left"
+            vertAlign="center"
+            wrap="false"
+            maxLines="2"
+            color="0xFFFFFF"
+            visible="false"
+        >
+            <Font role="font" uri="pkg:/fonts/Outfit-Medium.ttf" size="18" />
+        </Label>
     </children>
 </component>

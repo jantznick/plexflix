@@ -7,6 +7,8 @@ sub init()
     m.focusAccent = m.top.findNode("focusAccent")
     m.progressBg = m.top.findNode("progressBg")
     m.progressFg = m.top.findNode("progressFg")
+    m.titleBar = m.top.findNode("titleBar")
+    m.titleLabel = m.top.findNode("titleLabel")
     m.itemWidth = 168
     m.itemHeight = 252
     setFocused(false)
@@ -49,6 +51,14 @@ sub onSizeChange()
     m.progressBg.width = m.itemWidth
     m.progressBg.translation = [0, m.itemHeight - 5]
     m.progressFg.translation = [0, m.itemHeight - 5]
+    if m.titleBar <> invalid then
+        m.titleBar.width = m.itemWidth
+        m.titleBar.translation = [0, m.itemHeight - 56]
+    end if
+    if m.titleLabel <> invalid then
+        m.titleLabel.width = m.itemWidth - 8
+        m.titleLabel.translation = [4, m.itemHeight - 52]
+    end if
     refreshProgress()
 end sub
 
@@ -62,7 +72,22 @@ sub onContentChange()
         m.poster.uri = "pkg:/images/poster_placeholder.png"
     end if
 
+    refreshTitle()
     refreshProgress()
+end sub
+
+sub refreshTitle()
+    item = m.top.itemContent
+    if item = invalid or m.titleLabel = invalid then return
+    label = ""
+    if item.shortTitle <> invalid and asString(item.shortTitle) <> "" then
+        label = asString(item.shortTitle)
+    else if item.title <> invalid then
+        label = asString(item.title)
+    end if
+    if label = "" then return
+    if Len(label) > 42 then label = Left(label, 40) + "…"
+    m.titleLabel.text = label
 end sub
 
 sub refreshProgress()
@@ -98,7 +123,10 @@ sub setFocused(focused as Boolean)
     if m.focusGlow <> invalid then m.focusGlow.visible = focused
     if m.focusRing <> invalid then m.focusRing.visible = focused
     if m.focusAccent <> invalid then m.focusAccent.visible = focused
+    if m.titleBar <> invalid then m.titleBar.visible = focused
+    if m.titleLabel <> invalid then m.titleLabel.visible = focused
     if focused then
+        refreshTitle()
         m.poster.opacity = 1.0
         if m.shadow <> invalid then
             m.shadow.opacity = 0.7
@@ -112,3 +140,10 @@ sub setFocused(focused as Boolean)
         end if
     end if
 end sub
+
+function asString(value as Dynamic) as String
+    if value = invalid then return ""
+    valueType = type(value)
+    if valueType = "String" or valueType = "roString" then return value
+    return ""
+end function
