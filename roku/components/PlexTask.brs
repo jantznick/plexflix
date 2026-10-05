@@ -154,7 +154,7 @@ function metadataToItem(cfg as Object, meta as Object) as Object
         mediaType: mediaType,
         ratingKey: ratingKey,
         key: key,
-        hdPosterUrl: imageUrl(cfg, thumb, 420, 630),
+        hdPosterUrl: imageUrl(cfg, thumb, 308, 462),
         hdBackdropUrl: imageUrl(cfg, art, 1920, 1080),
         duration: duration,
         viewOffset: viewOffset,
