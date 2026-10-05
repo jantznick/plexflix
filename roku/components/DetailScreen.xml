@@ -4,6 +4,7 @@
         <field id="config" type="assocarray" />
         <field id="content" type="assocarray" onChange="onContentSet" />
         <field id="playRequested" type="assocarray" />
+        <field id="openDetails" type="assocarray" />
         <field id="closed" type="boolean" alwaysNotify="true" />
         <field id="close" type="boolean" alwaysNotify="true" onChange="onCloseRequested" />
     </interface>
@@ -11,30 +12,31 @@
     <script type="text/brightscript" uri="DetailScreen.brs" />
 
     <children>
-        <Rectangle width="1920" height="1080" color="0x0A0A0A" />
+        <Rectangle width="1920" height="1080" color="0x08080A" />
 
         <Poster
             id="backdrop"
             width="1920"
-            height="1080"
+            height="560"
             loadDisplayMode="scaleToFill"
-            opacity="0.28"
+            opacity="0.34"
         />
-        <Rectangle width="1920" height="1080" color="0x0A0A0A" opacity="0.62" />
+        <Rectangle width="1920" height="560" color="0x08080A" opacity="0.55" />
+        <Rectangle width="1920" height="420" translation="[0, 360]" color="0x08080A" opacity="0.92" />
 
         <Poster
             id="poster"
-            translation="[80, 80]"
-            width="300"
-            height="450"
+            translation="[80, 56]"
+            width="260"
+            height="390"
             loadDisplayMode="scaleToZoom"
             uri="pkg:/images/poster_placeholder.png"
         />
 
         <Label
             id="titleLabel"
-            translation="[440, 80]"
-            width="1400"
+            translation="[400, 64]"
+            width="1440"
             height="70"
             color="0xFFFFFF"
             font="font:LargeBoldSystemFont"
@@ -43,17 +45,17 @@
         />
         <Label
             id="metaLabel"
-            translation="[440, 160]"
-            width="1400"
+            translation="[400, 144]"
+            width="1440"
             height="36"
             color="0xB3B3B3"
             font="font:SmallSystemFont"
         />
         <Label
             id="summaryLabel"
-            translation="[440, 210]"
-            width="1360"
-            height="100"
+            translation="[400, 190]"
+            width="1400"
+            height="96"
             color="0xD6D6D6"
             font="font:SmallSystemFont"
             wrap="true"
@@ -61,7 +63,7 @@
             lineSpacing="4"
         />
 
-        <Group id="movieActions" translation="[440, 340]" visible="true">
+        <Group id="movieActions" translation="[400, 310]" visible="true">
             <Group id="playBtn" translation="[0, 0]">
                 <Rectangle id="playBg" width="240" height="64" color="0xE50914" />
                 <Label
@@ -90,18 +92,38 @@
             </Group>
         </Group>
 
-        <Group id="tvPanel" translation="[0, 340]" visible="false">
+        ' TV seasons/episodes — starts below the header block
+        <Group id="tvPanel" translation="[0, 470]" visible="false">
             <RowList
                 id="seasonRows"
                 translation="[0, 0]"
                 itemComponentName="EpisodeItem"
-                numRows="3"
+                numRows="2"
                 rowItemSize="[[320, 180]]"
                 rowItemSpacing="[[24, 0]]"
-                itemSize="[1920, 240]"
+                itemSize="[1920, 250]"
+                itemSpacing="[0, 24]"
+                showRowLabel="[true]"
+                rowLabelOffset="[[80, 8]]"
+                rowFocusAnimationStyle="fixedFocus"
+                focusXOffset="[80]"
+                drawFocusFeedback="false"
+            />
+        </Group>
+
+        ' Movies / extras — cast + more like this
+        <Group id="relatedPanel" translation="[0, 420]" visible="false">
+            <RowList
+                id="relatedRows"
+                translation="[0, 0]"
+                itemComponentName="PosterItem"
+                numRows="2"
+                rowItemSize="[[160, 240]]"
+                rowItemSpacing="[[22, 0]]"
+                itemSize="[1920, 300]"
                 itemSpacing="[0, 20]"
                 showRowLabel="[true]"
-                rowLabelOffset="[[80, 6]]"
+                rowLabelOffset="[[80, 8]]"
                 rowFocusAnimationStyle="fixedFocus"
                 focusXOffset="[80]"
                 drawFocusFeedback="false"

@@ -8,7 +8,7 @@
             id="background"
             width="1920"
             height="1080"
-            color="0x0A0A0A"
+            color="0x08080A"
         />
 
         <Group id="screens" />
@@ -17,18 +17,27 @@
             id="loadingDim"
             width="1920"
             height="1080"
-            color="0x000000"
-            opacity="0.55"
+            color="0x08080A"
+            opacity="0.88"
             visible="false"
+        />
+        <Poster
+            id="loadingLogo"
+            width="420"
+            height="117"
+            translation="[750, 430]"
+            uri="pkg:/images/loading-logo.png"
+            visible="false"
+            opacity="0.95"
         />
         <Label
             id="statusLabel"
             width="1920"
-            height="60"
-            translation="[0, 510]"
+            height="48"
+            translation="[0, 570]"
             horizAlign="center"
-            color="0xFFFFFF"
-            font="font:MediumBoldSystemFont"
+            color="0xBDBDBD"
+            font="font:SmallSystemFont"
             text=""
         />
     </children>

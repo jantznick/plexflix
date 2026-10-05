@@ -4,6 +4,7 @@ sub init()
 
     m.screens = m.top.findNode("screens")
     m.loadingDim = m.top.findNode("loadingDim")
+    m.loadingLogo = m.top.findNode("loadingLogo")
     m.statusLabel = m.top.findNode("statusLabel")
 
     m.config = GetPlexConfig()
@@ -21,6 +22,7 @@ end sub
 
 sub setLoading(isLoading as Boolean, message = "" as String)
     m.loadingDim.visible = isLoading
+    m.loadingLogo.visible = isLoading
     if isLoading then
         m.statusLabel.text = message
     else
@@ -66,6 +68,7 @@ sub showDetail(item as Object)
     m.detailScreen.config = m.config
     m.detailScreen.content = item
     m.detailScreen.observeField("playRequested", "onPlayRequested")
+    m.detailScreen.observeField("openDetails", "onOpenDetails")
     m.detailScreen.observeField("closed", "onDetailClosed")
     m.screens.appendChild(m.detailScreen)
     m.detailScreen.setFocus(true)
@@ -83,6 +86,12 @@ sub onPlayRequested()
     item = m.detailScreen.playRequested
     if item = invalid then return
     showVideo(item)
+end sub
+
+sub onOpenDetails()
+    item = m.detailScreen.openDetails
+    if item = invalid then return
+    showDetail(item)
 end sub
 
 sub showVideo(item as Object)

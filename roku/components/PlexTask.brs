@@ -13,6 +13,8 @@ sub exec()
         m.top.response = resolvePlayable(cfg, m.top.item)
     else if action = "children" then
         m.top.response = fetchChildren(cfg, m.top.item)
+    else if action = "extras" then
+        m.top.response = fetchExtras(cfg, m.top.item)
     else if action = "streamUrl" then
         m.top.response = buildStreamUrl(cfg, m.top.item)
     else
@@ -380,6 +382,65 @@ function fetchChildren(cfg as Object, item as Object) as Object
 
     items = collectMetadata(cfg, result.json)
     return { ok: true, items: items }
+end function
+
+function fetchExtras(cfg as Object, item as Object) as Object
+    if item = invalid then return { ok: false, error: "No item" }
+    ratingKey = safeToStr(item.ratingKey)
+    if ratingKey = "" then return { ok: false, error: "Missing ratingKey" }
+
+    castItems = []
+    similarItems = []
+
+    details = plexGet(cfg, "/library/metadata/" + ratingKey)
+    if details.ok = true and details.json <> invalid and details.json.MediaContainer <> invalid then
+        meta = details.json.MediaContainer.Metadata
+        if meta <> invalid then
+            if GetInterface(meta, "ifArray") <> invalid then
+                if meta.count() > 0 then meta = meta[0]
+            end if
+            roles = meta.Role
+            if roles <> invalid then
+                if GetInterface(roles, "ifArray") = invalid then roles = [roles]
+                for each role in roles
+                    name = ""
+                    if role.tag <> invalid then
+                        name = safeToStr(role.tag)
+                    else if role.role <> invalid then
+                        name = safeToStr(role.role)
+                    end if
+                    if name <> "" then
+                        thumb = ""
+                        if role.thumb <> invalid then thumb = safeToStr(role.thumb)
+                        castItems.push({
+                            title: name,
+                            shortTitle: name,
+                            description: safeToStr(role.role),
+                            mediaType: "actor",
+                            ratingKey: "",
+                            key: "",
+                            hdPosterUrl: imageUrl(cfg, thumb, 300, 450),
+                            hdBackdropUrl: "",
+                            duration: 0,
+                            viewOffset: 0,
+                            year: "",
+                            rating: "",
+                            contentRating: "",
+                            index: "",
+                            parentIndex: ""
+                        })
+                    end if
+                end for
+            end if
+        end if
+    end if
+
+    similar = plexGet(cfg, "/library/metadata/" + ratingKey + "/similar")
+    if similar.ok = true then
+        similarItems = collectMetadata(cfg, similar.json)
+    end if
+
+    return { ok: true, cast: castItems, similar: similarItems }
 end function
 
 function buildStreamUrl(cfg as Object, item as Object) as Object

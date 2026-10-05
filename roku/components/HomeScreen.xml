@@ -9,7 +9,7 @@
     <script type="text/brightscript" uri="HomeScreen.brs" />
 
     <children>
-        <Rectangle width="1920" height="1080" color="0x0A0A0A" />
+        <Rectangle width="1920" height="1080" color="0x08080A" />
 
         <Group id="billboard" translation="[0, 0]">
             <Poster
@@ -25,7 +25,7 @@
                 width="1920"
                 height="280"
                 translation="[0, 480]"
-                color="0x0A0A0A"
+                color="0x08080A"
                 opacity="0.95"
             />
 
@@ -81,7 +81,7 @@
             width="250"
             height="36"
             horizAlign="right"
-            text="v0.3.1"
+            text="v0.3.2"
             color="0x555555"
             font="font:SmallestSystemFont"
         />
@@ -90,7 +90,7 @@
             id="rowList"
             translation="[0, 600]"
             itemComponentName="PosterItem"
-            numRows="2"
+            numRows="3"
             rowItemSize="[[180, 270]]"
             rowItemSpacing="[[28, 0]]"
             itemSize="[1920, 340]"
@@ -101,5 +101,32 @@
             focusXOffset="[80]"
             drawFocusFeedback="false"
         />
+
+        <Animation
+            id="homeAnim"
+            duration="0.18"
+            easeFunction="outCubic"
+            optional="true"
+            repeat="false"
+        >
+            <Vector2DFieldInterpolator
+                id="billboardMove"
+                key="[0.0, 1.0]"
+                keyValue="[[0, 0], [0, 0]]"
+                fieldToInterp="billboard.translation"
+            />
+            <FloatFieldInterpolator
+                id="billboardFade"
+                key="[0.0, 1.0]"
+                keyValue="[1.0, 1.0]"
+                fieldToInterp="billboard.opacity"
+            />
+            <Vector2DFieldInterpolator
+                id="rowsMove"
+                key="[0.0, 1.0]"
+                keyValue="[[0, 600], [0, 600]]"
+                fieldToInterp="rowList.translation"
+            />
+        </Animation>
     </children>
 </component>

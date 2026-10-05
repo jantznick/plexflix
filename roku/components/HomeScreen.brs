@@ -7,6 +7,10 @@ sub init()
     m.heroSummary = m.top.findNode("heroSummary")
     m.rowList = m.top.findNode("rowList")
     m.buildLabel = m.top.findNode("buildLabel")
+    m.homeAnim = m.top.findNode("homeAnim")
+    m.billboardMove = m.top.findNode("billboardMove")
+    m.billboardFade = m.top.findNode("billboardFade")
+    m.rowsMove = m.top.findNode("rowsMove")
 
     ' Expanded = billboard mode. Collapsed = shelves fill the screen.
     m.expandedRowY = 600
@@ -14,6 +18,11 @@ sub init()
     m.heroHideY = -720
     m.isCollapsed = false
     m.currentRow = -1
+
+    m.snapTimer = createObject("roSGNode", "Timer")
+    m.snapTimer.repeat = false
+    m.snapTimer.duration = 0.2
+    m.snapTimer.observeField("fire", "onAnimSnap")
 
     m.rowList.observeField("rowItemSelected", "onRowItemSelected")
     m.rowList.observeField("rowItemFocused", "onRowItemFocused")
@@ -65,7 +74,7 @@ sub onHomeLoaded()
     end if
 
     rowCount = content.getChildCount()
-    m.buildLabel.text = "v0.3.1 · " + safeToStr(rowCount) + " rows"
+    m.buildLabel.text = "v0.3.2 · " + safeToStr(rowCount) + " rows"
 
     m.rowList.content = content
     m.currentRow = -1
@@ -105,21 +114,62 @@ sub applyFocusedRow(force as Boolean)
 end sub
 
 sub setBrowseMode(collapsed as Boolean)
-    ' IMPORTANT: set properties directly. SceneGraph Animation is unreliable in brs-desktop.
+    if m.isCollapsed = collapsed then return
+
+    fromHero = m.billboard.translation
+    fromRows = m.rowList.translation
+    fromOpacity = m.billboard.opacity
+    if fromOpacity = invalid then fromOpacity = 1.0
+
     if collapsed then
-        m.billboard.translation = [0, m.heroHideY]
-        m.billboard.opacity = 0.0
+        toHero = [0, m.heroHideY]
+        toRows = [0, m.collapsedRowY]
+        toOpacity = 0.0
+        m.heroCopy.visible = false
+        m.billboard.visible = true
+    else
+        toHero = [0, 0]
+        toRows = [0, m.expandedRowY]
+        toOpacity = 1.0
+        m.billboard.visible = true
+        m.heroCopy.visible = true
+    end if
+
+    m.isCollapsed = collapsed
+    m.pendingHero = toHero
+    m.pendingRows = toRows
+    m.pendingOpacity = toOpacity
+    m.pendingVisible = not collapsed
+
+    ' Try a short animation; snap shortly after so brs-desktop still ends correctly
+    if m.homeAnim <> invalid and m.billboardMove <> invalid then
+        m.billboardMove.keyValue = [fromHero, toHero]
+        m.rowsMove.keyValue = [fromRows, toRows]
+        m.billboardFade.keyValue = [fromOpacity, toOpacity]
+        m.homeAnim.control = "start"
+        m.snapTimer.control = "start"
+    else
+        applyBrowseModeSnap()
+    end if
+end sub
+
+sub onAnimSnap()
+    applyBrowseModeSnap()
+end sub
+
+sub applyBrowseModeSnap()
+    if m.pendingHero = invalid then return
+    m.billboard.translation = m.pendingHero
+    m.rowList.translation = m.pendingRows
+    m.billboard.opacity = m.pendingOpacity
+    if m.isCollapsed then
         m.billboard.visible = false
         m.heroCopy.visible = false
-        m.rowList.translation = [0, m.collapsedRowY]
     else
         m.billboard.visible = true
-        m.billboard.opacity = 1.0
-        m.billboard.translation = [0, 0]
         m.heroCopy.visible = true
-        m.rowList.translation = [0, m.expandedRowY]
+        m.billboard.opacity = 1.0
     end if
-    m.isCollapsed = collapsed
 end sub
 
 sub updateHeroContent(item as Object)

@@ -15,6 +15,6 @@ function GetPlexConfig() as Object
         version: "0.1.0",
 
         ' How many items to request per row
-        rowSize: 24
+        rowSize: 36
     }
 end function

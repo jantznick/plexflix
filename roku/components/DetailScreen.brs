@@ -14,12 +14,18 @@ sub init()
     m.seasonRows = m.top.findNode("seasonRows")
     m.seasonRows.observeField("rowItemSelected", "onEpisodeSelected")
 
+    m.relatedPanel = m.top.findNode("relatedPanel")
+    m.relatedRows = m.top.findNode("relatedRows")
+    m.relatedRows.observeField("rowItemSelected", "onRelatedSelected")
+
     m.focusIndex = 0
     m.isShow = false
     m.seasons = []
     m.seasonQueue = 0
     m.seasonContent = invalid
     m.pendingSeason = invalid
+    m.relatedContent = invalid
+    m.prefetchAhead = 2
 
     updateMovieButtonFocus()
 end sub
@@ -53,6 +59,7 @@ sub onContentSet()
     if mediaType = "show" then
         showTvMode()
         loadChildren(item, "seasons")
+        loadExtras(item)
     else if mediaType = "season" then
         showTvMode()
         m.seasons = [item]
@@ -60,21 +67,42 @@ sub onContentSet()
         m.seasonContent = createObject("roSGNode", "ContentNode")
         m.seasonRows.content = m.seasonContent
         loadSeasonEpisodes()
+        loadExtras(item)
     else
-        m.movieActions.visible = true
-        m.tvPanel.visible = false
-        m.playLabel.text = "Play"
-        m.poster.visible = true
+        showMovieMode()
+        loadExtras(item)
     end if
 end sub
 
 sub showTvMode()
     m.movieActions.visible = false
+    m.relatedPanel.visible = false
     m.tvPanel.visible = true
-    ' Give episode rails the full width; keep a compact show poster
-    m.poster.width = 220
-    m.poster.height = 330
-    m.poster.translation = [80, 70]
+    m.poster.width = 200
+    m.poster.height = 300
+    m.poster.translation = [80, 48]
+    m.titleLabel.translation = [320, 56]
+    m.metaLabel.translation = [320, 136]
+    m.summaryLabel.translation = [320, 180]
+    m.summaryLabel.height = 80
+    m.summaryLabel.maxLines = 2
+end sub
+
+sub showMovieMode()
+    m.movieActions.visible = true
+    m.tvPanel.visible = false
+    m.relatedPanel.visible = true
+    m.playLabel.text = "Play"
+    m.poster.width = 260
+    m.poster.height = 390
+    m.poster.translation = [80, 56]
+    m.titleLabel.translation = [400, 64]
+    m.metaLabel.translation = [400, 144]
+    m.summaryLabel.translation = [400, 190]
+    m.summaryLabel.height = 96
+    m.summaryLabel.maxLines = 3
+    m.relatedContent = createObject("roSGNode", "ContentNode")
+    m.relatedRows.content = m.relatedContent
 end sub
 
 sub loadChildren(item as Object, mode as String)
@@ -86,6 +114,15 @@ sub loadChildren(item as Object, mode as String)
     m.task.item = item
     m.task.observeField("response", "onChildrenLoaded")
     m.task.control = "RUN"
+end sub
+
+sub loadExtras(item as Object)
+    m.extrasTask = createObject("roSGNode", "PlexTask")
+    m.extrasTask.config = m.top.config
+    m.extrasTask.action = "extras"
+    m.extrasTask.item = item
+    m.extrasTask.observeField("response", "onExtrasLoaded")
+    m.extrasTask.control = "RUN"
 end sub
 
 sub onChildrenLoaded()
@@ -101,11 +138,19 @@ sub onChildrenLoaded()
         m.seasons = items
         m.seasonQueue = 0
         m.seasonContent = createObject("roSGNode", "ContentNode")
+        ' Create empty labeled season rows immediately so rails appear early
+        for each season in items
+            row = m.seasonContent.createChild("ContentNode")
+            title = asString(season.title)
+            if title = "" then title = "Season"
+            row.title = title
+        end for
         m.seasonRows.content = m.seasonContent
         if items.count() = 0 then return
+        ' Prefetch first few seasons right away
         loadSeasonEpisodes()
     else if m.loadMode = "episodes" then
-        appendSeasonRow(m.pendingSeason, items)
+        fillSeasonRow(m.seasonQueue, m.pendingSeason, items)
         m.seasonQueue = m.seasonQueue + 1
         loadSeasonEpisodes()
     end if
@@ -119,6 +164,40 @@ sub loadSeasonEpisodes()
         return
     end if
     loadChildren(m.seasons[m.seasonQueue], "episodes")
+end sub
+
+sub fillSeasonRow(index as Integer, season as Object, episodes as Object)
+    if m.seasonContent = invalid then return
+    if index < 0 or index >= m.seasonContent.getChildCount() then
+        appendSeasonRow(season, episodes)
+        return
+    end if
+
+    row = m.seasonContent.getChild(index)
+    while row.getChildCount() > 0
+        row.removeChildIndex(0)
+    end while
+
+    for each ep in episodes
+        child = row.createChild("ContentNode")
+        child.title = formatEpisodeTitle(ep)
+        child.hdPosterUrl = ep.hdPosterUrl
+        child.description = ep.description
+        child.addFields({
+            ratingKey: ep.ratingKey,
+            key: ep.key,
+            mediaType: ep.mediaType,
+            duration: ep.duration,
+            viewOffset: ep.viewOffset,
+            year: ep.year,
+            hdBackdropUrl: ep.hdBackdropUrl,
+            shortTitle: ep.shortTitle,
+            index: ep.index
+        })
+    end for
+
+    m.seasonRows.content = m.seasonContent
+    if index = 0 then m.seasonRows.setFocus(true)
 end sub
 
 sub appendSeasonRow(season as Object, episodes as Object)
@@ -152,8 +231,58 @@ sub appendSeasonRow(season as Object, episodes as Object)
         })
     end for
 
-    ' Re-assign so RowList picks up the new row in simulators that need it
     m.seasonRows.content = m.seasonContent
+end sub
+
+sub onExtrasLoaded()
+    response = m.extrasTask.response
+    if response = invalid or response.ok <> true then return
+
+    castItems = response.cast
+    similarItems = response.similar
+    if castItems = invalid then castItems = []
+    if similarItems = invalid then similarItems = []
+
+    if m.isShow then
+        ' Append extras under season rails once seasons exist
+        if m.seasonContent = invalid then
+            m.seasonContent = createObject("roSGNode", "ContentNode")
+        end if
+        appendItemsRow(m.seasonContent, "Cast", castItems)
+        appendItemsRow(m.seasonContent, "More Like This", similarItems)
+        m.seasonRows.content = m.seasonContent
+    else
+        if m.relatedContent = invalid then
+            m.relatedContent = createObject("roSGNode", "ContentNode")
+        end if
+        appendItemsRow(m.relatedContent, "Cast", castItems)
+        appendItemsRow(m.relatedContent, "More Like This", similarItems)
+        m.relatedRows.content = m.relatedContent
+        m.relatedPanel.visible = true
+    end if
+end sub
+
+sub appendItemsRow(root as Object, title as String, items as Object)
+    if items = invalid or items.count() = 0 then return
+    row = root.createChild("ContentNode")
+    row.title = title
+    for each item in items
+        child = row.createChild("ContentNode")
+        child.title = asString(item.title)
+        child.hdPosterUrl = item.hdPosterUrl
+        child.description = item.description
+        child.addFields({
+            ratingKey: item.ratingKey,
+            key: item.key,
+            mediaType: item.mediaType,
+            duration: item.duration,
+            viewOffset: item.viewOffset,
+            year: item.year,
+            hdBackdropUrl: item.hdBackdropUrl,
+            contentRating: item.contentRating,
+            rating: item.rating
+        })
+    end for
 end sub
 
 function formatEpisodeTitle(ep as Object) as String
@@ -173,10 +302,35 @@ sub onEpisodeSelected()
     item = row.getChild(info[1])
     if item = invalid then return
 
-    m.top.playRequested = {
+    mediaType = asString(item.mediaType)
+    if mediaType = "actor" then return
+    if mediaType = "episode" then
+        m.top.playRequested = nodeToItem(item)
+    else if mediaType = "movie" or mediaType = "show" then
+        m.top.openDetails = nodeToItem(item)
+    end if
+end sub
+
+sub onRelatedSelected()
+    info = m.relatedRows.rowItemSelected
+    if info = invalid or info.count() < 2 then return
+    row = m.relatedRows.content.getChild(info[0])
+    if row = invalid then return
+    item = row.getChild(info[1])
+    if item = invalid then return
+
+    mediaType = asString(item.mediaType)
+    if mediaType = "actor" then return
+    m.top.openDetails = nodeToItem(item)
+end sub
+
+function nodeToItem(item as Object) as Object
+    return {
         title: item.title,
         description: item.description,
         year: item.year,
+        rating: item.rating,
+        contentRating: item.contentRating,
         mediaType: item.mediaType,
         ratingKey: item.ratingKey,
         key: item.key,
@@ -185,7 +339,7 @@ sub onEpisodeSelected()
         duration: item.duration,
         viewOffset: item.viewOffset
     }
-end sub
+end function
 
 sub onCloseRequested()
     if m.top.close = true then m.top.closed = true
@@ -214,6 +368,11 @@ function onKeyEvent(key as String, press as Boolean) as Boolean
         if key = "back"
             m.top.closed = true
             return true
+        else if key = "down" and m.movieActions.visible = false
+            if not m.seasonRows.hasFocus() then
+                m.seasonRows.setFocus(true)
+                return true
+            end if
         end if
         return false
     end if
@@ -226,7 +385,19 @@ function onKeyEvent(key as String, press as Boolean) as Boolean
         end if
         updateMovieButtonFocus()
         return true
+    else if key = "down"
+        if m.relatedPanel.visible = true then
+            m.relatedRows.setFocus(true)
+            return true
+        end if
+    else if key = "up"
+        if m.relatedRows.hasFocus() then
+            updateMovieButtonFocus()
+            m.top.setFocus(true)
+            return true
+        end if
     else if key = "OK"
+        if m.relatedRows.hasFocus() then return false
         if m.focusIndex = 0 then
             requestMoviePlay()
         else
