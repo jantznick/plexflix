@@ -65,7 +65,7 @@ sub onHomeLoaded()
     end if
 
     rowCount = content.getChildCount()
-    m.buildLabel.text = "v0.2.1 · " + safeToStr(rowCount) + " rows"
+    m.buildLabel.text = "v0.2.2 · " + safeToStr(rowCount) + " rows"
 
     m.rowList.content = content
     m.currentRow = -1

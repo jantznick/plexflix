@@ -81,7 +81,7 @@
             width="250"
             height="36"
             horizAlign="right"
-            text="v0.2.1"
+            text="v0.2.2"
             color="0x666666"
             font="font:SmallestSystemFont"
         />

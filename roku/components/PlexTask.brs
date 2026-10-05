@@ -108,25 +108,6 @@ function requestEncode(value as String) as String
     return transfer.Escape(value)
 end function
 
-' brs-engine/desktop: numbers often lack .toStr(); never call it blindly.
-function safeToStr(value as Dynamic) as String
-    if value = invalid then return ""
-    valueType = type(value)
-    if valueType = "String" or valueType = "roString" then return value
-    if valueType = "Integer" or valueType = "roInt" or valueType = "roInteger" or valueType = "LongInteger" then
-        return StrI(value).Trim()
-    end if
-    if valueType = "Float" or valueType = "Double" or valueType = "roFloat" or valueType = "roDouble" then
-        return Str(value).Trim()
-    end if
-    if valueType = "Boolean" or valueType = "roBoolean" then
-        if value = true then return "true"
-        return "false"
-    end if
-    ' Last resort — avoid unsupported method calls in the simulator
-    return ""
-end function
-
 function metadataToItem(cfg as Object, meta as Object) as Object
     if meta = invalid then return invalid
 
