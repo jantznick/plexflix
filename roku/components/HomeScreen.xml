@@ -11,7 +11,6 @@
     <children>
         <Rectangle width="1920" height="1080" color="0x0A0A0A" />
 
-        ' Billboard layer — slides up and off when you browse down (Netflix behavior)
         <Group id="billboard" translation="[0, 0]">
             <Poster
                 id="heroArt"
@@ -66,7 +65,6 @@
             </Group>
         </Group>
 
-        ' Persistent chrome
         <Label
             id="brandLabel"
             translation="[72, 24]"
@@ -77,7 +75,17 @@
             font="font:MediumBoldSystemFont"
         />
 
-        ' Shelves: sit low over the billboard when expanded; jump up when collapsed
+        <Label
+            id="buildLabel"
+            translation="[1600, 28]"
+            width="250"
+            height="36"
+            horizAlign="right"
+            text="v0.2.0"
+            color="0x666666"
+            font="font:SmallestSystemFont"
+        />
+
         <RowList
             id="rowList"
             translation="[0, 560]"
@@ -94,32 +102,5 @@
             drawFocusFeedback="true"
             focusBitmapUri="pkg:/images/focus_border.png"
         />
-
-        <Animation
-            id="homeAnim"
-            duration="0.28"
-            easeFunction="outCubic"
-            optional="true"
-            repeat="false"
-        >
-            <Vector2DFieldInterpolator
-                id="billboardMove"
-                key="[0.0, 1.0]"
-                keyValue="[[0, 0], [0, 0]]"
-                fieldToInterp="billboard.translation"
-            />
-            <FloatFieldInterpolator
-                id="billboardFade"
-                key="[0.0, 1.0]"
-                keyValue="[1.0, 1.0]"
-                fieldToInterp="billboard.opacity"
-            />
-            <Vector2DFieldInterpolator
-                id="rowsMove"
-                key="[0.0, 1.0]"
-                keyValue="[[0, 560], [0, 560]]"
-                fieldToInterp="rowList.translation"
-            />
-        </Animation>
     </children>
 </component>

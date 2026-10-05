@@ -218,39 +218,27 @@ function buildHome(cfg as Object) as Object
     end if
 
     root = createObject("roSGNode", "ContentNode")
+    seenTitles = {}
 
     ' Continue Watching / On Deck
     onDeck = plexGet(cfg, "/library/onDeck")
     if onDeck.ok = true then
-        appendRow(root, "Continue Watching", collectMetadata(cfg, onDeck.json))
+        addUniqueRow(root, seenTitles, "Continue Watching", collectMetadata(cfg, onDeck.json))
     end if
 
-    ' Recently Added
+    ' Recently Added (global)
     recent = plexGet(cfg, "/library/recentlyAdded")
     if recent.ok = true then
-        appendRow(root, "Recently Added", collectMetadata(cfg, recent.json))
+        addUniqueRow(root, seenTitles, "Recently Added", collectMetadata(cfg, recent.json))
     end if
 
-    ' Home hubs (richer Netflix-like shelves when available)
+    ' Home hubs
     hubs = plexGet(cfg, "/hubs/home?count=" + cfg.rowSize.toStr())
     if hubs.ok = true and hubs.json <> invalid and hubs.json.MediaContainer <> invalid then
-        hubList = hubs.json.MediaContainer.Hub
-        if hubList <> invalid then
-            if GetInterface(hubList, "ifArray") = invalid then hubList = [hubList]
-            for each hub in hubList
-                hubTitle = ""
-                if hub.title <> invalid then hubTitle = hub.title.toStr()
-                ' Skip duplicates we already added
-                if hubTitle = "Continue Watching" or hubTitle = "On Deck" or hubTitle = "Recently Added" then
-                    ' already covered
-                else if hub.Metadata <> invalid then
-                    appendRow(root, hubTitle, collectMetadata(cfg, hub))
-                end if
-            end for
-        end if
+        appendHubRows(root, seenTitles, hubs.json.MediaContainer.Hub, cfg)
     end if
 
-    ' Fallback / extra: movie + show libraries as shelves
+    ' Per-library hubs (this is what fills Netflix-like multi-shelf homes)
     sections = plexGet(cfg, "/library/sections")
     if sections.ok = true and sections.json <> invalid and sections.json.MediaContainer <> invalid then
         dirs = sections.json.MediaContainer.Directory
@@ -262,12 +250,19 @@ function buildHome(cfg as Object) as Object
                 if sectionType = "movie" or sectionType = "show" then
                     key = dir.key.toStr()
                     title = dir.title.toStr()
+
+                    sectionHubs = plexGet(cfg, "/hubs/sections/" + key + "?count=" + cfg.rowSize.toStr())
+                    if sectionHubs.ok = true and sectionHubs.json <> invalid and sectionHubs.json.MediaContainer <> invalid then
+                        appendHubRows(root, seenTitles, sectionHubs.json.MediaContainer.Hub, cfg)
+                    end if
+
+                    ' Always include a full library shelf as well
                     allItems = plexGet(cfg, "/library/sections/" + key + "/all?sort=addedAt:desc")
                     if allItems.ok = true then
                         label = title
                         if sectionType = "movie" then label = title + " · Movies"
                         if sectionType = "show" then label = title + " · TV"
-                        appendRow(root, label, collectMetadata(cfg, allItems.json))
+                        addUniqueRow(root, seenTitles, label, collectMetadata(cfg, allItems.json))
                     end if
                 end if
             end for
@@ -284,6 +279,28 @@ function buildHome(cfg as Object) as Object
 
     return { ok: true, content: root }
 end function
+
+sub appendHubRows(root as Object, seenTitles as Object, hubList as Dynamic, cfg as Object)
+    if hubList = invalid then return
+    if GetInterface(hubList, "ifArray") = invalid then hubList = [hubList]
+    for each hub in hubList
+        hubTitle = ""
+        if hub.title <> invalid then hubTitle = hub.title.toStr()
+        if hubTitle = "" then hubTitle = "Browse"
+        if hub.Metadata <> invalid then
+            addUniqueRow(root, seenTitles, hubTitle, collectMetadata(cfg, hub))
+        end if
+    end for
+end sub
+
+sub addUniqueRow(root as Object, seenTitles as Object, title as String, items as Object)
+    if items = invalid or items.count() = 0 then return
+    key = LCase(title)
+    if seenTitles.DoesExist(key) then return
+    if appendRow(root, title, items) then
+        seenTitles[key] = true
+    end if
+end sub
 
 function resolvePlayable(cfg as Object, item as Object) as Object
     if item = invalid then return { ok: false, error: "No item" }

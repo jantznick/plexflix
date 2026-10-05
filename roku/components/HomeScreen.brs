@@ -6,20 +6,24 @@ sub init()
     m.heroMeta = m.top.findNode("heroMeta")
     m.heroSummary = m.top.findNode("heroSummary")
     m.rowList = m.top.findNode("rowList")
-    m.homeAnim = m.top.findNode("homeAnim")
-    m.billboardMove = m.top.findNode("billboardMove")
-    m.billboardFade = m.top.findNode("billboardFade")
-    m.rowsMove = m.top.findNode("rowsMove")
+    m.buildLabel = m.top.findNode("buildLabel")
 
-    ' Expanded = Netflix billboard mode (first row). Collapsed = shelves take the screen.
+    ' Expanded = billboard mode. Collapsed = shelves fill the screen.
     m.expandedRowY = 560
     m.collapsedRowY = 88
-    m.heroHideY = -640
+    m.heroHideY = -700
     m.isCollapsed = false
-    m.currentRow = 0
+    m.currentRow = -1
 
     m.rowList.observeField("rowItemSelected", "onRowItemSelected")
     m.rowList.observeField("rowItemFocused", "onRowItemFocused")
+
+    ' brs-desktop sometimes misses rowItemFocused; poll as a backup
+    m.focusPoll = createObject("roSGNode", "Timer")
+    m.focusPoll.repeat = true
+    m.focusPoll.duration = 0.15
+    m.focusPoll.observeField("fire", "onFocusPoll")
+    m.focusPoll.control = "start"
 
     m.top.observeField("config", "onConfigReady")
     m.top.setFocus(true)
@@ -60,8 +64,12 @@ sub onHomeLoaded()
         return
     end if
 
+    rowCount = content.getChildCount()
+    m.buildLabel.text = "v0.2.0 · " + rowCount.toStr() + " rows"
+
     m.rowList.content = content
-    setBrowseMode(false, false)
+    m.currentRow = -1
+    setBrowseMode(false)
     m.rowList.setFocus(true)
 
     firstRow = content.getChild(0)
@@ -70,55 +78,48 @@ sub onHomeLoaded()
     end if
 end sub
 
+sub onFocusPoll()
+    applyFocusedRow(false)
+end sub
+
 sub onRowItemFocused()
+    applyFocusedRow(true)
+end sub
+
+sub applyFocusedRow(force as Boolean)
     info = m.rowList.rowItemFocused
     if info = invalid or info.count() < 2 then return
 
     rowIndex = info[0]
+    if not force and rowIndex = m.currentRow then return
+
     row = m.rowList.content.getChild(rowIndex)
     if row = invalid then return
     item = row.getChild(info[1])
     if item = invalid then return
 
     m.currentRow = rowIndex
-    ' Row 0 keeps the billboard. Any lower shelf scrolls the home surface up.
-    setBrowseMode(rowIndex > 0, true)
+    ' Any shelf below the first one hides the billboard and lifts the rails
+    setBrowseMode(rowIndex > 0)
     updateHeroContent(item)
 end sub
 
-sub setBrowseMode(collapsed as Boolean, animate as Boolean)
-    if m.isCollapsed = collapsed and animate then return
-
-    fromHero = m.billboard.translation
-    fromRows = m.rowList.translation
-    fromOpacity = m.billboard.opacity
-
+sub setBrowseMode(collapsed as Boolean)
+    ' IMPORTANT: set properties directly. SceneGraph Animation is unreliable in brs-desktop.
     if collapsed then
-        toHero = [0, m.heroHideY]
-        toRows = [0, m.collapsedRowY]
-        toOpacity = 0.0
+        m.billboard.translation = [0, m.heroHideY]
+        m.billboard.opacity = 0.0
+        m.billboard.visible = false
         m.heroCopy.visible = false
+        m.rowList.translation = [0, m.collapsedRowY]
     else
-        toHero = [0, 0]
-        toRows = [0, m.expandedRowY]
-        toOpacity = 1.0
+        m.billboard.visible = true
+        m.billboard.opacity = 1.0
+        m.billboard.translation = [0, 0]
         m.heroCopy.visible = true
+        m.rowList.translation = [0, m.expandedRowY]
     end if
-
     m.isCollapsed = collapsed
-
-    if not animate then
-        m.homeAnim.control = "stop"
-        m.billboard.translation = toHero
-        m.billboard.opacity = toOpacity
-        m.rowList.translation = toRows
-        return
-    end if
-
-    m.billboardMove.keyValue = [fromHero, toHero]
-    m.rowsMove.keyValue = [fromRows, toRows]
-    m.billboardFade.keyValue = [fromOpacity, toOpacity]
-    m.homeAnim.control = "start"
 end sub
 
 sub updateHeroContent(item as Object)
@@ -193,9 +194,17 @@ sub onRowItemSelected()
 end sub
 
 function onKeyEvent(key as String, press as Boolean) as Boolean
-    if press and key = "OK" and not m.rowList.hasFocus() then
+    if not press then return false
+
+    if key = "OK" and not m.rowList.hasFocus() then
         m.rowList.setFocus(true)
         return true
     end if
+
+    ' Extra insurance if RowList swallows focus events in the simulator
+    if key = "down" or key = "up" then
+        applyFocusedRow(true)
+    end if
+
     return false
 end function
