@@ -6,13 +6,18 @@ sub init()
     m.summaryLabel = m.top.findNode("summaryLabel")
 
     m.movieActions = m.top.findNode("movieActions")
+    m.playBtn = m.top.findNode("playBtn")
+    m.backBtn = m.top.findNode("backBtn")
     m.playBg = m.top.findNode("playBg")
     m.backBg = m.top.findNode("backBg")
     m.playLabel = m.top.findNode("playLabel")
+    m.unavailablePanel = m.top.findNode("unavailablePanel")
+    m.unavailableBody = m.top.findNode("unavailableBody")
 
     m.tvPanel = m.top.findNode("tvPanel")
     m.seasonRows = m.top.findNode("seasonRows")
     m.seasonRows.observeField("rowItemSelected", "onEpisodeSelected")
+    m.seasonRows.observeField("rowItemFocused", "onSeasonItemFocused")
     m.seasonRows.observeField("escapeUp", "onSeasonEscapeUp")
     m.seasonRows.observeField("escapeBack", "onEscapeBack")
 
@@ -25,6 +30,7 @@ sub init()
 
     m.focusIndex = 0
     m.isShow = false
+    m.isUnavailable = false
     m.seasons = []
     m.seasonQueue = 0
     m.seasonContent = invalid
@@ -32,6 +38,8 @@ sub init()
     m.relatedContent = invalid
     m.focusEpisodeKey = ""
     m.focusSeasonKey = ""
+    m.showHeader = invalid
+    m.headerMode = "show"
 
     updateMovieButtonFocus()
 end sub
@@ -43,20 +51,12 @@ sub onContentSet()
     m.focusEpisodeKey = asString(item.focusEpisodeKey)
     m.focusSeasonKey = asString(item.focusSeasonKey)
 
-    m.titleLabel.text = asString(item.title)
-    m.summaryLabel.text = asString(item.description)
-    if m.softStatus <> invalid then m.softStatus.text = ""
+    m.isUnavailable = false
+    if item.DoesExist("isDiscover") and item.isDiscover = true then m.isUnavailable = true
+    if item.DoesExist("unavailable") and item.unavailable = true then m.isUnavailable = true
 
-    metaBits = []
-    year = asString(item.year)
-    if year <> "" then metaBits.push(year)
-    contentRating = asString(item.contentRating)
-    if contentRating <> "" then metaBits.push(contentRating)
-    rating = asString(item.rating)
-    if rating <> "" then metaBits.push(rating + " ★")
-    mediaType = asString(item.mediaType)
-    if mediaType <> "" then metaBits.push(titleCaseType(mediaType))
-    m.metaLabel.text = joinStrings(metaBits, "  ·  ")
+    applyShowHeader(item)
+    rememberShowHeader()
 
     if item.hdBackdropUrl <> invalid and item.hdBackdropUrl <> "" then
         m.backdrop.uri = item.hdBackdropUrl
@@ -65,8 +65,13 @@ sub onContentSet()
         m.poster.uri = item.hdPosterUrl
     end if
 
+    mediaType = asString(item.mediaType)
     m.isShow = (mediaType = "show" or mediaType = "season")
-    if mediaType = "show" then
+
+    if m.isUnavailable then
+        showUnavailableMode(item)
+        loadUnavailableDetail(item)
+    else if mediaType = "show" then
         showTvMode()
         loadChildren(item, "seasons")
         loadExtras(item)
@@ -84,8 +89,119 @@ sub onContentSet()
     end if
 end sub
 
+sub applyShowHeader(item as Object)
+    if item = invalid then return
+    m.titleLabel.text = asString(item.title)
+    m.summaryLabel.text = asString(item.description)
+    if m.softStatus <> invalid then m.softStatus.text = ""
+
+    metaBits = []
+    year = asString(item.year)
+    if year <> "" then metaBits.push(year)
+    contentRating = asString(item.contentRating)
+    if contentRating <> "" then metaBits.push(contentRating)
+    rating = asString(item.rating)
+    if rating <> "" then metaBits.push(rating + " ★")
+    mediaType = asString(item.mediaType)
+    if mediaType <> "" then metaBits.push(titleCaseType(mediaType))
+    m.metaLabel.text = joinStrings(metaBits, "  ·  ")
+    m.headerMode = "show"
+end sub
+
+sub rememberShowHeader()
+    m.showHeader = {
+        title: m.titleLabel.text,
+        meta: m.metaLabel.text,
+        summary: m.summaryLabel.text,
+        backdrop: ""
+    }
+    if m.backdrop <> invalid and m.backdrop.uri <> invalid then
+        m.showHeader.backdrop = m.backdrop.uri
+    end if
+end sub
+
+sub restoreShowHeader()
+    if m.showHeader = invalid then return
+    m.titleLabel.text = asString(m.showHeader.title)
+    m.metaLabel.text = asString(m.showHeader.meta)
+    m.summaryLabel.text = asString(m.showHeader.summary)
+    if asString(m.showHeader.backdrop) <> "" and m.backdrop <> invalid then
+        m.backdrop.uri = m.showHeader.backdrop
+    end if
+    m.headerMode = "show"
+end sub
+
+sub applyEpisodeHeader(ep as Object)
+    if ep = invalid then return
+
+    epTitle = asString(ep.shortTitle)
+    if epTitle = "" then epTitle = asString(ep.title)
+    showTitle = ""
+    if m.showHeader <> invalid then showTitle = asString(m.showHeader.title)
+    if showTitle = "" and m.top.content <> invalid then showTitle = asString(m.top.content.title)
+
+    seasonNo = asString(ep.parentIndex)
+    epNo = asString(ep.index)
+    headline = epTitle
+    if showTitle <> "" and epTitle <> "" then
+        if seasonNo <> "" and epNo <> "" then
+            headline = showTitle + " — S" + seasonNo + "E" + epNo + " " + epTitle
+        else
+            headline = showTitle + " — " + epTitle
+        end if
+    end if
+    m.titleLabel.text = headline
+
+    metaBits = []
+    year = asString(ep.year)
+    if year <> "" then metaBits.push(year)
+    if m.top.content <> invalid then
+        contentRating = asString(m.top.content.contentRating)
+        if contentRating <> "" then metaBits.push(contentRating)
+    end if
+    if seasonNo <> "" and epNo <> "" then
+        metaBits.push("S" + seasonNo + " · E" + epNo)
+    end if
+    metaBits.push("Episode")
+    m.metaLabel.text = joinStrings(metaBits, "  ·  ")
+
+    summary = asString(ep.description)
+    if summary = "" and m.showHeader <> invalid then summary = asString(m.showHeader.summary)
+    m.summaryLabel.text = summary
+
+    if asString(ep.hdBackdropUrl) <> "" and m.backdrop <> invalid then
+        m.backdrop.uri = ep.hdBackdropUrl
+    end if
+    m.headerMode = "episode"
+end sub
+
+sub onSeasonItemFocused()
+    info = m.seasonRows.rowItemFocused
+    if info = invalid or info.count() < 2 then return
+    if m.seasonRows.content = invalid then return
+    row = m.seasonRows.content.getChild(info[0])
+    if row = invalid then return
+    item = row.getChild(info[1])
+    if item = invalid then return
+
+    mediaType = asString(item.mediaType)
+    if mediaType = "episode" then
+        applyEpisodeHeader(item)
+    else
+        ' Cast / other rows under the same list — show synopsis again
+        restoreShowHeader()
+    end if
+end sub
+
 sub showTvMode()
+    m.isUnavailable = false
     m.movieActions.visible = true
+    if m.unavailablePanel <> invalid then m.unavailablePanel.visible = false
+    if m.playBtn <> invalid then m.playBtn.visible = true
+    if m.backBtn <> invalid then m.backBtn.translation = [248, 0]
+    m.movieActions.translation = [248, 240]
+    if m.softStatus <> invalid then m.softStatus.translation = [248, 346]
+    if m.relatedPanel <> invalid then m.relatedPanel.translation = [0, 400]
     m.relatedPanel.visible = false
     m.tvPanel.visible = true
     m.playLabel.text = "Play"
@@ -95,13 +211,20 @@ sub showTvMode()
     m.titleLabel.translation = [248, 12]
     m.metaLabel.translation = [248, 92]
     m.summaryLabel.translation = [248, 136]
-    m.summaryLabel.height = 72
+    m.summaryLabel.height = 88
     m.focusIndex = 0
     updateMovieButtonFocus()
 end sub
 
 sub showMovieMode()
+    m.isUnavailable = false
     m.movieActions.visible = true
+    if m.unavailablePanel <> invalid then m.unavailablePanel.visible = false
+    if m.playBtn <> invalid then m.playBtn.visible = true
+    if m.backBtn <> invalid then m.backBtn.translation = [248, 0]
+    m.movieActions.translation = [248, 240]
+    if m.softStatus <> invalid then m.softStatus.translation = [248, 346]
+    if m.relatedPanel <> invalid then m.relatedPanel.translation = [0, 400]
     m.tvPanel.visible = false
     m.relatedPanel.visible = false
     m.playLabel.text = "Play"
@@ -111,9 +234,108 @@ sub showMovieMode()
     m.titleLabel.translation = [248, 12]
     m.metaLabel.translation = [248, 92]
     m.summaryLabel.translation = [248, 136]
+    m.summaryLabel.height = 88
     m.relatedContent = createObject("roSGNode", "ContentNode")
     m.relatedRows.content = m.relatedContent
     m.focusIndex = 0
+    updateMovieButtonFocus()
+    m.top.setFocus(true)
+end sub
+
+sub showUnavailableMode(item as Object)
+    m.isUnavailable = true
+    m.isShow = false
+    m.tvPanel.visible = false
+    m.relatedPanel.visible = false
+    m.movieActions.visible = true
+    if m.playBtn <> invalid then m.playBtn.visible = false
+    if m.backBtn <> invalid then m.backBtn.translation = [0, 0]
+    m.movieActions.translation = [248, 348]
+    if m.softStatus <> invalid then m.softStatus.translation = [248, 420]
+    if m.relatedPanel <> invalid then m.relatedPanel.translation = [0, 450]
+    if m.unavailablePanel <> invalid then m.unavailablePanel.visible = true
+
+    if m.unavailableBody <> invalid then m.unavailableBody.text = unavailableMessage(item)
+    if m.softStatus <> invalid then m.softStatus.text = "Looking up details & similar titles…"
+
+    m.relatedContent = createObject("roSGNode", "ContentNode")
+    m.relatedRows.content = m.relatedContent
+    m.focusIndex = 1
+    updateMovieButtonFocus()
+    m.top.setFocus(true)
+end sub
+
+function unavailableMessage(item as Object) as String
+    mt = ""
+    if item <> invalid then mt = asString(item.mediaType)
+    if mt = "show" or mt = "series" or mt = "tv" then
+        return "We don't have this show yet — but we can get it soon."
+    else if mt = "movie" then
+        return "We don't have this movie yet — but we can get it soon."
+    end if
+    return "We don't have this one yet — but we can get it soon."
+end function
+
+sub loadUnavailableDetail(item as Object)
+    if m.softStatus <> invalid then m.softStatus.text = "Looking up details & similar titles…"
+    m.extrasTask = createObject("roSGNode", "PlexTask")
+    m.extrasTask.config = m.top.config
+    m.extrasTask.action = "unavailableDetail"
+    m.extrasTask.item = item
+    m.extrasTask.observeField("response", "onUnavailableLoaded")
+    m.extrasTask.control = "RUN"
+end sub
+
+sub onUnavailableLoaded()
+    response = m.extrasTask.response
+    if m.softStatus <> invalid then m.softStatus.text = ""
+    if response = invalid or response.ok <> true then
+        if m.softStatus <> invalid then m.softStatus.text = "Couldn't load extra details — try similar picks below if any"
+        return
+    end if
+
+    detail = response.detail
+    if detail <> invalid then
+        applyShowHeader(detail)
+        if asString(detail.hdPosterUrl) <> "" then m.poster.uri = detail.hdPosterUrl
+        if asString(detail.hdBackdropUrl) <> "" then m.backdrop.uri = detail.hdBackdropUrl
+        rememberShowHeader()
+        if m.unavailableBody <> invalid then m.unavailableBody.text = unavailableMessage(detail)
+    end if
+
+    castItems = response.cast
+    similarItems = response.similar
+    if castItems = invalid then castItems = []
+    if similarItems = invalid then similarItems = []
+
+    if m.relatedContent = invalid then
+        m.relatedContent = createObject("roSGNode", "ContentNode")
+    end if
+    while m.relatedContent.getChildCount() > 0
+        m.relatedContent.removeChildIndex(0)
+    end while
+
+    if similarItems.count() > 0 then
+        appendItemsRow(m.relatedContent, "In your library", similarItems)
+    end if
+    if castItems.count() > 0 then
+        appendItemsRow(m.relatedContent, "Cast", castItems)
+    end if
+    m.relatedRows.content = m.relatedContent
+    if similarItems.count() > 0 or castItems.count() > 0 then
+        m.relatedPanel.visible = true
+        if m.softStatus <> invalid then
+            if similarItems.count() > 0 then
+                m.softStatus.text = "Similar titles already in your library ↓"
+            else
+                m.softStatus.text = ""
+            end if
+        end if
+    else if m.softStatus <> invalid then
+        m.softStatus.text = "No close matches in your library yet"
+    end if
+
+    m.focusIndex = 1
     updateMovieButtonFocus()
     m.top.setFocus(true)
 end sub
@@ -243,7 +465,8 @@ sub fillSeasonRow(index as Integer, season as Object, episodes as Object)
             year: ep.year,
             hdBackdropUrl: ep.hdBackdropUrl,
             shortTitle: ep.shortTitle,
-            index: ep.index
+            index: ep.index,
+            parentIndex: ep.parentIndex
         })
     end for
 
@@ -307,7 +530,8 @@ sub appendSeasonRow(season as Object, episodes as Object)
             year: ep.year,
             hdBackdropUrl: ep.hdBackdropUrl,
             shortTitle: ep.shortTitle,
-            index: ep.index
+            index: ep.index,
+            parentIndex: ep.parentIndex
         })
     end for
 
@@ -322,20 +546,27 @@ sub onExtrasLoaded()
     ' Enrich header from full metadata (important when opened from Continue Watching episode)
     detail = response.detail
     if detail <> invalid then
-        if asString(detail.title) <> "" then m.titleLabel.text = asString(detail.title)
-        if asString(detail.description) <> "" then m.summaryLabel.text = asString(detail.description)
         if asString(detail.hdPosterUrl) <> "" then m.poster.uri = detail.hdPosterUrl
+        ' Always refresh the cached show synopsis; only paint it if we aren't
+        ' currently previewing a focused episode.
+        prevMode = m.headerMode
+        applyShowHeader(detail)
         if asString(detail.hdBackdropUrl) <> "" then m.backdrop.uri = detail.hdBackdropUrl
-        metaBits = []
-        year = asString(detail.year)
-        if year <> "" then metaBits.push(year)
-        contentRating = asString(detail.contentRating)
-        if contentRating <> "" then metaBits.push(contentRating)
-        rating = asString(detail.rating)
-        if rating <> "" then metaBits.push(rating + " ★")
-        mediaType = asString(detail.mediaType)
-        if mediaType <> "" then metaBits.push(titleCaseType(mediaType))
-        if metaBits.count() > 0 then m.metaLabel.text = joinStrings(metaBits, "  ·  ")
+        rememberShowHeader()
+        if prevMode = "episode" then
+            ' Re-apply episode copy after the show cache refresh
+            info = invalid
+            if m.seasonRows <> invalid then info = m.seasonRows.rowItemFocused
+            if info <> invalid and info.count() >= 2 and m.seasonRows.content <> invalid then
+                row = m.seasonRows.content.getChild(info[0])
+                if row <> invalid then
+                    ep = row.getChild(info[1])
+                    if ep <> invalid and asString(ep.mediaType) = "episode" then
+                        applyEpisodeHeader(ep)
+                    end if
+                end if
+            end if
+        end if
     end if
 
     castItems = response.cast
@@ -434,6 +665,8 @@ sub onRelatedSelected()
 end sub
 
 function nodeToItem(item as Object) as Object
+    isDiscover = false
+    if item.DoesExist("isDiscover") and item.isDiscover = true then isDiscover = true
     return {
         title: item.title,
         description: item.description,
@@ -448,7 +681,8 @@ function nodeToItem(item as Object) as Object
         duration: item.duration,
         viewOffset: item.viewOffset,
         personId: item.personId,
-        shortTitle: item.shortTitle
+        shortTitle: item.shortTitle,
+        isDiscover: isDiscover
     }
 end function
 
@@ -457,6 +691,13 @@ sub onCloseRequested()
 end sub
 
 sub updateMovieButtonFocus()
+    if m.isUnavailable = true then
+        ' Only Back is actionable
+        m.focusIndex = 1
+        m.backBg.color = "0xE50914"
+        if m.top.findNode("backShadow") <> invalid then m.top.findNode("backShadow").opacity = 0.5
+        return
+    end if
     if m.focusIndex = 0 then
         m.playBg.color = "0xE50914"
         m.backBg.color = "0x2A2A32"
@@ -499,6 +740,7 @@ sub onSeasonEscapeUp()
 end sub
 
 sub requestMoviePlay()
+    if m.isUnavailable = true then return
     item = m.top.content
     if item = invalid then return
 
@@ -536,6 +778,7 @@ function onKeyEvent(key as String, press as Boolean) as Boolean
     end if
 
     if key = "left" or key = "right"
+        if m.isUnavailable = true then return true
         if m.focusIndex = 0 then
             m.focusIndex = 1
         else
@@ -554,6 +797,10 @@ function onKeyEvent(key as String, press as Boolean) as Boolean
     else if key = "up"
         return true
     else if key = "OK"
+        if m.isUnavailable = true then
+            m.top.closed = true
+            return true
+        end if
         if m.focusIndex = 0 then
             requestMoviePlay()
         else
@@ -561,6 +808,7 @@ function onKeyEvent(key as String, press as Boolean) as Boolean
         end if
         return true
     else if key = "play"
+        if m.isUnavailable = true then return true
         requestMoviePlay()
         return true
     end if
