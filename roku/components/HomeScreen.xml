@@ -81,7 +81,7 @@
             width="250"
             height="36"
             horizAlign="right"
-            text="v0.2.2"
+            text="v0.3.0"
             color="0x666666"
             font="font:SmallestSystemFont"
         />
@@ -99,8 +99,8 @@
             rowLabelOffset="[[72, 2]]"
             rowFocusAnimationStyle="fixedFocus"
             focusXOffset="[72]"
-            drawFocusFeedback="true"
-            focusBitmapUri="pkg:/images/focus_border.png"
+            drawFocusFeedback="false"
+            focusXOffset="[72]"
         />
     </children>
 </component>

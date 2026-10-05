@@ -18,24 +18,24 @@
             width="1920"
             height="1080"
             loadDisplayMode="scaleToFill"
-            opacity="0.35"
+            opacity="0.30"
         />
-        <Rectangle width="1920" height="1080" color="0x0A0A0A" opacity="0.55" />
+        <Rectangle width="1920" height="1080" color="0x0A0A0A" opacity="0.60" />
 
         <Poster
             id="poster"
-            translation="[120, 160]"
-            width="420"
-            height="630"
+            translation="[80, 120]"
+            width="360"
+            height="540"
             loadDisplayMode="scaleToZoom"
             uri="pkg:/images/poster_placeholder.png"
         />
 
         <Label
             id="titleLabel"
-            translation="[620, 180]"
-            width="1160"
-            height="90"
+            translation="[500, 100]"
+            width="1320"
+            height="70"
             color="0xFFFFFF"
             font="font:LargeBoldSystemFont"
             wrap="true"
@@ -43,59 +43,113 @@
         />
         <Label
             id="metaLabel"
-            translation="[620, 290]"
-            width="1160"
-            height="40"
+            translation="[500, 180]"
+            width="1320"
+            height="36"
             color="0xB3B3B3"
-            font="font:MediumSystemFont"
+            font="font:SmallSystemFont"
         />
         <Label
             id="summaryLabel"
-            translation="[620, 360]"
-            width="1100"
-            height="240"
-            color="0xE5E5E5"
+            translation="[500, 230]"
+            width="1280"
+            height="110"
+            color="0xD6D6D6"
             font="font:SmallSystemFont"
             wrap="true"
-            maxLines="8"
-            lineSpacing="6"
+            maxLines="3"
+            lineSpacing="4"
         />
 
-        <Group id="playBtn" translation="[620, 650]">
-            <Rectangle id="playBg" width="220" height="64" color="0xE50914" />
-            <Label
-                id="playLabel"
-                width="220"
-                height="64"
-                horizAlign="center"
-                vertAlign="center"
-                text="Play"
-                color="0xFFFFFF"
-                font="font:MediumBoldSystemFont"
-            />
+        ' Movie actions
+        <Group id="movieActions" translation="[500, 370]" visible="true">
+            <Group id="playBtn" translation="[0, 0]">
+                <Rectangle id="playBg" width="240" height="64" color="0xE50914" />
+                <Label
+                    id="playLabel"
+                    width="240"
+                    height="64"
+                    horizAlign="center"
+                    vertAlign="center"
+                    text="Play"
+                    color="0xFFFFFF"
+                    font="font:MediumBoldSystemFont"
+                />
+            </Group>
+            <Group id="backBtn" translation="[260, 0]">
+                <Rectangle id="backBg" width="180" height="64" color="0x2A2A2A" />
+                <Label
+                    id="backLabel"
+                    width="180"
+                    height="64"
+                    horizAlign="center"
+                    vertAlign="center"
+                    text="Back"
+                    color="0xFFFFFF"
+                    font="font:MediumSystemFont"
+                />
+            </Group>
         </Group>
 
-        <Group id="backBtn" translation="[868, 650]">
-            <Rectangle id="backBg" width="180" height="64" color="0x2A2A2A" />
+        ' TV show browse
+        <Group id="tvPanel" translation="[500, 360]" visible="false">
             <Label
-                id="backLabel"
-                width="180"
-                height="64"
-                horizAlign="center"
-                vertAlign="center"
-                text="Back"
+                id="seasonHeading"
+                width="400"
+                height="36"
+                text="Seasons"
                 color="0xFFFFFF"
-                font="font:MediumSystemFont"
+                font="font:SmallBoldSystemFont"
+            />
+            <LabelList
+                id="seasonList"
+                translation="[0, 40]"
+                itemSize="[320, 52]"
+                itemSpacing="[0, 6]"
+                numRows="8"
+                color="0xCCCCCC"
+                focusedColor="0xFFFFFF"
+                drawFocusFeedback="true"
+            />
+
+            <Label
+                id="episodeHeading"
+                translation="[360, 0]"
+                width="900"
+                height="36"
+                text="Episodes"
+                color="0xFFFFFF"
+                font="font:SmallBoldSystemFont"
+            />
+            <LabelList
+                id="episodeList"
+                translation="[360, 40]"
+                itemSize="[980, 56]"
+                itemSpacing="[0, 4]"
+                numRows="9"
+                color="0xCCCCCC"
+                focusedColor="0xFFFFFF"
+                drawFocusFeedback="true"
+            />
+
+            <Label
+                id="tvHint"
+                translation="[0, 520]"
+                width="1340"
+                height="40"
+                text="Left/Right switch lists  •  OK plays episode  •  Back returns"
+                color="0x808080"
+                font="font:SmallestSystemFont"
             />
         </Group>
 
         <Label
-            id="hintLabel"
-            translation="[620, 740]"
-            width="1100"
+            id="statusLabel"
+            translation="[500, 980]"
+            width="1300"
             height="40"
-            text="OK to play  •  Back to return"
-            color="0x808080"
+            text=""
+            color="0xAAAAAA"
             font="font:SmallestSystemFont"
         />
     </children>

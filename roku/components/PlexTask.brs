@@ -11,6 +11,8 @@ sub exec()
         m.top.response = buildHome(cfg)
     else if action = "resolvePlayable" then
         m.top.response = resolvePlayable(cfg, m.top.item)
+    else if action = "children" then
+        m.top.response = fetchChildren(cfg, m.top.item)
     else if action = "streamUrl" then
         m.top.response = buildStreamUrl(cfg, m.top.item)
     else
@@ -120,15 +122,16 @@ function metadataToItem(cfg as Object, meta as Object) as Object
 
     ratingKey = safeToStr(meta.ratingKey)
     key = safeToStr(meta.key)
-    title = safeToStr(meta.title)
+    rawTitle = safeToStr(meta.title)
+    title = rawTitle
 
-    ' Episodes: prefer grandparent/parent context in title
+    ' Episodes: prefer grandparent/parent context in title for home shelves
     if mediaType = "episode" then
         showTitle = safeToStr(meta.grandparentTitle)
         season = safeToStr(meta.parentIndex)
         episode = safeToStr(meta.index)
         if showTitle <> "" then
-            title = showTitle + " — S" + season + "E" + episode + " " + title
+            title = showTitle + " — S" + season + "E" + episode + " " + rawTitle
         end if
         if meta.grandparentThumb <> invalid and thumb = "" then thumb = safeToStr(meta.grandparentThumb)
         if meta.grandparentArt <> invalid and art = "" then art = safeToStr(meta.grandparentArt)
@@ -151,8 +154,20 @@ function metadataToItem(cfg as Object, meta as Object) as Object
     viewOffset = 0
     if meta.viewOffset <> invalid then viewOffset = meta.viewOffset
 
+    indexVal = ""
+    parentIndexVal = ""
+    if meta.index <> invalid then indexVal = safeToStr(meta.index)
+    if meta.parentIndex <> invalid then parentIndexVal = safeToStr(meta.parentIndex)
+
+    ' Seasons often arrive as "Season 1" already; if blank, synthesize
+    if mediaType = "season" and title = "" and indexVal <> "" then
+        title = "Season " + indexVal
+        rawTitle = title
+    end if
+
     return {
         title: title,
+        shortTitle: rawTitle,
         description: description,
         year: year,
         rating: rating,
@@ -165,7 +180,9 @@ function metadataToItem(cfg as Object, meta as Object) as Object
         duration: duration,
         viewOffset: viewOffset,
         leafCount: meta.leafCount,
-        childCount: meta.childCount
+        childCount: meta.childCount,
+        index: indexVal,
+        parentIndex: parentIndexVal
     }
 end function
 
@@ -344,6 +361,18 @@ function resolvePlayable(cfg as Object, item as Object) as Object
     end if
 
     return { ok: false, error: "Could not find a playable episode" }
+end function
+
+function fetchChildren(cfg as Object, item as Object) as Object
+    if item = invalid then return { ok: false, error: "No item" }
+    ratingKey = safeToStr(item.ratingKey)
+    if ratingKey = "" then return { ok: false, error: "Missing ratingKey" }
+
+    result = plexGet(cfg, "/library/metadata/" + ratingKey + "/children")
+    if result.ok <> true then return result
+
+    items = collectMetadata(cfg, result.json)
+    return { ok: true, items: items }
 end function
 
 function buildStreamUrl(cfg as Object, item as Object) as Object

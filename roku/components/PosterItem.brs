@@ -1,16 +1,33 @@
 sub init()
     m.poster = m.top.findNode("poster")
+    m.focusTop = m.top.findNode("focusTop")
+    m.focusBottom = m.top.findNode("focusBottom")
+    m.focusLeft = m.top.findNode("focusLeft")
+    m.focusRight = m.top.findNode("focusRight")
+    m.focusAccent = m.top.findNode("focusAccent")
     m.progressBg = m.top.findNode("progressBg")
     m.progressFg = m.top.findNode("progressFg")
     m.itemWidth = 148
     m.itemHeight = 222
+    setFocused(false)
 end sub
 
 sub onSizeChange()
     if m.top.width > 0 then m.itemWidth = m.top.width
     if m.top.height > 0 then m.itemHeight = m.top.height
+
     m.poster.width = m.itemWidth
     m.poster.height = m.itemHeight
+
+    m.focusTop.width = m.itemWidth + 8
+    m.focusBottom.width = m.itemWidth + 8
+    m.focusBottom.translation = [-4, m.itemHeight]
+    m.focusLeft.height = m.itemHeight + 8
+    m.focusRight.height = m.itemHeight + 8
+    m.focusRight.translation = [m.itemWidth, -4]
+    m.focusAccent.width = m.itemWidth + 8
+    m.focusAccent.translation = [-4, m.itemHeight]
+
     m.progressBg.width = m.itemWidth
     m.progressBg.translation = [0, m.itemHeight - 5]
     m.progressFg.translation = [0, m.itemHeight - 5]
@@ -56,5 +73,18 @@ sub refreshProgress()
 end sub
 
 sub onFocusPercentChange()
-    ' Keep MVP simple — RowList focus bitmap handles the chrome.
+    setFocused(m.top.focusPercent > 0.5)
+end sub
+
+sub setFocused(focused as Boolean)
+    m.focusTop.visible = focused
+    m.focusBottom.visible = focused
+    m.focusLeft.visible = focused
+    m.focusRight.visible = focused
+    m.focusAccent.visible = focused
+    if focused then
+        m.poster.opacity = 1.0
+    else
+        m.poster.opacity = 0.72
+    end if
 end sub
