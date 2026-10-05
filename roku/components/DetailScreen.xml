@@ -15,43 +15,43 @@
     <children>
         <Rectangle width="1920" height="1080" color="0x07070B" />
 
-        <!-- Full-bleed hero — taller art plane (rails sit lower) -->
+        <!-- Full-bleed hero — taller visible art plane -->
         <Poster
             id="backdrop"
             width="1920"
-            height="780"
+            height="680"
             loadDisplayMode="scaleToZoom"
             loadWidth="1920"
             loadHeight="1080"
             opacity="1"
         />
         <!-- Soft washes only — no hard vertical panel -->
-        <Rectangle width="1920" height="780" color="0x07070B" opacity="0.14" />
-        <Rectangle width="1920" height="260" translation="[0, 520]" color="0x07070B" opacity="0.55" />
-        <Rectangle width="1920" height="180" translation="[0, 640]" color="0x07070B" opacity="0.82" />
+        <Rectangle width="1920" height="680" color="0x07070B" opacity="0.14" />
+        <Rectangle width="1920" height="240" translation="[0, 440]" color="0x07070B" opacity="0.55" />
+        <Rectangle width="1920" height="160" translation="[0, 560]" color="0x07070B" opacity="0.82" />
 
         <Group id="frame" translation="[96, 56]">
-            <Rectangle width="232" height="348" translation="[8, 10]" color="0x000000" opacity="0.55" />
+            <Rectangle width="216" height="324" translation="[8, 10]" color="0x000000" opacity="0.55" />
             <Poster
                 id="poster"
                 translation="[0, 0]"
-                width="224"
-                height="336"
+                width="210"
+                height="315"
                 loadDisplayMode="scaleToZoom"
                 uri="pkg:/images/poster_placeholder.png"
             />
 
-            <Label id="titleLabel" translation="[264, 12]" width="1430" height="70" color="0xFFFFFF" wrap="true" maxLines="2">
-                <Font role="font" uri="pkg:/fonts/Outfit-Bold.ttf" size="52" />
+            <Label id="titleLabel" translation="[248, 12]" width="1450" height="70" color="0xFFFFFF" wrap="true" maxLines="2">
+                <Font role="font" uri="pkg:/fonts/Outfit-Bold.ttf" size="50" />
             </Label>
-            <Label id="metaLabel" translation="[264, 92]" width="1430" height="32" color="0xA8A8B0">
+            <Label id="metaLabel" translation="[248, 92]" width="1450" height="32" color="0xA8A8B0">
                 <Font role="font" uri="pkg:/fonts/Outfit-Medium.ttf" size="22" />
             </Label>
-            <Label id="summaryLabel" translation="[264, 136]" width="1380" height="80" color="0xD0D0D6" wrap="true" maxLines="2" lineSpacing="5">
+            <Label id="summaryLabel" translation="[248, 136]" width="1400" height="80" color="0xD0D0D6" wrap="true" maxLines="2" lineSpacing="5">
                 <Font role="font" uri="pkg:/fonts/Outfit-Regular.ttf" size="22" />
             </Label>
 
-            <Group id="movieActions" translation="[264, 240]" visible="true">
+            <Group id="movieActions" translation="[248, 240]" visible="true">
                 <Group id="playBtn" translation="[0, 0]">
                     <Rectangle id="playShadow" width="228" height="60" translation="[4, 5]" color="0x000000" opacity="0.45" />
                     <Rectangle id="playBg" width="220" height="56" color="0xE50914" />
@@ -68,12 +68,12 @@
                 </Group>
             </Group>
 
-            <Label id="softStatus" translation="[264, 316]" width="1200" height="28" text="" color="0x666670">
+            <Label id="softStatus" translation="[248, 316]" width="1200" height="28" text="" color="0x666670">
                 <Font role="font" uri="pkg:/fonts/Outfit-Regular.ttf" size="18" />
             </Label>
 
-            <!-- Rails sit lower so more hero art stays visible -->
-            <Group id="tvPanel" translation="[0, 470]" visible="false">
+            <!-- Rails sit so next row can clip at bottom -->
+            <Group id="tvPanel" translation="[0, 400]" visible="false">
                 <ShelfRowList
                     id="seasonRows"
                     translation="[0, 0]"
@@ -91,7 +91,7 @@
                 />
             </Group>
 
-            <Group id="relatedPanel" translation="[0, 470]" visible="false">
+            <Group id="relatedPanel" translation="[0, 400]" visible="false">
                 <ShelfRowList
                     id="relatedRows"
                     translation="[0, 0]"

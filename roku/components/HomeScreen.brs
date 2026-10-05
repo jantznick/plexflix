@@ -18,10 +18,10 @@ sub init()
 
     ' Active shelf is ALWAYS the RowList focus slot — never the peek strip.
     ' rowsClip clips away RowList's native previous-row peek (which was aligned + moved).
-    m.expandedRowY = 640
+    m.expandedRowY = 560
     m.collapsedRowY = 130
     m.rowsX = 96
-    m.heroHideY = -800
+    m.heroHideY = -700
     m.isCollapsed = false
     m.currentRow = -1
     m.tileStep = 172
@@ -31,7 +31,7 @@ sub init()
         m.heroArt.loadWidth = 1920
         m.heroArt.loadHeight = 1080
         m.heroArt.width = 1920
-        m.heroArt.height = 780
+        m.heroArt.height = 680
         m.heroArt.translation = [0, 0]
     end if
 
@@ -251,8 +251,7 @@ sub applyBrowseModeSnap()
 end sub
 
 sub updateHeroContent(item as Object)
-    ' Same treatment as DetailScreen: landscape backdrop only.
-    ' Never shove a vertical poster into the billboard (that warps / seams).
+    ' Same plane as DetailScreen: landscape backdrop. Fall back only if art missing.
     if m.heroArt <> invalid then
         m.heroArt.loadDisplayMode = "scaleToZoom"
         m.heroArt.loadWidth = 1920
@@ -265,8 +264,12 @@ sub updateHeroContent(item as Object)
     uri = ""
     if item.hdBackdropUrl <> invalid and item.hdBackdropUrl <> "" then
         uri = item.hdBackdropUrl
+    else if item.hdShowPosterUrl <> invalid and item.hdShowPosterUrl <> "" then
+        uri = item.hdShowPosterUrl
+    else if item.hdPosterUrl <> invalid then
+        uri = item.hdPosterUrl
     end if
-    if m.heroArt <> invalid then m.heroArt.uri = uri
+    if m.heroArt <> invalid and uri <> "" then m.heroArt.uri = uri
 
     m.heroTitle.text = asString(item.title)
 

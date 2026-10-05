@@ -19,22 +19,22 @@
         </Group>
 
         <Group id="frame" translation="[0, 0]" visible="false" clippingRect="[0, 0, 1920, 1080]">
-            <!-- Match DetailScreen: landscape backdrop plane + soft washes (no left panel — that seams) -->
+            <!-- Same landscape plane + soft washes as DetailScreen (no left panel) -->
             <Group id="billboard" translation="[0, 0]">
                 <Poster
                     id="heroArt"
                     width="1920"
-                    height="780"
+                    height="680"
                     loadDisplayMode="scaleToZoom"
                     loadWidth="1920"
                     loadHeight="1080"
                     uri=""
                 />
-                <Rectangle width="1920" height="780" color="0x07070B" opacity="0.14" />
-                <Rectangle width="1920" height="260" translation="[0, 520]" color="0x07070B" opacity="0.55" />
-                <Rectangle width="1920" height="180" translation="[0, 640]" color="0x07070B" opacity="0.82" />
+                <Rectangle width="1920" height="680" color="0x07070B" opacity="0.14" />
+                <Rectangle width="1920" height="240" translation="[0, 440]" color="0x07070B" opacity="0.55" />
+                <Rectangle width="1920" height="160" translation="[0, 560]" color="0x07070B" opacity="0.82" />
 
-                <Group id="heroCopy" translation="[96, 340]">
+                <Group id="heroCopy" translation="[96, 300]">
                     <Label id="heroTitle" width="1100" height="110" text="" color="0xFFFFFF" wrap="true" maxLines="2" lineSpacing="2">
                         <Font role="font" uri="pkg:/fonts/Outfit-Bold.ttf" size="54" />
                     </Label>
@@ -53,7 +53,7 @@
             </Group>
 
             <!-- Clip TOP of the RowList so fixedFocus can't show an aligned previous shelf -->
-            <Group id="rowsClip" translation="[0, 640]" clippingRect="[0, 0, 1920, 960]">
+            <Group id="rowsClip" translation="[0, 560]" clippingRect="[0, 0, 1920, 960]">
                 <ShelfRowList
                     id="rowList"
                     translation="[96, 0]"
@@ -74,7 +74,7 @@
             <Animation id="homeAnim" duration="0.16" easeFunction="outCubic" optional="true" repeat="false">
                 <Vector2DFieldInterpolator id="billboardMove" key="[0.0, 1.0]" keyValue="[[0, 0], [0, 0]]" fieldToInterp="billboard.translation" />
                 <FloatFieldInterpolator id="billboardFade" key="[0.0, 1.0]" keyValue="[1.0, 1.0]" fieldToInterp="billboard.opacity" />
-                <Vector2DFieldInterpolator id="rowsMove" key="[0.0, 1.0]" keyValue="[[0, 640], [0, 640]]" fieldToInterp="rowsClip.translation" />
+                <Vector2DFieldInterpolator id="rowsMove" key="[0.0, 1.0]" keyValue="[[0, 560], [0, 560]]" fieldToInterp="rowsClip.translation" />
             </Animation>
         </Group>
     </children>
