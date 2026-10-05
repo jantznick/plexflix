@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<component name="EpisodeItem" extends="Group">
+    <interface>
+        <field id="itemContent" type="node" onChange="onContentChange" />
+        <field id="focusPercent" type="float" onChange="onFocusPercentChange" />
+        <field id="width" type="float" onChange="onSizeChange" />
+        <field id="height" type="float" onChange="onSizeChange" />
+    </interface>
+
+    <script type="text/brightscript" uri="EpisodeItem.brs" />
+
+    <children>
+        <Poster
+            id="still"
+            width="320"
+            height="180"
+            loadDisplayMode="scaleToZoom"
+            failedBitmapUri="pkg:/images/poster_placeholder.png"
+            loadingBitmapUri="pkg:/images/poster_placeholder.png"
+            uri="pkg:/images/poster_placeholder.png"
+            opacity="0.78"
+        />
+        <Rectangle
+            id="titleScrim"
+            width="320"
+            height="48"
+            translation="[0, 132]"
+            color="0x000000"
+            opacity="0.65"
+        />
+        <Label
+            id="titleLabel"
+            translation="[10, 138]"
+            width="300"
+            height="40"
+            color="0xFFFFFF"
+            font="font:SmallestSystemFont"
+            wrap="true"
+            maxLines="2"
+        />
+
+        <Rectangle id="focusTop" width="328" height="3" translation="[-4, -4]" color="0xFFFFFF" visible="false" />
+        <Rectangle id="focusBottom" width="328" height="3" translation="[-4, 180]" color="0xFFFFFF" visible="false" />
+        <Rectangle id="focusLeft" width="3" height="187" translation="[-4, -4]" color="0xFFFFFF" visible="false" />
+        <Rectangle id="focusRight" width="3" height="187" translation="[320, -4]" color="0xFFFFFF" visible="false" />
+        <Rectangle id="focusAccent" width="328" height="3" translation="[-4, 180]" color="0xE50914" visible="false" />
+
+        <Rectangle
+            id="progressBg"
+            width="320"
+            height="4"
+            translation="[0, 176]"
+            color="0x404040"
+            visible="false"
+        />
+        <Rectangle
+            id="progressFg"
+            width="0"
+            height="4"
+            translation="[0, 176]"
+            color="0xE50914"
+            visible="false"
+        />
+    </children>
+</component>

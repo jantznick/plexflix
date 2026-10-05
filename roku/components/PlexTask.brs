@@ -165,6 +165,13 @@ function metadataToItem(cfg as Object, meta as Object) as Object
         rawTitle = title
     end if
 
+    posterW = 360
+    posterH = 540
+    if mediaType = "episode" then
+        posterW = 480
+        posterH = 270
+    end if
+
     return {
         title: title,
         shortTitle: rawTitle,
@@ -175,7 +182,7 @@ function metadataToItem(cfg as Object, meta as Object) as Object
         mediaType: mediaType,
         ratingKey: ratingKey,
         key: key,
-        hdPosterUrl: imageUrl(cfg, thumb, 308, 462),
+        hdPosterUrl: imageUrl(cfg, thumb, posterW, posterH),
         hdBackdropUrl: imageUrl(cfg, art, 1920, 1080),
         duration: duration,
         viewOffset: viewOffset,

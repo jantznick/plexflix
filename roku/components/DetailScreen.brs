@@ -4,31 +4,22 @@ sub init()
     m.titleLabel = m.top.findNode("titleLabel")
     m.metaLabel = m.top.findNode("metaLabel")
     m.summaryLabel = m.top.findNode("summaryLabel")
-    m.statusLabel = m.top.findNode("statusLabel")
 
     m.movieActions = m.top.findNode("movieActions")
-    m.playBtn = m.top.findNode("playBtn")
-    m.backBtn = m.top.findNode("backBtn")
     m.playBg = m.top.findNode("playBg")
     m.backBg = m.top.findNode("backBg")
     m.playLabel = m.top.findNode("playLabel")
 
     m.tvPanel = m.top.findNode("tvPanel")
-    m.seasonList = m.top.findNode("seasonList")
-    m.episodeList = m.top.findNode("episodeList")
-    m.episodeHeading = m.top.findNode("episodeHeading")
+    m.seasonRows = m.top.findNode("seasonRows")
+    m.seasonRows.observeField("rowItemSelected", "onEpisodeSelected")
 
-    m.seasonList.observeField("itemFocused", "onSeasonFocused")
-    m.seasonList.observeField("itemSelected", "onSeasonSelected")
-    m.episodeList.observeField("itemSelected", "onEpisodeSelected")
-
-    m.focusIndex = 0 ' movie mode: 0 play, 1 back
+    m.focusIndex = 0
     m.isShow = false
-    m.tvFocus = "seasons" ' seasons | episodes
     m.seasons = []
-    m.episodes = []
-    m.selectedSeason = invalid
-    m.selectedEpisode = invalid
+    m.seasonQueue = 0
+    m.seasonContent = invalid
+    m.pendingSeason = invalid
 
     updateMovieButtonFocus()
 end sub
@@ -60,31 +51,35 @@ sub onContentSet()
 
     m.isShow = (mediaType = "show" or mediaType = "season")
     if mediaType = "show" then
-        m.movieActions.visible = false
-        m.tvPanel.visible = true
-        m.statusLabel.text = "Loading seasons..."
+        showTvMode()
         loadChildren(item, "seasons")
     else if mediaType = "season" then
-        m.movieActions.visible = false
-        m.tvPanel.visible = true
+        showTvMode()
         m.seasons = [item]
-        m.selectedSeason = item
-        m.seasonList.content = buildListContent(m.seasons, "season")
-        m.seasonList.jumpToItem = 0
-        m.tvFocus = "episodes"
-        m.statusLabel.text = "Loading episodes..."
-        loadChildren(item, "episodes")
-        m.episodeList.setFocus(true)
+        m.seasonQueue = 0
+        m.seasonContent = createObject("roSGNode", "ContentNode")
+        m.seasonRows.content = m.seasonContent
+        loadSeasonEpisodes()
     else
         m.movieActions.visible = true
         m.tvPanel.visible = false
         m.playLabel.text = "Play"
-        m.statusLabel.text = "OK to play  ·  Back to return"
+        m.poster.visible = true
     end if
+end sub
+
+sub showTvMode()
+    m.movieActions.visible = false
+    m.tvPanel.visible = true
+    ' Give episode rails the full width; keep a compact show poster
+    m.poster.width = 220
+    m.poster.height = 330
+    m.poster.translation = [80, 70]
 end sub
 
 sub loadChildren(item as Object, mode as String)
     m.loadMode = mode
+    m.pendingSeason = item
     m.task = createObject("roSGNode", "PlexTask")
     m.task.config = m.top.config
     m.task.action = "children"
@@ -96,9 +91,6 @@ end sub
 sub onChildrenLoaded()
     response = m.task.response
     if response = invalid or response.ok <> true then
-        err = "Could not load list"
-        if response <> invalid and response.error <> invalid then err = response.error
-        m.statusLabel.text = err
         return
     end if
 
@@ -107,103 +99,92 @@ sub onChildrenLoaded()
 
     if m.loadMode = "seasons" then
         m.seasons = items
-        m.seasonList.content = buildListContent(items, "season")
-        if items.count() > 0 then
-            m.seasonList.jumpToItem = 0
-            m.selectedSeason = items[0]
-            m.tvFocus = "seasons"
-            m.seasonList.setFocus(true)
-            m.statusLabel.text = "Select a season, then an episode"
-            loadChildren(items[0], "episodes")
-        else
-            m.statusLabel.text = "No seasons found"
-        end if
+        m.seasonQueue = 0
+        m.seasonContent = createObject("roSGNode", "ContentNode")
+        m.seasonRows.content = m.seasonContent
+        if items.count() = 0 then return
+        loadSeasonEpisodes()
     else if m.loadMode = "episodes" then
-        m.episodes = items
-        m.episodeList.content = buildListContent(items, "episode")
-        seasonTitle = ""
-        if m.selectedSeason <> invalid then seasonTitle = asString(m.selectedSeason.title)
-        m.episodeHeading.text = "Episodes"
-        if seasonTitle <> "" then m.episodeHeading.text = seasonTitle + " · Episodes"
-        if items.count() > 0 then
-            m.episodeList.jumpToItem = 0
-            m.selectedEpisode = items[0]
-            m.statusLabel.text = safeCount(items.count()) + " episodes — OK to play"
-        else
-            m.selectedEpisode = invalid
-            m.statusLabel.text = "No episodes in this season"
-        end if
+        appendSeasonRow(m.pendingSeason, items)
+        m.seasonQueue = m.seasonQueue + 1
+        loadSeasonEpisodes()
     end if
 end sub
 
-function buildListContent(items as Object, kind as String) as Object
-    root = createObject("roSGNode", "ContentNode")
-    for each item in items
-        child = root.createChild("ContentNode")
-        child.title = formatListTitle(item, kind)
+sub loadSeasonEpisodes()
+    if m.seasons = invalid or m.seasonQueue >= m.seasons.count() then
+        if m.seasonContent <> invalid and m.seasonContent.getChildCount() > 0 then
+            m.seasonRows.setFocus(true)
+        end if
+        return
+    end if
+    loadChildren(m.seasons[m.seasonQueue], "episodes")
+end sub
+
+sub appendSeasonRow(season as Object, episodes as Object)
+    if m.seasonContent = invalid then
+        m.seasonContent = createObject("roSGNode", "ContentNode")
+    end if
+
+    row = m.seasonContent.createChild("ContentNode")
+    seasonTitle = "Season"
+    if season <> invalid then
+        seasonTitle = asString(season.title)
+        if seasonTitle = "" then seasonTitle = "Season"
+    end if
+    row.title = seasonTitle
+
+    for each ep in episodes
+        child = row.createChild("ContentNode")
+        child.title = formatEpisodeTitle(ep)
+        child.hdPosterUrl = ep.hdPosterUrl
+        child.description = ep.description
         child.addFields({
-            ratingKey: item.ratingKey,
-            key: item.key,
-            mediaType: item.mediaType,
-            description: item.description,
-            hdPosterUrl: item.hdPosterUrl,
-            hdBackdropUrl: item.hdBackdropUrl,
-            duration: item.duration,
-            viewOffset: item.viewOffset,
-            year: item.year,
-            rawTitle: item.title
+            ratingKey: ep.ratingKey,
+            key: ep.key,
+            mediaType: ep.mediaType,
+            duration: ep.duration,
+            viewOffset: ep.viewOffset,
+            year: ep.year,
+            hdBackdropUrl: ep.hdBackdropUrl,
+            shortTitle: ep.shortTitle,
+            index: ep.index
         })
     end for
-    return root
-end function
 
-function formatListTitle(item as Object, kind as String) as String
-    if kind = "season" then
-        title = asString(item.title)
-        if title = "" then title = "Season"
-        return title
-    end if
+    ' Re-assign so RowList picks up the new row in simulators that need it
+    m.seasonRows.content = m.seasonContent
+end sub
 
-    title = asString(item.shortTitle)
-    if title = "" then title = asString(item.title)
+function formatEpisodeTitle(ep as Object) as String
+    title = asString(ep.shortTitle)
+    if title = "" then title = asString(ep.title)
     if title = "" then title = "Episode"
-
-    epNo = asString(item.index)
-    label = title
-    if epNo <> "" then label = epNo + ". " + title
-    if item.viewOffset <> invalid and item.viewOffset > 0 then label = label + "  ·  Resume"
-    return label
+    epNo = asString(ep.index)
+    if epNo <> "" then return epNo + ". " + title
+    return title
 end function
-
-sub onSeasonFocused()
-    idx = m.seasonList.itemFocused
-    if idx = invalid or idx < 0 or idx >= m.seasons.count() then return
-    season = m.seasons[idx]
-    if season = invalid then return
-    if m.selectedSeason <> invalid and asString(m.selectedSeason.ratingKey) = asString(season.ratingKey) then return
-    m.selectedSeason = season
-    m.statusLabel.text = "Loading episodes..."
-    loadChildren(season, "episodes")
-end sub
-
-sub onSeasonSelected()
-    ' Move into episode list on OK
-    if m.episodes.count() > 0 then
-        m.tvFocus = "episodes"
-        m.episodeList.setFocus(true)
-    end if
-end sub
 
 sub onEpisodeSelected()
-    idx = m.episodeList.itemSelected
-    if idx = invalid or idx < 0 or idx >= m.episodes.count() then return
-    m.selectedEpisode = m.episodes[idx]
-    playEpisode(m.selectedEpisode)
-end sub
+    info = m.seasonRows.rowItemSelected
+    if info = invalid or info.count() < 2 then return
+    row = m.seasonRows.content.getChild(info[0])
+    if row = invalid then return
+    item = row.getChild(info[1])
+    if item = invalid then return
 
-sub playEpisode(episode as Object)
-    if episode = invalid then return
-    m.top.playRequested = episode
+    m.top.playRequested = {
+        title: item.title,
+        description: item.description,
+        year: item.year,
+        mediaType: item.mediaType,
+        ratingKey: item.ratingKey,
+        key: item.key,
+        hdPosterUrl: item.hdPosterUrl,
+        hdBackdropUrl: item.hdBackdropUrl,
+        duration: item.duration,
+        viewOffset: item.viewOffset
+    }
 end sub
 
 sub onCloseRequested()
@@ -230,7 +211,11 @@ function onKeyEvent(key as String, press as Boolean) as Boolean
     if not press then return false
 
     if m.isShow then
-        return handleTvKeys(key)
+        if key = "back"
+            m.top.closed = true
+            return true
+        end if
+        return false
     end if
 
     if key = "left" or key = "right"
@@ -259,32 +244,6 @@ function onKeyEvent(key as String, press as Boolean) as Boolean
     return false
 end function
 
-function handleTvKeys(key as String) as Boolean
-    if key = "back"
-        m.top.closed = true
-        return true
-    else if key = "right"
-        if m.tvFocus = "seasons" and m.episodes.count() > 0 then
-            m.tvFocus = "episodes"
-            m.episodeList.setFocus(true)
-            return true
-        end if
-    else if key = "left"
-        if m.tvFocus = "episodes" then
-            m.tvFocus = "seasons"
-            m.seasonList.setFocus(true)
-            return true
-        end if
-    else if key = "play"
-        idx = m.episodeList.itemFocused
-        if idx <> invalid and idx >= 0 and idx < m.episodes.count() then
-            playEpisode(m.episodes[idx])
-            return true
-        end if
-    end if
-    return false
-end function
-
 function titleCaseType(mediaType as String) as String
     if mediaType = "movie" then return "Movie"
     if mediaType = "show" then return "Series"
@@ -305,10 +264,6 @@ function asString(value as Dynamic) as String
         return Str(value).Trim()
     end if
     return ""
-end function
-
-function safeCount(value as Dynamic) as String
-    return asString(value)
 end function
 
 function joinStrings(parts as Object, sep as String) as String

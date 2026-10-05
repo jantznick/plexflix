@@ -12,27 +12,26 @@
     <children>
         <Poster
             id="poster"
-            width="148"
-            height="222"
+            width="180"
+            height="270"
             loadDisplayMode="scaleToZoom"
             failedBitmapUri="pkg:/images/poster_placeholder.png"
             loadingBitmapUri="pkg:/images/poster_placeholder.png"
             uri="pkg:/images/poster_placeholder.png"
-            opacity="0.72"
+            opacity="0.75"
         />
 
-        ' Drawn focus chrome — RowList focusBitmapUri is flaky in brs-desktop
-        <Rectangle id="focusTop" width="156" height="4" translation="[-4, -4]" color="0xFFFFFF" visible="false" />
-        <Rectangle id="focusBottom" width="156" height="4" translation="[-4, 222]" color="0xFFFFFF" visible="false" />
-        <Rectangle id="focusLeft" width="4" height="230" translation="[-4, -4]" color="0xFFFFFF" visible="false" />
-        <Rectangle id="focusRight" width="4" height="230" translation="[148, -4]" color="0xFFFFFF" visible="false" />
-        <Rectangle id="focusAccent" width="156" height="4" translation="[-4, 222]" color="0xE50914" visible="false" />
+        <Rectangle id="focusTop" width="188" height="4" translation="[-4, -4]" color="0xFFFFFF" visible="false" />
+        <Rectangle id="focusBottom" width="188" height="4" translation="[-4, 270]" color="0xFFFFFF" visible="false" />
+        <Rectangle id="focusLeft" width="4" height="278" translation="[-4, -4]" color="0xFFFFFF" visible="false" />
+        <Rectangle id="focusRight" width="4" height="278" translation="[180, -4]" color="0xFFFFFF" visible="false" />
+        <Rectangle id="focusAccent" width="188" height="4" translation="[-4, 270]" color="0xE50914" visible="false" />
 
         <Rectangle
             id="progressBg"
-            width="148"
+            width="180"
             height="5"
-            translation="[0, 217]"
+            translation="[0, 265]"
             color="0x404040"
             visible="false"
         />
@@ -40,7 +39,7 @@
             id="progressFg"
             width="0"
             height="5"
-            translation="[0, 217]"
+            translation="[0, 265]"
             color="0xE50914"
             visible="false"
         />

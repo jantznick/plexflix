@@ -1,5 +1,7 @@
 sub init()
-    m.poster = m.top.findNode("poster")
+    m.still = m.top.findNode("still")
+    m.titleLabel = m.top.findNode("titleLabel")
+    m.titleScrim = m.top.findNode("titleScrim")
     m.focusTop = m.top.findNode("focusTop")
     m.focusBottom = m.top.findNode("focusBottom")
     m.focusLeft = m.top.findNode("focusLeft")
@@ -7,8 +9,8 @@ sub init()
     m.focusAccent = m.top.findNode("focusAccent")
     m.progressBg = m.top.findNode("progressBg")
     m.progressFg = m.top.findNode("progressFg")
-    m.itemWidth = 180
-    m.itemHeight = 270
+    m.itemWidth = 320
+    m.itemHeight = 180
     setFocused(false)
 end sub
 
@@ -16,21 +18,25 @@ sub onSizeChange()
     if m.top.width > 0 then m.itemWidth = m.top.width
     if m.top.height > 0 then m.itemHeight = m.top.height
 
-    m.poster.width = m.itemWidth
-    m.poster.height = m.itemHeight
+    m.still.width = m.itemWidth
+    m.still.height = m.itemHeight
+    m.titleScrim.width = m.itemWidth
+    m.titleScrim.translation = [0, m.itemHeight - 48]
+    m.titleLabel.width = m.itemWidth - 20
+    m.titleLabel.translation = [10, m.itemHeight - 42]
 
     m.focusTop.width = m.itemWidth + 8
     m.focusBottom.width = m.itemWidth + 8
     m.focusBottom.translation = [-4, m.itemHeight]
-    m.focusLeft.height = m.itemHeight + 8
-    m.focusRight.height = m.itemHeight + 8
+    m.focusLeft.height = m.itemHeight + 7
+    m.focusRight.height = m.itemHeight + 7
     m.focusRight.translation = [m.itemWidth, -4]
     m.focusAccent.width = m.itemWidth + 8
     m.focusAccent.translation = [-4, m.itemHeight]
 
     m.progressBg.width = m.itemWidth
-    m.progressBg.translation = [0, m.itemHeight - 5]
-    m.progressFg.translation = [0, m.itemHeight - 5]
+    m.progressBg.translation = [0, m.itemHeight - 4]
+    m.progressFg.translation = [0, m.itemHeight - 4]
     refreshProgress()
 end sub
 
@@ -39,11 +45,14 @@ sub onContentChange()
     if item = invalid then return
 
     if item.hdPosterUrl <> invalid and item.hdPosterUrl <> "" then
-        m.poster.uri = item.hdPosterUrl
+        m.still.uri = item.hdPosterUrl
     else
-        m.poster.uri = "pkg:/images/poster_placeholder.png"
+        m.still.uri = "pkg:/images/poster_placeholder.png"
     end if
 
+    label = ""
+    if item.title <> invalid then label = item.title
+    m.titleLabel.text = label
     refreshProgress()
 end sub
 
@@ -83,8 +92,8 @@ sub setFocused(focused as Boolean)
     m.focusRight.visible = focused
     m.focusAccent.visible = focused
     if focused then
-        m.poster.opacity = 1.0
+        m.still.opacity = 1.0
     else
-        m.poster.opacity = 0.75
+        m.still.opacity = 0.78
     end if
 end sub

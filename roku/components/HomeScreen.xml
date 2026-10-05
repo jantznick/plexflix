@@ -15,25 +15,25 @@
             <Poster
                 id="heroArt"
                 width="1920"
-                height="780"
+                height="760"
                 loadDisplayMode="scaleToFill"
                 uri="pkg:/images/splash-screen_fhd.jpg"
             />
-            <Rectangle width="1920" height="780" color="0x000000" opacity="0.20" />
-            <Rectangle width="1100" height="780" color="0x000000" opacity="0.50" />
+            <Rectangle width="1920" height="760" color="0x000000" opacity="0.18" />
+            <Rectangle width="1040" height="760" color="0x000000" opacity="0.42" />
             <Rectangle
                 width="1920"
-                height="320"
-                translation="[0, 460]"
+                height="280"
+                translation="[0, 480]"
                 color="0x0A0A0A"
                 opacity="0.95"
             />
 
-            <Group id="heroCopy" translation="[72, 250]">
+            <Group id="heroCopy" translation="[80, 280]">
                 <Label
                     id="heroTitle"
-                    width="980"
-                    height="100"
+                    width="920"
+                    height="90"
                     text="Loading your library..."
                     color="0xFFFFFF"
                     font="font:LargeBoldSystemFont"
@@ -43,7 +43,7 @@
                 />
                 <Label
                     id="heroMeta"
-                    translation="[0, 108]"
+                    translation="[0, 100]"
                     width="900"
                     height="32"
                     text=""
@@ -52,11 +52,11 @@
                 />
                 <Label
                     id="heroSummary"
-                    translation="[0, 148]"
-                    width="860"
-                    height="90"
+                    translation="[0, 140]"
+                    width="820"
+                    height="70"
                     text=""
-                    color="0xD6D6D6"
+                    color="0xD0D0D0"
                     font="font:SmallSystemFont"
                     wrap="true"
                     maxLines="2"
@@ -67,7 +67,7 @@
 
         <Label
             id="brandLabel"
-            translation="[72, 24]"
+            translation="[80, 28]"
             width="500"
             height="44"
             text="PLEXFLIX"
@@ -77,30 +77,29 @@
 
         <Label
             id="buildLabel"
-            translation="[1600, 28]"
+            translation="[1600, 32]"
             width="250"
             height="36"
             horizAlign="right"
-            text="v0.3.0"
-            color="0x666666"
+            text="v0.3.1"
+            color="0x555555"
             font="font:SmallestSystemFont"
         />
 
         <RowList
             id="rowList"
-            translation="[0, 560]"
+            translation="[0, 600]"
             itemComponentName="PosterItem"
-            numRows="4"
-            rowItemSize="[[148, 222]]"
-            rowItemSpacing="[[16, 0]]"
-            itemSize="[1920, 275]"
-            itemSpacing="[0, 6]"
+            numRows="2"
+            rowItemSize="[[180, 270]]"
+            rowItemSpacing="[[28, 0]]"
+            itemSize="[1920, 340]"
+            itemSpacing="[0, 28]"
             showRowLabel="[true]"
-            rowLabelOffset="[[72, 2]]"
+            rowLabelOffset="[[80, 8]]"
             rowFocusAnimationStyle="fixedFocus"
-            focusXOffset="[72]"
+            focusXOffset="[80]"
             drawFocusFeedback="false"
-            focusXOffset="[72]"
         />
     </children>
 </component>
