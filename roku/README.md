@@ -10,7 +10,7 @@ This is intentionally a **design/UX shell** on top of existing Plex data. Creden
 - **Collapsible sidebar** (Left to open): Home, your **Libraries**, **Live TV**, Live Sports
 - Selecting a library in the sidebar opens that library’s shelves
 - **Live TV**: Guide layout always visible (columns + placeholder rows while syncing); program info top-left, preview top-right
-- **Libraries**: Mosaic hero + **View all** / **Search**; full grid with genre filter
+- **Libraries**: mosaic hero + **View all** / **Search**; full grid with filter, search and order-by
 - **Continue Watching**, **Recently Added**, Plex hubs, library shelves, **genre rows**, and **Discover** trending (Netflix/Disney+/etc.)
 - Home shelves require **15–30** items (except Continue Watching) and **loop** horizontally
 - Continue Watching episodes open the parent show with that episode focused
@@ -67,6 +67,24 @@ Optional CLI (if `ROKU_IP` / `ROKU_PASSWORD` are set):
 ./roku/package.sh --deploy
 ```
 
+## Library pages
+
+Picking a library in the sidebar opens its **hub**: a mosaic hero with **View all**
+and **Search**, plus Continue Watching / Recently Added / Plex hub shelves below.
+
+**View all** (or Search) opens the full library grid:
+
+- one scrolling 11-wide poster grid, Up from the top row reaches the toolbar
+- **Filter** — genre, decade, unwatched only, clear all (the `*` key opens it too)
+- **Search** — on-screen keyboard, matches titles inside the library
+- **Order by** — title A–Z / Z–A, recently added, year, rating, recently watched
+- the header shows the active filters on the left and `1,234 of 8,900` on the right
+
+Paging is a sliding window: titles load 66 at a time, two rows ahead of the
+focus, and rows that fall far behind are released again. At most ~330 titles are
+held in memory no matter how big the library is, so memory stays flat on older
+sticks.
+
 ## Remote / focus
 
 - **Left** opens the sidebar from Home, Libraries, Live Sports (and sports detail via Back first); **Right** or **Back** hides it
@@ -110,7 +128,7 @@ Outfit (Google Fonts / OFL) ships under `roku/fonts/`. Swap TTFs there and updat
 ## Out of scope for this MVP
 
 - Account login / PIN pairing UI
-- Search, profiles, downloads
+- Global (cross-library) search, profiles, downloads
 - Direct Play codec negotiation beyond HLS transcode
 - Settings screen (edit `PlexConfig.brs` and republish)
 
