@@ -811,20 +811,24 @@ function resolvePlayable(cfg as Object, item as Object) as Object
         return { ok: true, item: item }
     end if
 
-    ' Show -> pick on-deck episode, else first episode of first season
+    ' Show -> whatever Plex says is next up, else first episode of first season
     if mediaType = "show" then
-        ' Try metadata children (seasons)
+        onDeck = fetchOnDeck(cfg, safeToStr(item.ratingKey))
+        if onDeck <> invalid then return { ok: true, item: onDeck }
+
         detail = plexGet(cfg, "/library/metadata/" + item.ratingKey + "/allLeaves?sort=index")
         if detail.ok = true then
             episodes = collectMetadata(cfg, detail.json)
             if episodes.count() > 0 then
-                ' Prefer partially watched
+                ' Resume a part-watched episode before falling back to the start
                 for each ep in episodes
                     if ep.viewOffset <> invalid and ep.viewOffset > 0 then
                         return { ok: true, item: ep }
                     end if
                 end for
-                ' Else first unwatched-ish / first episode
+                for each ep in episodes
+                    if ep.watched <> true then return { ok: true, item: ep }
+                end for
                 return { ok: true, item: episodes[0] }
             end if
         end if
@@ -839,6 +843,34 @@ function resolvePlayable(cfg as Object, item as Object) as Object
     end if
 
     return { ok: false, error: "Could not find a playable episode" }
+end function
+
+' includeOnDeck makes the server pick the next episode: the part-watched one if
+' there is one, otherwise the first unwatched in airing order.
+function fetchOnDeck(cfg as Object, ratingKey as String) as Object
+    if ratingKey = "" then return invalid
+
+    result = plexGet(cfg, "/library/metadata/" + ratingKey + "?includeOnDeck=1")
+    if result.ok <> true or result.json = invalid then return invalid
+    container = result.json.MediaContainer
+    if container = invalid then return invalid
+
+    meta = container.Metadata
+    if meta = invalid then return invalid
+    if GetInterface(meta, "ifArray") <> invalid then
+        if meta.count() = 0 then return invalid
+        meta = meta[0]
+    end if
+    if meta.OnDeck = invalid then return invalid
+
+    upNext = meta.OnDeck.Metadata
+    if upNext = invalid then return invalid
+    if GetInterface(upNext, "ifArray") <> invalid then
+        if upNext.count() = 0 then return invalid
+        upNext = upNext[0]
+    end if
+
+    return metadataToItem(cfg, upNext)
 end function
 
 function fetchChildren(cfg as Object, item as Object) as Object
@@ -860,13 +892,26 @@ function fetchExtras(cfg as Object, item as Object) as Object
 
     castItems = []
     similarItems = []
+    onDeckKey = ""
+    onDeckSeasonKey = ""
 
-    details = plexGet(cfg, "/library/metadata/" + ratingKey)
+    ' One request covers the header refresh, the cast and next-up
+    details = plexGet(cfg, "/library/metadata/" + ratingKey + "?includeOnDeck=1")
     if details.ok = true and details.json <> invalid and details.json.MediaContainer <> invalid then
         meta = details.json.MediaContainer.Metadata
         if meta <> invalid then
             if GetInterface(meta, "ifArray") <> invalid then
                 if meta.count() > 0 then meta = meta[0]
+            end if
+            if meta.OnDeck <> invalid then
+                upNext = meta.OnDeck.Metadata
+                if upNext <> invalid and GetInterface(upNext, "ifArray") <> invalid then
+                    if upNext.count() > 0 then upNext = upNext[0] else upNext = invalid
+                end if
+                if upNext <> invalid then
+                    onDeckKey = safeToStr(upNext.ratingKey)
+                    onDeckSeasonKey = safeToStr(upNext.parentRatingKey)
+                end if
             end if
             roles = meta.Role
             if roles <> invalid then
@@ -919,7 +964,14 @@ function fetchExtras(cfg as Object, item as Object) as Object
         if mapped.count() > 0 then detail = mapped[0]
     end if
 
-    return { ok: true, cast: castItems, similar: similarItems, detail: detail }
+    return {
+        ok: true,
+        cast: castItems,
+        similar: similarItems,
+        detail: detail,
+        onDeckKey: onDeckKey,
+        onDeckSeasonKey: onDeckSeasonKey
+    }
 end function
 
 function sectionIdFromKey(key as String) as String

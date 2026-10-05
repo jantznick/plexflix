@@ -84,6 +84,24 @@ sub onContentSet()
         showMovieMode()
         loadExtras(item)
     end if
+
+    refreshPlayLabel(item)
+end sub
+
+sub refreshPlayLabel(item as Object)
+    if m.playLabel = invalid or item = invalid then return
+
+    resume = false
+    mediaType = asString(item.mediaType)
+    if mediaType = "show" or mediaType = "season" then
+        leaves = asInteger(item.leafCount)
+        viewed = asInteger(item.viewedLeafCount)
+        resume = (viewed > 0 and viewed < leaves)
+    else
+        resume = (asInteger(item.viewOffset) > 0)
+    end if
+
+    if resume then m.playLabel.text = "Resume" else m.playLabel.text = "Play"
 end sub
 
 sub showTvMode()
@@ -344,7 +362,10 @@ sub onExtrasLoaded()
         watchBit = watchedSummary(detail)
         if watchBit <> "" then metaBits.push(watchBit)
         if metaBits.count() > 0 then m.metaLabel.text = joinStrings(metaBits, "  ·  ")
+        refreshPlayLabel(detail)
     end if
+
+    adoptOnDeck(response, detail)
 
     castItems = response.cast
     similarItems = response.similar
@@ -375,6 +396,24 @@ sub onExtrasLoaded()
             m.top.setFocus(true)
         end if
     end if
+end sub
+
+sub adoptOnDeck(response as Object, detail as Object)
+    ' Arriving from Continue Watching already pins an episode; otherwise let the
+    ' server's next-up pick it, but only once there is progress worth resuming
+    if m.focusEpisodeKey <> "" or detail = invalid then return
+    onDeckKey = asString(response.onDeckKey)
+    if onDeckKey = "" then return
+    if asInteger(detail.viewedLeafCount) <= 0 then return
+
+    m.focusEpisodeKey = onDeckKey
+    m.focusSeasonKey = asString(response.onDeckSeasonKey)
+    if m.seasonContent = invalid then return
+
+    ' Season rows may already be built, and those only try to focus as they fill
+    for i = 0 to m.seasonContent.getChildCount() - 1
+        maybeFocusEpisode(i)
+    end for
 end sub
 
 sub appendItemsRow(root as Object, title as String, items as Object)
