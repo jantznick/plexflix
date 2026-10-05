@@ -14,32 +14,68 @@
     <children>
         <Rectangle width="1920" height="1080" color="0x07070B" />
 
-        <Group translation="[96, 64]">
-            <Label width="1200" height="56" text="Live TV" color="0xFFFFFF">
+        <!-- Top: info (left) + preview (right) -->
+        <Group id="topPane" translation="[96, 48]">
+            <Label width="900" height="48" text="Live TV" color="0xE50914">
+                <Font role="font" uri="pkg:/fonts/Outfit-Bold.ttf" size="36" />
+            </Label>
+
+            <Label id="programTitle" translation="[0, 70]" width="860" height="70" color="0xFFFFFF" wrap="true" maxLines="2">
                 <Font role="font" uri="pkg:/fonts/Outfit-Bold.ttf" size="44" />
             </Label>
-            <Label id="statusLabel" translation="[0, 58]" width="1500" height="36" text="Loading Live TV..." color="0x777780">
+            <Label id="channelMeta" translation="[0, 150]" width="860" height="36" color="0xA8A8B0">
+                <Font role="font" uri="pkg:/fonts/Outfit-Medium.ttf" size="22" />
+            </Label>
+            <Label id="programSummary" translation="[0, 200]" width="860" height="140" color="0xD0D0D6" wrap="true" maxLines="4" lineSpacing="5">
+                <Font role="font" uri="pkg:/fonts/Outfit-Regular.ttf" size="22" />
+            </Label>
+
+            <Group id="watchBtn" translation="[0, 360]">
+                <Rectangle id="watchBg" width="240" height="56" color="0xE50914" />
+                <Label width="240" height="56" horizAlign="center" vertAlign="center" text="Watch" color="0xFFFFFF">
+                    <Font role="font" uri="pkg:/fonts/Outfit-SemiBold.ttf" size="26" />
+                </Label>
+            </Group>
+            <Label id="statusLabel" translation="[260, 370]" width="600" height="40" text="" color="0x777780">
                 <Font role="font" uri="pkg:/fonts/Outfit-Regular.ttf" size="20" />
             </Label>
 
-            <ShimmerRow id="shimmer" translation="[0, 120]" />
-
-            <ShelfRowList
-                id="liveRows"
-                translation="[0, 120]"
-                itemComponentName="EpisodeItem"
-                numRows="6"
-                rowItemSize="[[300, 170]]"
-                rowItemSpacing="[[24, 0]]"
-                itemSize="[1728, 250]"
-                itemSpacing="[0, 28]"
-                showRowLabel="[true]"
-                rowLabelOffset="[[0, 8]]"
-                rowFocusAnimationStyle="fixedFocus"
-                focusXOffset="[0]"
-                drawFocusFeedback="false"
+            <!-- Preview -->
+            <Rectangle translation="[980, 40]" width="760" height="428" color="0x000000" />
+            <Poster
+                id="previewArt"
+                translation="[980, 40]"
+                width="760"
+                height="428"
+                loadDisplayMode="scaleToZoom"
+                uri="pkg:/images/poster_placeholder.png"
+            />
+            <Video
+                id="previewVideo"
+                translation="[980, 40]"
+                width="760"
+                height="428"
                 visible="false"
             />
+            <Rectangle translation="[980, 40]" width="760" height="428" color="0x000000" opacity="0.0" />
         </Group>
+
+        <!-- Bottom guide -->
+        <Rectangle translation="[0, 560]" width="1920" height="520" color="0x0C0C12" />
+        <Label translation="[96, 580]" width="600" height="40" text="Guide" color="0xFFFFFF">
+            <Font role="font" uri="pkg:/fonts/Outfit-SemiBold.ttf" size="28" />
+        </Label>
+        <BusySpinner id="spinner" translation="[920, 780]" uri="pkg:/images/spinner.png" visible="false" />
+
+        <LabelList
+            id="guideList"
+            translation="[96, 640]"
+            itemSize="[1728, 56]"
+            itemSpacing="[0, 4]"
+            numRows="6"
+            color="0xCCCCCC"
+            focusedColor="0xFFFFFF"
+            drawFocusFeedback="true"
+        />
     </children>
 </component>

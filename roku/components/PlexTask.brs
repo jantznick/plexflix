@@ -25,6 +25,8 @@ sub exec()
         m.top.response = fetchPersonDetail(cfg, m.top.item)
     else if action = "liveTv" then
         m.top.response = fetchLiveTv(cfg)
+    else if action = "liveTvGuide" then
+        m.top.response = fetchLiveTvGuide(cfg)
     else if action = "tuneLiveChannel" then
         m.top.response = tuneLiveChannel(cfg, m.top.item)
     else if action = "sportsFeed" then
@@ -273,7 +275,28 @@ function metadataToItem(cfg as Object, meta as Object) as Object
     }
 end function
 
-function appendRow(root as Object, title as String, items as Object) as Boolean
+function clampRowItems(items as Object) as Object
+    ' Only keep rows that can feel full: 15–30 items. Cap, then loop by duplicating.
+    out = []
+    if items = invalid then return out
+    for each item in items
+        if item <> invalid then out.push(item)
+        if out.count() >= 30 then exit for
+    end for
+    if out.count() < 15 then return []
+
+    ' Duplicate once so horizontal shelves feel continuous / looping
+    looped = []
+    for each item in out
+        looped.push(item)
+    end for
+    for each item in out
+        looped.push(item)
+    end for
+    return looped
+end function
+
+function appendRowNodes(root as Object, title as String, items as Object) as Boolean
     if items = invalid or items.count() = 0 then return false
     row = root.createChild("ContentNode")
     row.title = title
@@ -283,6 +306,8 @@ function appendRow(root as Object, title as String, items as Object) as Boolean
         child.description = item.description
         child.hdPosterUrl = item.hdPosterUrl
         child.hdBackdropUrl = item.hdBackdropUrl
+        isDiscover = false
+        if item.DoesExist("isDiscover") and item.isDiscover = true then isDiscover = true
         child.addFields({
             year: item.year,
             rating: item.rating,
@@ -299,10 +324,16 @@ function appendRow(root as Object, title as String, items as Object) as Boolean
             grandparentTitle: item.grandparentTitle,
             index: item.index,
             shortTitle: item.shortTitle,
-            parentIndex: item.parentIndex
+            parentIndex: item.parentIndex,
+            isDiscover: isDiscover
         })
     end for
     return true
+end function
+
+function appendRow(root as Object, title as String, items as Object) as Boolean
+    ' Home shelves: enforce 15–30 + loop duplicates
+    return appendRowNodes(root, title, clampRowItems(items))
 end function
 
 function collectMetadata(cfg as Object, container as Object) as Object
@@ -335,11 +366,13 @@ function buildHome(cfg as Object) as Object
 
     root = createObject("roSGNode", "ContentNode")
     seenTitles = {}
+    movieSectionKeys = []
+    showSectionKeys = []
 
-    ' Continue Watching / On Deck
+    ' Continue Watching / On Deck — exempt from 15-min (always useful)
     onDeck = plexGet(cfg, "/library/onDeck")
     if onDeck.ok = true then
-        addUniqueRow(root, seenTitles, "Continue Watching", collectMetadata(cfg, onDeck.json))
+        addUniqueRowLoose(root, seenTitles, "Continue Watching", collectMetadata(cfg, onDeck.json))
     end if
 
     ' Recently Added (global)
@@ -354,7 +387,7 @@ function buildHome(cfg as Object) as Object
         appendHubRows(root, seenTitles, hubs.json.MediaContainer.Hub, cfg)
     end if
 
-    ' Per-library hubs (this is what fills Netflix-like multi-shelf homes)
+    ' Per-library hubs + collect section keys for genre shelves
     sections = plexGet(cfg, "/library/sections")
     if sections.ok = true and sections.json <> invalid and sections.json.MediaContainer <> invalid then
         dirs = sections.json.MediaContainer.Directory
@@ -365,13 +398,14 @@ function buildHome(cfg as Object) as Object
                 if sectionType = "movie" or sectionType = "show" then
                     key = safeToStr(dir.key)
                     title = safeToStr(dir.title)
+                    if sectionType = "movie" then movieSectionKeys.push(key)
+                    if sectionType = "show" then showSectionKeys.push(key)
 
                     sectionHubs = plexGet(cfg, "/hubs/sections/" + key + "?count=" + safeToStr(cfg.rowSize))
                     if sectionHubs.ok = true and sectionHubs.json <> invalid and sectionHubs.json.MediaContainer <> invalid then
                         appendHubRows(root, seenTitles, sectionHubs.json.MediaContainer.Hub, cfg)
                     end if
 
-                    ' Always include a full library shelf as well
                     allItems = plexGet(cfg, "/library/sections/" + key + "/all?sort=addedAt:desc")
                     if allItems.ok = true then
                         label = title
@@ -384,6 +418,12 @@ function buildHome(cfg as Object) as Object
         end if
     end if
 
+    ' Netflix-style genre shelves from local libraries
+    appendGenreRows(root, seenTitles, cfg, movieSectionKeys, showSectionKeys)
+
+    ' Discover / trending (may include titles not in library)
+    appendDiscoverRows(root, seenTitles, cfg)
+
     if root.getChildCount() = 0 then
         err = "No rows loaded from Plex."
         if onDeck.ok <> true and onDeck.error <> invalid then err = onDeck.error
@@ -393,6 +433,145 @@ function buildHome(cfg as Object) as Object
     end if
 
     return { ok: true, content: root }
+end function
+
+sub appendGenreRows(root as Object, seenTitles as Object, cfg as Object, movieKeys as Object, showKeys as Object)
+    genres = [
+        { title: "Romantic Comedy Movies", genre: "Comedy", section: "movie", extra: "Romance" },
+        { title: "Action Movies", genre: "Action", section: "movie", extra: "" },
+        { title: "Horror Movies", genre: "Horror", section: "movie", extra: "" },
+        { title: "Sci-Fi Movies", genre: "Sci-Fi", section: "movie", extra: "" },
+        { title: "Romance Movies", genre: "Romance", section: "movie", extra: "" },
+        { title: "Drama Movies", genre: "Drama", section: "movie", extra: "" },
+        { title: "Family Movies", genre: "Family", section: "movie", extra: "" },
+        { title: "Thriller Movies", genre: "Thriller", section: "movie", extra: "" },
+        { title: "Comedy TV", genre: "Comedy", section: "show", extra: "" },
+        { title: "Drama TV", genre: "Drama", section: "show", extra: "" },
+        { title: "Crime TV", genre: "Crime", section: "show", extra: "" },
+        { title: "Reality TV", genre: "Reality", section: "show", extra: "" },
+        { title: "Kids TV", genre: "Kids", section: "show", extra: "" }
+    ]
+
+    for each g in genres
+        keys = movieKeys
+        if g.section = "show" then keys = showKeys
+        if keys <> invalid and keys.count() > 0 then
+            merged = []
+            seenKeys = {}
+            for each sectionKey in keys
+                path = "/library/sections/" + sectionKey + "/all?genre=" + requestEncode(g.genre) + "&sort=rating:desc"
+                result = plexGet(cfg, path)
+                if result.ok = true then
+                    for each it in collectMetadata(cfg, result.json)
+                        rk = safeToStr(it.ratingKey)
+                        if rk = "" or seenKeys.DoesExist(rk) = false then
+                            if rk <> "" then seenKeys[rk] = true
+                            merged.push(it)
+                        end if
+                        if merged.count() >= 30 then exit for
+                    end for
+                end if
+                if merged.count() >= 30 then exit for
+            end for
+            addUniqueRow(root, seenTitles, g.title, merged)
+        end if
+    end for
+end sub
+
+sub appendDiscoverRows(root as Object, seenTitles as Object, cfg as Object)
+    ' Trending / popular from Plex Discover (works even when not in local library)
+    discoverSources = [
+        { title: "Most Watchlisted", path: "/hubs/sections/home/top_watchlisted?count=30&includeMeta=1" },
+        { title: "Trending on Netflix", path: "/library/platforms/netflix/trend?count=30&includeMeta=1" },
+        { title: "Trending on Disney+", path: "/library/platforms/disney-plus/trend?count=30&includeMeta=1" },
+        { title: "Trending on Hulu", path: "/library/platforms/hulu/trend?count=30&includeMeta=1" },
+        { title: "Trending on Prime Video", path: "/library/platforms/amazon-prime-video/trend?count=30&includeMeta=1" },
+        { title: "Popular on Apple TV+", path: "/library/platforms/apple-tv-plus/platform-popular?count=30&includeMeta=1" },
+        { title: "Romance", path: "/library/categories/romance?count=30&includeMeta=1&includeExternalMetadata=1" },
+        { title: "Animation", path: "/library/categories/animation?count=30&includeMeta=1&includeExternalMetadata=1" },
+        { title: "Comedy", path: "/library/categories/comedy?count=30&includeMeta=1&includeExternalMetadata=1" },
+        { title: "Documentary", path: "/library/categories/documentary?count=30&includeMeta=1&includeExternalMetadata=1" }
+    ]
+
+    for each src in discoverSources
+        result = discoverGet(cfg, src.path)
+        if result.ok = true then
+            items = collectDiscoverMetadata(cfg, result.json)
+            addUniqueRow(root, seenTitles, src.title, items)
+        end if
+    end for
+end sub
+
+function discoverGet(cfg as Object, path as String) as Object
+    url = "https://discover.provider.plex.tv" + path
+    if path.Instr("?") > 0 then
+        url = url + "&X-Plex-Token=" + cfg.token
+    else
+        url = url + "?X-Plex-Token=" + cfg.token
+    end if
+    url = url + "&X-Plex-Provider-Version=6.5&X-Plex-Language=en"
+
+    request = CreateObject("roUrlTransfer")
+    port = CreateObject("roMessagePort")
+    request.SetMessagePort(port)
+    request.SetUrl(url)
+    request.SetRequest("GET")
+    request.EnableEncodings(true)
+    request.RetainBodyOnError(true)
+    request.AddHeader("Accept", "application/json")
+    request.AddHeader("X-Plex-Token", cfg.token)
+    request.AddHeader("X-Plex-Product", cfg.product)
+    request.AddHeader("X-Plex-Version", cfg.version)
+    request.AddHeader("X-Plex-Client-Identifier", cfg.clientId)
+    request.AddHeader("X-Plex-Platform", "Roku")
+    request.SetCertificatesFile("common:/certs/ca-bundle.crt")
+    request.InitClientCertificates()
+
+    if not request.AsyncGetToString() then
+        return { ok: false, error: "Failed discover request" }
+    end if
+
+    while true
+        msg = wait(12000, port)
+        if msg = invalid then
+            request.AsyncCancel()
+            return { ok: false, error: "Discover timeout" }
+        end if
+        if type(msg) = "roUrlEvent" then
+            code = msg.GetResponseCode()
+            body = msg.GetString()
+            if code < 200 or code >= 300 then
+                return { ok: false, error: "Discover HTTP " + safeToStr(code) }
+            end if
+            parsed = ParseJson(body)
+            if parsed = invalid then return { ok: false, error: "Discover parse error" }
+            return { ok: true, json: parsed }
+        end if
+    end while
+end function
+
+function collectDiscoverMetadata(cfg as Object, container as Object) as Object
+    items = collectMetadata(cfg, container)
+    ' Also walk Hub → Metadata when present
+    if items.count() = 0 and container <> invalid and container.MediaContainer <> invalid then
+        hubs = container.MediaContainer.Hub
+        if hubs <> invalid then
+            if GetInterface(hubs, "ifArray") = invalid then hubs = [hubs]
+            for each hub in hubs
+                for each it in collectMetadata(cfg, hub)
+                    items.push(it)
+                    if items.count() >= 30 then exit for
+                end for
+                if items.count() >= 30 then exit for
+            end for
+        end if
+    end if
+    for each it in items
+        it.isDiscover = true
+        ' Discover items may lack a local ratingKey playable path — still browsable
+        if safeToStr(it.mediaType) = "" then it.mediaType = "movie"
+    end for
+    return items
 end function
 
 sub appendHubRows(root as Object, seenTitles as Object, hubList as Dynamic, cfg as Object)
@@ -414,6 +593,60 @@ sub addUniqueRow(root as Object, seenTitles as Object, title as String, items as
     if appendRow(root, title, items) then
         seenTitles[key] = true
     end if
+end sub
+
+sub addUniqueRowLoose(root as Object, seenTitles as Object, title as String, items as Object)
+    ' Continue Watching etc — show even with fewer than 15 items, still loop when possible
+    if items = invalid or items.count() = 0 then return
+    key = LCase(title)
+    if seenTitles.DoesExist(key) then return
+
+    capped = []
+    for each item in items
+        if item <> invalid then capped.push(item)
+        if capped.count() >= 30 then exit for
+    end for
+    if capped.count() = 0 then return
+
+    looped = []
+    for each item in capped
+        looped.push(item)
+    end for
+    if capped.count() >= 8 then
+        for each item in capped
+            looped.push(item)
+        end for
+    end if
+
+    row = root.createChild("ContentNode")
+    row.title = title
+    for each item in looped
+        child = row.createChild("ContentNode")
+        child.title = item.title
+        child.description = item.description
+        child.hdPosterUrl = item.hdPosterUrl
+        child.hdBackdropUrl = item.hdBackdropUrl
+        child.addFields({
+            year: item.year,
+            rating: item.rating,
+            contentRating: item.contentRating,
+            mediaType: item.mediaType,
+            ratingKey: item.ratingKey,
+            key: item.key,
+            duration: item.duration,
+            viewOffset: item.viewOffset,
+            leafCount: item.leafCount,
+            childCount: item.childCount,
+            grandparentRatingKey: item.grandparentRatingKey,
+            parentRatingKey: item.parentRatingKey,
+            grandparentTitle: item.grandparentTitle,
+            index: item.index,
+            shortTitle: item.shortTitle,
+            parentIndex: item.parentIndex,
+            isDiscover: item.isDiscover
+        })
+    end for
+    seenTitles[key] = true
 end sub
 
 function resolvePlayable(cfg as Object, item as Object) as Object
@@ -658,6 +891,8 @@ function fetchPersonDetail(cfg as Object, item as Object) as Object
     bio = safeToStr(item.description)
     poster = safeToStr(item.hdPosterUrl)
     backdrop = ""
+    metaLine = ""
+    knownFor = ""
 
     ' Plex people endpoint (when id is available)
     if personId <> "" then
@@ -678,7 +913,7 @@ function fetchPersonDetail(cfg as Object, item as Object) as Object
         end if
     end if
 
-    ' Optional TMDB enrichment
+    ' Optional TMDB enrichment — always prefers richer bios / filmography
     tmdbKey = ""
     if cfg.tmdbApiKey <> invalid then tmdbKey = safeToStr(cfg.tmdbApiKey)
     if tmdbKey <> "" and tmdbKey <> "REPLACE_WITH_TMDB_API_KEY" and name <> "" then
@@ -687,23 +922,55 @@ function fetchPersonDetail(cfg as Object, item as Object) as Object
             if tmdb.bio <> "" then bio = tmdb.bio
             if tmdb.poster <> "" then poster = tmdb.poster
             if tmdb.backdrop <> "" then backdrop = tmdb.backdrop
-            if tmdb.credits <> invalid and tmdb.credits.count() > 0 and credits.count() = 0 then
-                credits = tmdb.credits
+            if tmdb.metaLine <> "" then metaLine = tmdb.metaLine
+            if tmdb.knownFor <> "" then knownFor = tmdb.knownFor
+            if tmdb.credits <> invalid and tmdb.credits.count() > 0 then
+                ' Merge: plex library matches first, then TMDB titles not already present
+                merged = []
+                seen = {}
+                for each c in credits
+                    t = LCase(safeToStr(c.title))
+                    if t <> "" then seen[t] = true
+                    merged.push(c)
+                end for
+                for each c in tmdb.credits
+                    t = LCase(safeToStr(c.title))
+                    if t <> "" and seen.DoesExist(t) = false then
+                        seen[t] = true
+                        merged.push(c)
+                    end if
+                end for
+                credits = merged
             end if
         end if
     end if
+
+    movies = []
+    shows = []
+    for each c in credits
+        mt = safeToStr(c.mediaType)
+        if mt = "show" or mt = "tv" then
+            shows.push(c)
+        else
+            movies.push(c)
+        end if
+    end for
 
     return {
         ok: true,
         person: {
             title: name,
             description: bio,
+            metaLine: metaLine,
+            knownFor: knownFor,
             hdPosterUrl: poster,
             hdBackdropUrl: backdrop,
             mediaType: "actor",
             personId: personId
         },
-        credits: credits
+        credits: credits,
+        movies: movies,
+        shows: shows
     }
 end function
 
@@ -725,11 +992,27 @@ function fetchTmdbPerson(apiKey as String, name as String) as Object
     poster = ""
     backdrop = ""
     bio = ""
+    metaLine = ""
+    knownFor = ""
     if detail <> invalid then
         bio = safeToStr(detail.biography)
         if detail.profile_path <> invalid and safeToStr(detail.profile_path) <> "" then
             poster = "https://image.tmdb.org/t/p/w500" + safeToStr(detail.profile_path)
         end if
+        bits = []
+        dept = safeToStr(detail.known_for_department)
+        if dept <> "" then
+            bits.push(dept)
+            knownFor = dept
+        end if
+        birthday = safeToStr(detail.birthday)
+        if birthday <> "" then bits.push("Born " + birthday)
+        place = safeToStr(detail.place_of_birth)
+        if place <> "" then bits.push(place)
+        if detail.deathday <> invalid and safeToStr(detail.deathday) <> "" then
+            bits.push("Died " + safeToStr(detail.deathday))
+        end if
+        metaLine = joinBits(bits, "  ·  ")
     end if
     if person.profile_path <> invalid and poster = "" then
         poster = "https://image.tmdb.org/t/p/w500" + safeToStr(person.profile_path)
@@ -740,8 +1023,9 @@ function fetchTmdbPerson(apiKey as String, name as String) as Object
         castList = creditsJson.cast
         if castList <> invalid then
             if GetInterface(castList, "ifArray") = invalid then castList = [castList]
+            ' Sort-ish by popularity if present
             maxN = castList.count()
-            if maxN > 24 then maxN = 24
+            if maxN > 60 then maxN = 60
             for i = 0 to maxN - 1
                 c = castList[i]
                 if c <> invalid then
@@ -756,10 +1040,53 @@ function fetchTmdbPerson(apiKey as String, name as String) as Object
                     if c.backdrop_path <> invalid and backdrop = "" then
                         backdrop = "https://image.tmdb.org/t/p/w1280" + safeToStr(c.backdrop_path)
                     end if
+                    year = Left(safeToStr(c.release_date), 4)
+                    if year = "" then year = Left(safeToStr(c.first_air_date), 4)
+                    character = safeToStr(c.character)
+                    desc = character
+                    if year <> "" and desc <> "" then desc = year + " · " + character
+                    if year <> "" and desc = "" then desc = year
                     if title <> "" then
                         credits.push({
                             title: title,
-                            description: safeToStr(c.character),
+                            description: desc,
+                            mediaType: mediaType,
+                            ratingKey: "",
+                            key: "",
+                            hdPosterUrl: thumb,
+                            hdBackdropUrl: "",
+                            year: year,
+                            rating: "",
+                            contentRating: "",
+                            duration: 0,
+                            viewOffset: 0
+                        })
+                    end if
+                end if
+            end for
+        end if
+        ' Also include a few crew credits (director/writer) when cast is thin
+        if credits.count() < 15 and creditsJson.crew <> invalid then
+            crewList = creditsJson.crew
+            if GetInterface(crewList, "ifArray") = invalid then crewList = [crewList]
+            maxC = crewList.count()
+            if maxC > 20 then maxC = 20
+            for i = 0 to maxC - 1
+                c = crewList[i]
+                job = LCase(safeToStr(c.job))
+                if job = "director" or job = "writer" or job = "creator" then
+                    title = firstString(c, ["title", "name"])
+                    if title <> "" then
+                        mediaType = safeToStr(c.media_type)
+                        if mediaType = "tv" then mediaType = "show"
+                        if mediaType = "" then mediaType = "movie"
+                        path = ""
+                        if c.poster_path <> invalid then path = safeToStr(c.poster_path)
+                        thumb = ""
+                        if path <> "" then thumb = "https://image.tmdb.org/t/p/w342" + path
+                        credits.push({
+                            title: title,
+                            description: safeToStr(c.job),
                             mediaType: mediaType,
                             ratingKey: "",
                             key: "",
@@ -777,7 +1104,16 @@ function fetchTmdbPerson(apiKey as String, name as String) as Object
         end if
     end if
 
-    return { bio: bio, poster: poster, backdrop: backdrop, credits: credits }
+    return { bio: bio, poster: poster, backdrop: backdrop, credits: credits, metaLine: metaLine, knownFor: knownFor }
+end function
+
+function joinBits(parts as Object, sep as String) as String
+    out = ""
+    for i = 0 to parts.count() - 1
+        if i > 0 then out = out + sep
+        out = out + parts[i]
+    end for
+    return out
 end function
 
 function httpGetJson(url as String) as Object
@@ -866,6 +1202,130 @@ function fetchLiveTv(cfg as Object) as Object
     end if
 
     return { ok: true, rows: rows, dvrId: dvrId }
+end function
+
+function fetchLiveTvGuide(cfg as Object) as Object
+    dvrId = ""
+    dvrs = plexGet(cfg, "/livetv/dvrs")
+    if dvrs.ok = true then dvrId = firstDvrId(dvrs.json)
+    if dvrId = "" then
+        err = "No DVR configured on this Plex server"
+        if dvrs.ok <> true and dvrs.error <> invalid then err = dvrs.error
+        return { ok: false, error: err }
+    end if
+
+    ' Build channel list
+    channels = []
+    channelsResult = plexGet(cfg, "/livetv/dvrs/" + dvrId + "/channels")
+    if channelsResult.ok = true then
+        channels = mapLiveTvChannels(cfg, channelsResult.json, dvrId)
+    end if
+
+    ' Enrich with what's on now from watchnow / guide
+    onNow = fetchLiveTvWatchNow(cfg)
+    onNowByChannel = {}
+    for each air in onNow
+        cid = safeToStr(air.channelId)
+        if cid <> "" then onNowByChannel[cid] = air
+        ' also index by title fragments
+    end for
+
+    guideAirings = []
+    dt = CreateObject("roDateTime")
+    guideResult = plexGet(cfg, "/livetv/dvrs/" + dvrId + "/guide?time=" + safeToStr(dt.AsSeconds()))
+    if guideResult.ok <> true then
+        guideResult = plexGet(cfg, "/livetv/dvrs/" + dvrId + "/guide")
+    end if
+    if guideResult.ok = true then
+        guideAirings = mapLiveTvGuide(cfg, guideResult.json, dvrId)
+    end if
+
+    ' Prefer richer guide airings as primary channel list when channels empty
+    if channels.count() = 0 and guideAirings.count() > 0 then
+        channels = guideAirings
+    else if channels.count() = 0 and onNow.count() > 0 then
+        channels = onNow
+    end if
+
+    enriched = []
+    for each ch in channels
+        cid = safeToStr(ch.channelId)
+        air = invalid
+        if cid <> "" and onNowByChannel.DoesExist(cid) then
+            air = onNowByChannel[cid]
+        end if
+        if air = invalid then
+            ' match guide by channel number in title
+            for each g in guideAirings
+                if safeToStr(g.channelId) = cid and cid <> "" then
+                    air = g
+                    exit for
+                end if
+            end for
+        end if
+
+        programTitle = asStringSafe(ch.title)
+        description = asStringSafe(ch.description)
+        poster = asStringSafe(ch.hdPosterUrl)
+        backdrop = asStringSafe(ch.hdBackdropUrl)
+        timeRange = ""
+        callSign = asStringSafe(ch.description)
+        if Instr(1, callSign, " · ") > 0 then callSign = Left(callSign, Instr(1, callSign, " · ") - 1)
+
+        if air <> invalid then
+            if asStringSafe(air.title) <> "" then programTitle = asStringSafe(air.title)
+            if asStringSafe(air.description) <> "" then description = asStringSafe(air.description)
+            if asStringSafe(air.hdPosterUrl) <> "" then poster = asStringSafe(air.hdPosterUrl)
+            if asStringSafe(air.hdBackdropUrl) <> "" then backdrop = asStringSafe(air.hdBackdropUrl)
+        end if
+
+        channelNumber = ""
+        ' Parse "12.1  CNN" style titles from mapLiveTvChannels
+        bits = ch.title
+        if bits <> invalid then
+            ' channel number often leading
+            channelNumber = firstTokenNumber(asStringSafe(ch.title))
+        end if
+
+        enriched.push({
+            title: asStringSafe(ch.title),
+            programTitle: programTitle,
+            description: description,
+            callSign: callSign,
+            channelNumber: channelNumber,
+            timeRange: timeRange,
+            mediaType: "livetv",
+            ratingKey: asStringSafe(ch.ratingKey),
+            key: asStringSafe(ch.key),
+            channelId: cid,
+            dvrId: dvrId,
+            hdPosterUrl: poster,
+            hdBackdropUrl: backdrop
+        })
+    end for
+
+    if enriched.count() = 0 then
+        return { ok: false, error: "No Live TV channels found" }
+    end if
+    return { ok: true, channels: enriched, dvrId: dvrId }
+end function
+
+function asStringSafe(value as Dynamic) as String
+    return safeToStr(value)
+end function
+
+function firstTokenNumber(title as String) as String
+    if title = "" then return ""
+    out = ""
+    for i = 1 to Len(title)
+        ch = Mid(title, i, 1)
+        if (ch >= "0" and ch <= "9") or ch = "." then
+            out = out + ch
+        else if out <> "" then
+            exit for
+        end if
+    end for
+    return out
 end function
 
 function firstDvrId(json as Object) as String

@@ -12,10 +12,10 @@ function GetPlexConfig() as Object
         clientId: "plexflix-roku-mvp-001",
 
         product: "PlexFlix",
-        version: "0.3.9",
+        version: "0.4.0",
 
-        ' How many items to request per row
-        rowSize: 36,
+        ' How many items to request per row (home clamps display to 15–30)
+        rowSize: 40,
 
         ' Live sports JSON feed (editable). Expected objects with title/name + url/stream fields.
         sportsFeedUrl: "https://roku-hockey.s3.us-west-004.backblazeb2.com/secretfeedfilename.json",

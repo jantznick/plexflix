@@ -47,18 +47,49 @@ sub onLoaded()
     person = response.person
     if person <> invalid then
         if asString(person.title) <> "" then m.titleLabel.text = person.title
+        meta = asString(person.metaLine)
+        if meta = "" then meta = asString(person.knownFor)
+        if meta = "" then meta = asString(m.top.content.description)
+        m.roleLabel.text = meta
         if asString(person.description) <> "" then m.bioLabel.text = person.description
         if asString(person.hdPosterUrl) <> "" then m.poster.uri = person.hdPosterUrl
         if asString(person.hdBackdropUrl) <> "" then m.backdrop.uri = person.hdBackdropUrl
     end if
 
+    movies = response.movies
+    shows = response.shows
     credits = response.credits
+    if movies = invalid then movies = []
+    if shows = invalid then shows = []
     if credits = invalid then credits = []
+
     root = createObject("roSGNode", "ContentNode")
+    added = 0
+    if movies.count() > 0 then
+        appendCreditRow(root, "Movies", movies)
+        added = added + 1
+    end if
+    if shows.count() > 0 then
+        appendCreditRow(root, "TV Shows", shows)
+        added = added + 1
+    end if
+    if added = 0 and credits.count() > 0 then
+        appendCreditRow(root, "Known for", credits)
+        added = 1
+    end if
+
+    m.creditRows.content = root
+    if added > 0 then m.creditRows.setFocus(true)
+end sub
+
+sub appendCreditRow(root as Object, title as String, list as Object)
     row = root.createChild("ContentNode")
-    row.title = "Known for"
-    for each c in credits
-        if asString(c.mediaType) = "movie" or asString(c.mediaType) = "show" then
+    row.title = title
+    maxN = list.count()
+    if maxN > 40 then maxN = 40
+    for i = 0 to maxN - 1
+        c = list[i]
+        if c <> invalid and (asString(c.mediaType) = "movie" or asString(c.mediaType) = "show" or asString(c.mediaType) = "") then
             child = row.createChild("ContentNode")
             child.title = c.title
             child.hdPosterUrl = c.hdPosterUrl
@@ -76,8 +107,6 @@ sub onLoaded()
             })
         end if
     end for
-    m.creditRows.content = root
-    if row.getChildCount() > 0 then m.creditRows.setFocus(true)
 end sub
 
 sub onCreditSelected()

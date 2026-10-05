@@ -16,10 +16,10 @@ sub init()
     m.rowsMove = m.top.findNode("rowsMove")
 
     ' Expanded = billboard mode. Collapsed = shelves fill the screen.
-    m.expandedRowY = 620
+    m.expandedRowY = 720
     m.collapsedRowY = 64
     m.rowsX = 96
-    m.heroHideY = -820
+    m.heroHideY = -920
     m.isCollapsed = false
     m.currentRow = -1
 
@@ -90,7 +90,7 @@ sub onHomeLoaded()
     end if
 
     rowCount = content.getChildCount()
-    m.buildLabel.text = "v0.3.8 · " + safeToStr(rowCount) + " rows"
+    m.buildLabel.text = "v0.4.0 · " + safeToStr(rowCount) + " rows"
 
     if m.loadingPanel <> invalid then m.loadingPanel.visible = false
     if m.frame <> invalid then m.frame.visible = true

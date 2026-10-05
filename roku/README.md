@@ -9,10 +9,12 @@ This is intentionally a **design/UX shell** on top of existing Plex data. Creden
 - Dark Netflix-like home: billboard hero + horizontal shelves
 - **Collapsible sidebar** (Left to open): Home, your **Libraries**, **Live TV**, Live Sports
 - Selecting a library in the sidebar opens that library’s shelves
-- **Live TV / DVR**: On Now, Channels, Guide, Recordings (tunes via Plex DVR → HLS)
-- **Continue Watching**, **Recently Added**, Plex home hubs, and library shelves
+- **Live TV**: Guide layout — program info top-left, live preview top-right, channel guide bottom third (DVR recordings later)
+- **Continue Watching**, **Recently Added**, Plex hubs, library shelves, **genre rows**, and **Discover** trending (Netflix/Disney+/etc.)
+- Home shelves require **15–30** items (except Continue Watching) and **loop** horizontally
 - Continue Watching episodes open the parent show with that episode focused
-- Title detail screen (Cast + More Like This)
+- Title detail screen (Cast + More Like This) with larger hero art
+- Cast pages: bio, birthday/place, Movies + TV filmography (TMDB when configured)
 - Playback via Plex universal transcoder (HLS)
 - Live sports from a configurable JSON feed URL (event detail + stream picker)
 - Optional **TMDB** enrichment for cast pages (`tmdbApiKey` in config)

@@ -15,19 +15,20 @@
     <children>
         <Rectangle width="1920" height="1080" color="0x07070B" />
 
-        <!-- Full-bleed hero backdrop -->
+        <!-- Full-bleed hero — taller visible art plane -->
         <Poster
             id="backdrop"
             width="1920"
-            height="720"
+            height="900"
             loadDisplayMode="scaleToZoom"
             opacity="1"
         />
-        <Rectangle width="1920" height="720" color="0x07070B" opacity="0.35" />
-        <Rectangle width="1100" height="720" color="0x07070B" opacity="0.5" />
-        <Rectangle width="1920" height="360" translation="[0, 360]" color="0x07070B" opacity="0.88" />
+        <Rectangle width="1920" height="900" color="0x07070B" opacity="0.22" />
+        <Rectangle width="1100" height="900" color="0x07070B" opacity="0.42" />
+        <!-- Soft fade only near bottom so art stays visible -->
+        <Rectangle width="1920" height="280" translation="[0, 620]" color="0x07070B" opacity="0.72" />
 
-        <Group id="frame" translation="[96, 72]">
+        <Group id="frame" translation="[96, 56]">
             <Rectangle width="216" height="324" translation="[8, 10]" color="0x000000" opacity="0.55" />
             <Poster
                 id="poster"
@@ -69,7 +70,8 @@
                 <Font role="font" uri="pkg:/fonts/Outfit-Regular.ttf" size="18" />
             </Label>
 
-            <Group id="tvPanel" translation="[0, 360]" visible="false">
+            <!-- Rails sit lower so more hero art stays visible -->
+            <Group id="tvPanel" translation="[0, 460]" visible="false">
                 <ShelfRowList
                     id="seasonRows"
                     translation="[0, 0]"
@@ -87,7 +89,7 @@
                 />
             </Group>
 
-            <Group id="relatedPanel" translation="[0, 360]" visible="false">
+            <Group id="relatedPanel" translation="[0, 460]" visible="false">
                 <ShelfRowList
                     id="relatedRows"
                     translation="[0, 0]"

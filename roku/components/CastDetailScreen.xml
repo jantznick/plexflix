@@ -28,14 +28,14 @@
             <Label id="roleLabel" translation="[268, 90]" width="1400" height="36" color="0xA8A8B0">
                 <Font role="font" uri="pkg:/fonts/Outfit-Medium.ttf" size="22" />
             </Label>
-            <Label id="bioLabel" translation="[268, 136]" width="1380" height="140" color="0xD0D0D6" wrap="true" maxLines="4" lineSpacing="5">
+            <Label id="bioLabel" translation="[268, 136]" width="1380" height="160" color="0xD0D0D6" wrap="true" maxLines="5" lineSpacing="5">
                 <Font role="font" uri="pkg:/fonts/Outfit-Regular.ttf" size="22" />
             </Label>
-            <BusySpinner id="spinner" translation="[268, 300]" uri="pkg:/images/spinner.png" visible="false" />
+            <BusySpinner id="spinner" translation="[268, 310]" uri="pkg:/images/spinner.png" visible="false" />
 
             <ShelfRowList
                 id="creditRows"
-                translation="[0, 380]"
+                translation="[0, 360]"
                 itemComponentName="PosterItem"
                 numRows="2"
                 rowItemSize="[[150, 225]]"
