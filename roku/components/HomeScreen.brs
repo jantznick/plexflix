@@ -257,7 +257,7 @@ sub updateHeroContent(item as Object)
         m.heroArt.loadWidth = 1920
         m.heroArt.loadHeight = 1080
         m.heroArt.width = 1920
-        m.heroArt.height = 780
+        m.heroArt.height = 680
         m.heroArt.translation = [0, 0]
     end if
 
