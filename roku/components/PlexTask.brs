@@ -270,7 +270,7 @@ function metadataToItem(cfg as Object, meta as Object) as Object
         key: key,
         hdPosterUrl: imageUrl(cfg, thumb, posterW, posterH),
         hdShowPosterUrl: showPosterUrl,
-        hdBackdropUrl: imageUrl(cfg, art, 1920, 1080),
+        hdBackdropUrl: imageUrl(cfg, art, 1920, 800),
         duration: duration,
         viewOffset: viewOffset,
         leafCount: meta.leafCount,
@@ -911,12 +911,18 @@ function fetchSectionHub(cfg as Object, item as Object) as Object
 
     heroPosters = []
     pool = []
-    sample = plexGet(cfg, "/library/sections/" + sectionId + "/all?sort=addedAt:desc")
+    sample = plexGet(cfg, "/library/sections/" + sectionId + "/all?sort=addedAt:desc&X-Plex-Container-Start=0&X-Plex-Container-Size=60")
     if sample.ok = true then pool = collectMetadata(cfg, sample.json)
-    heroPosters = pickRandomPosterUrls(pool, 10)
+    heroPosters = pickRandomPosterUrls(pool, 36)
 
     root = createObject("roSGNode", "ContentNode")
     seenTitles = {}
+
+    ' Continue Watching is always the first shelf under View all
+    onDeck = plexGet(cfg, "/library/sections/" + sectionId + "/onDeck")
+    if onDeck.ok = true then
+        addUniqueRowLoose(root, seenTitles, "Continue Watching", preferShowPosters(collectMetadata(cfg, onDeck.json)))
+    end if
 
     recent = plexGet(cfg, "/library/sections/" + sectionId + "/recentlyAdded")
     if recent.ok = true then
@@ -931,16 +937,15 @@ function fetchSectionHub(cfg as Object, item as Object) as Object
             for each hub in hubList
                 hubTitle = safeToStr(hub.title)
                 if hubTitle = "" then hubTitle = "Browse"
-                if hub.Metadata <> invalid then
+                low = LCase(hubTitle)
+                skipHub = false
+                if low = "continue watching" or low = "on deck" or low = "recently added" then skipHub = true
+                if Left(low, 18) = "continue watching" then skipHub = true
+                if hub.Metadata <> invalid and skipHub <> true then
                     addUniqueRowLoose(root, seenTitles, hubTitle, collectMetadata(cfg, hub))
                 end if
             end for
         end if
-    end if
-
-    onDeck = plexGet(cfg, "/library/sections/" + sectionId + "/onDeck")
-    if onDeck.ok = true then
-        addUniqueRowLoose(root, seenTitles, "Continue Watching", preferShowPosters(collectMetadata(cfg, onDeck.json)))
     end if
 
     genres = collectSectionGenres(cfg, sectionId)
@@ -970,7 +975,7 @@ function fetchSectionAll(cfg as Object, item as Object) as Object
     pageSize = 48
     if item.pageSize <> invalid then pageSize = item.pageSize
     if pageSize < 12 then pageSize = 12
-    if pageSize > 60 then pageSize = 60
+    if pageSize > 80 then pageSize = 80
 
     path = "/library/sections/" + sectionId + "/all?sort=" + requestEncode(sortKey)
     path = path + "&X-Plex-Container-Start=" + safeToStr(startAt)

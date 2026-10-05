@@ -14,66 +14,65 @@
     <children>
         <Rectangle width="1920" height="1080" color="0x0A0E18" />
 
-        <Rectangle width="1920" height="64" color="0x121A2A" />
-        <Label translation="[96, 14]" width="400" height="40" text="LIVE TV GUIDE" color="0xE50914">
-            <Font role="font" uri="pkg:/fonts/Outfit-Bold.ttf" size="28" />
+        <Rectangle width="1920" height="56" color="0x121A2A" />
+        <Label translation="[96, 12]" width="400" height="36" text="LIVE TV GUIDE" color="0xE50914">
+            <Font role="font" uri="pkg:/fonts/Outfit-Bold.ttf" size="24" />
         </Label>
-        <Label id="clockLabel" translation="[1400, 18]" width="420" height="36" horizAlign="right" text="" color="0xA8B0C0">
-            <Font role="font" uri="pkg:/fonts/Outfit-Medium.ttf" size="22" />
+        <Label id="clockLabel" translation="[1400, 14]" width="420" height="32" horizAlign="right" text="" color="0xA8B0C0">
+            <Font role="font" uri="pkg:/fonts/Outfit-Medium.ttf" size="18" />
         </Label>
 
-        <Group translation="[96, 80]">
-            <Label id="programTitle" width="900" height="60" color="0xFFFFFF" wrap="true" maxLines="2" text="Select a channel">
-                <Font role="font" uri="pkg:/fonts/Outfit-Bold.ttf" size="40" />
+        <Group translation="[96, 72]">
+            <Label id="programTitle" width="900" height="52" color="0xFFFFFF" wrap="true" maxLines="2" text="Select a channel">
+                <Font role="font" uri="pkg:/fonts/Outfit-Bold.ttf" size="34" />
             </Label>
-            <Label id="channelMeta" translation="[0, 68]" width="900" height="32" color="0x8FA0B8" text="">
-                <Font role="font" uri="pkg:/fonts/Outfit-Medium.ttf" size="20" />
+            <Label id="channelMeta" translation="[0, 56]" width="900" height="28" color="0x8FA0B8" text="">
+                <Font role="font" uri="pkg:/fonts/Outfit-Medium.ttf" size="18" />
             </Label>
-            <Label id="programSummary" translation="[0, 108]" width="900" height="100" color="0xC5CCD8" wrap="true" maxLines="3" lineSpacing="4" text="">
-                <Font role="font" uri="pkg:/fonts/Outfit-Regular.ttf" size="20" />
-            </Label>
-
-            <Group id="watchBtn" translation="[0, 230]">
-                <Rectangle id="watchBg" width="220" height="52" color="0xE50914" />
-                <Label width="220" height="52" horizAlign="center" vertAlign="center" text="Watch" color="0xFFFFFF">
-                    <Font role="font" uri="pkg:/fonts/Outfit-SemiBold.ttf" size="24" />
-                </Label>
-            </Group>
-            <Label id="statusLabel" translation="[240, 240]" width="640" height="36" text="" color="0x778099">
+            <Label id="programSummary" translation="[0, 90]" width="900" height="80" color="0xC5CCD8" wrap="true" maxLines="3" lineSpacing="3" text="">
                 <Font role="font" uri="pkg:/fonts/Outfit-Regular.ttf" size="18" />
             </Label>
 
-            <Rectangle translation="[1020, 0]" width="700" height="294" color="0x000000" />
-            <Poster id="previewArt" translation="[1020, 0]" width="700" height="294" loadDisplayMode="scaleToZoom" loadWidth="1280" loadHeight="720" uri="pkg:/images/poster_placeholder.png" opacity="0.35" />
-            <Video id="previewVideo" translation="[1020, 0]" width="700" height="294" visible="false" />
-            <Label id="previewHint" translation="[1020, 130]" width="700" height="36" horizAlign="center" text="PREVIEW" color="0x556070">
-                <Font role="font" uri="pkg:/fonts/Outfit-Medium.ttf" size="20" />
+            <Group id="watchBtn" translation="[0, 190]">
+                <Rectangle id="watchBg" width="200" height="48" color="0xE50914" />
+                <Label id="watchLabel" width="200" height="48" horizAlign="center" vertAlign="center" text="Watch" color="0xFFFFFF">
+                    <Font role="font" uri="pkg:/fonts/Outfit-SemiBold.ttf" size="22" />
+                </Label>
+            </Group>
+            <Label id="statusLabel" translation="[220, 200]" width="640" height="32" text="" color="0x778099">
+                <Font role="font" uri="pkg:/fonts/Outfit-Regular.ttf" size="16" />
+            </Label>
+
+            <Rectangle translation="[1020, 0]" width="700" height="250" color="0x000000" />
+            <Poster id="previewArt" translation="[1020, 0]" width="700" height="250" loadDisplayMode="scaleToZoom" loadWidth="1280" loadHeight="720" uri="pkg:/images/poster_placeholder.png" opacity="0.35" />
+            <Video id="previewVideo" translation="[1020, 0]" width="700" height="250" visible="false" />
+            <Label id="previewHint" translation="[1020, 110]" width="700" height="32" horizAlign="center" text="PREVIEW" color="0x556070">
+                <Font role="font" uri="pkg:/fonts/Outfit-Medium.ttf" size="18" />
             </Label>
         </Group>
 
-        <Rectangle translation="[0, 400]" width="1920" height="48" color="0x1A2438" />
-        <Label translation="[96, 410]" width="280" height="32" text="CHANNEL" color="0x8FA0B8">
-            <Font role="font" uri="pkg:/fonts/Outfit-SemiBold.ttf" size="18" />
+        <Rectangle translation="[0, 350]" width="1920" height="36" color="0x1A2438" />
+        <Label translation="[120, 356]" width="280" height="28" text="CHANNEL" color="0x8FA0B8">
+            <Font role="font" uri="pkg:/fonts/Outfit-SemiBold.ttf" size="14" />
         </Label>
-        <Label translation="[420, 410]" width="460" height="32" text="ON NOW" color="0xE8EEF8">
-            <Font role="font" uri="pkg:/fonts/Outfit-SemiBold.ttf" size="18" />
+        <Label translation="[416, 356]" width="460" height="28" text="ON NOW" color="0xE8EEF8">
+            <Font role="font" uri="pkg:/fonts/Outfit-SemiBold.ttf" size="14" />
         </Label>
-        <Label translation="[1000, 410]" width="460" height="32" text="UP NEXT" color="0x8FA0B8">
-            <Font role="font" uri="pkg:/fonts/Outfit-SemiBold.ttf" size="18" />
+        <Label translation="[996, 356]" width="460" height="28" text="UP NEXT" color="0x8FA0B8">
+            <Font role="font" uri="pkg:/fonts/Outfit-SemiBold.ttf" size="14" />
         </Label>
-        <Label translation="[1580, 410]" width="240" height="32" text="STATUS" color="0x8FA0B8">
-            <Font role="font" uri="pkg:/fonts/Outfit-SemiBold.ttf" size="18" />
+        <Label translation="[1476, 356]" width="240" height="28" text="STATUS" color="0x8FA0B8">
+            <Font role="font" uri="pkg:/fonts/Outfit-SemiBold.ttf" size="14" />
         </Label>
 
-        <LabelList
+        <MarkupList
             id="guideList"
-            translation="[72, 456]"
-            itemSize="[1776, 68]"
-            itemSpacing="[0, 0]"
-            numRows="9"
-            color="0xD0D8E8"
-            focusedColor="0x0A0E18"
-            drawFocusFeedback="true"
+            translation="[72, 392]"
+            itemComponentName="GuideRowItem"
+            itemSize="[1776, 40]"
+            itemSpacing="[0, 2]"
+            numRows="15"
+            drawFocusFeedback="false"
         />
     </children>
 </component>

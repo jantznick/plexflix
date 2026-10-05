@@ -5,6 +5,7 @@ sub init()
     m.statusLabel = m.top.findNode("statusLabel")
     m.clockLabel = m.top.findNode("clockLabel")
     m.watchBg = m.top.findNode("watchBg")
+    m.watchLabel = m.top.findNode("watchLabel")
     m.previewArt = m.top.findNode("previewArt")
     m.guideList = m.top.findNode("guideList")
 
@@ -40,9 +41,9 @@ end sub
 
 sub showSkeleton()
     root = createObject("roSGNode", "ContentNode")
-    for i = 1 to 9
+    for i = 1 to 12
         child = root.createChild("ContentNode")
-        child.title = padRight("—", 28) + padRight("Loading sports…", 52) + padRight("—", 28) + "—"
+        setGuideCols(child, "—", "Loading sports…", "—", "—")
     end for
     m.guideList.content = root
     m.guideList.setFocus(true)
@@ -88,7 +89,7 @@ sub onFeedLoaded()
             item.league = league
             m.events.push(item)
             child = root.createChild("ContentNode")
-            child.title = formatLine(item, league)
+            applySportsLine(child, item, league)
         end for
     end for
 
@@ -104,25 +105,28 @@ sub onFeedLoaded()
     end if
 end sub
 
-function formatLine(item as Object, league as String) as String
-    lg = league
-    if Len(lg) > 22 then lg = Mid(lg, 1, 22)
-    title = asString(item.title)
-    if Len(title) > 46 then title = Mid(title, 1, 46)
-    info = asString(item.description)
-    if Len(info) > 24 then info = Mid(info, 1, 24)
-    if info = "" then info = "—"
-    return padRight(lg, 28) + padRight(title, 52) + padRight(info, 28) + "LIVE"
-end function
+sub setGuideCols(node as Object, c0 as String, c1 as String, c2 as String, c3 as String)
+    node.title = c1
+    if node.DoesExist("col0") then
+        node.col0 = c0
+        node.col1 = c1
+        node.col2 = c2
+        node.col3 = c3
+    else
+        node.addFields({ col0: c0, col1: c1, col2: c2, col3: c3 })
+    end if
+end sub
 
-function padRight(text as String, width as Integer) as String
-    if Len(text) >= width then return Mid(text, 1, width)
-    out = text
-    while Len(out) < width
-        out = out + " "
-    end while
-    return out
-end function
+sub applySportsLine(node as Object, item as Object, league as String)
+    lg = league
+    if Len(lg) > 26 then lg = Mid(lg, 1, 26)
+    title = asString(item.title)
+    if Len(title) > 42 then title = Mid(title, 1, 42)
+    info = asString(item.description)
+    if Len(info) > 34 then info = Mid(info, 1, 34)
+    if info = "" then info = "—"
+    setGuideCols(node, lg, title, info, "LIVE")
+end sub
 
 sub onGuideFocused()
     idx = m.guideList.itemFocused
@@ -159,8 +163,10 @@ end sub
 sub paintWatchFocus()
     if m.focusZone = "watch" then
         m.watchBg.color = "0xFFFFFF"
+        if m.watchLabel <> invalid then m.watchLabel.color = "0x111118"
     else
         m.watchBg.color = "0xE50914"
+        if m.watchLabel <> invalid then m.watchLabel.color = "0xFFFFFF"
     end if
 end sub
 
@@ -170,10 +176,6 @@ sub onRefocus()
         paintWatchFocus()
         m.guideList.setFocus(true)
     end if
-end sub
-
-sub onEscapeLeft()
-    m.top.openMenu = true
 end sub
 
 function onKeyEvent(key as String, press as Boolean) as Boolean
@@ -198,8 +200,10 @@ function onKeyEvent(key as String, press as Boolean) as Boolean
             return true
         end if
     else if key = "OK" or key = "play"
-        requestOpen()
-        return true
+        if m.focusZone = "watch" or m.guideList.hasFocus() then
+            requestOpen()
+            return true
+        end if
     end if
     return false
 end function

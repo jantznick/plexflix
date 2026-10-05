@@ -19,49 +19,45 @@
             <Label translation="[0, 420]" width="1920" height="60" horizAlign="center" text="PLEXFLIX" color="0xE50914">
                 <Font role="font" uri="pkg:/fonts/Outfit-Bold.ttf" size="52" />
             </Label>
-            <BusySpinner
-                id="loadSpinner"
-                translation="[912, 510]"
-                uri="pkg:/images/spinner.png"
-            />
+            <BusySpinner id="loadSpinner" translation="[912, 510]" uri="pkg:/images/spinner.png" />
             <ShimmerRow id="shimmer" translation="[96, 700]" />
         </Group>
 
         <Group id="frame" translation="[0, 0]" visible="false">
             <Group id="billboard" translation="[0, 0]">
-                <!-- Standard ~16:9 billboard crop — not ultra-tall zoom -->
+                <!-- Full-bleed billboard; loadWidth/Height keep art sharp -->
                 <Poster
                     id="heroArt"
                     width="1920"
-                    height="680"
+                    height="560"
                     loadDisplayMode="scaleToZoom"
                     loadWidth="1920"
                     loadHeight="1080"
                     uri=""
                 />
-                <!-- Soft full wash only — no hard midline panel -->
-                <Rectangle width="1920" height="680" color="0x07070B" opacity="0.12" />
-                <Rectangle width="1920" height="260" translation="[0, 420]" color="0x07070B" opacity="0.55" />
-                <Rectangle width="1920" height="120" translation="[0, 560]" color="0x07070B" opacity="0.75" />
+                <!-- Soft left/bottom fades for copy — no hard midline bar -->
+                <Rectangle width="900" height="560" color="0x07070B" opacity="0.45" />
+                <Rectangle width="1920" height="200" translation="[0, 360]" color="0x07070B" opacity="0.55" />
+                <Rectangle width="1920" height="80" translation="[0, 480]" color="0x07070B" opacity="0.7" />
 
-                <Group id="heroCopy" translation="[96, 300]">
-                    <Label id="heroTitle" width="1100" height="110" text="" color="0xFFFFFF" wrap="true" maxLines="2" lineSpacing="2">
-                        <Font role="font" uri="pkg:/fonts/Outfit-Bold.ttf" size="54" />
+                <Group id="heroCopy" translation="[96, 250]">
+                    <Label id="heroTitle" width="1100" height="100" text="" color="0xFFFFFF" wrap="true" maxLines="2" lineSpacing="2">
+                        <Font role="font" uri="pkg:/fonts/Outfit-Bold.ttf" size="50" />
                     </Label>
-                    <Label id="heroMeta" translation="[0, 112]" width="1000" height="32" text="" color="0xB8B8C0">
-                        <Font role="font" uri="pkg:/fonts/Outfit-Medium.ttf" size="22" />
+                    <Label id="heroMeta" translation="[0, 100]" width="1000" height="30" text="" color="0xB8B8C0">
+                        <Font role="font" uri="pkg:/fonts/Outfit-Medium.ttf" size="20" />
                     </Label>
-                    <Label id="heroSummary" translation="[0, 150]" width="980" height="80" text="" color="0xD0D0D6" wrap="true" maxLines="2" lineSpacing="5">
-                        <Font role="font" uri="pkg:/fonts/Outfit-Regular.ttf" size="22" />
+                    <Label id="heroSummary" translation="[0, 136]" width="980" height="70" text="" color="0xD0D0D6" wrap="true" maxLines="2" lineSpacing="4">
+                        <Font role="font" uri="pkg:/fonts/Outfit-Regular.ttf" size="20" />
                     </Label>
                 </Group>
             </Group>
 
-            <Label id="buildLabel" translation="[1520, 36]" width="340" height="36" horizAlign="right" text="v0.4.3" color="0x55555A">
+            <Label id="buildLabel" translation="[1520, 36]" width="340" height="36" horizAlign="right" text="v0.4.4" color="0x55555A">
                 <Font role="font" uri="pkg:/fonts/Outfit-Medium.ttf" size="16" />
             </Label>
 
-            <!-- numRows=4 fills the screen; bottom row clips Netflix-style -->
+            <!-- First shelf fully below hero; next shelf peeks at bottom -->
             <ShelfRowList
                 id="rowList"
                 translation="[96, 560]"
@@ -70,7 +66,7 @@
                 rowItemSize="[[150, 225]]"
                 rowItemSpacing="[[22, 0]]"
                 itemSize="[1728, 280]"
-                itemSpacing="[0, 16]"
+                itemSpacing="[0, 14]"
                 showRowLabel="[true]"
                 rowLabelOffset="[[0, 4]]"
                 rowFocusAnimationStyle="fixedFocus"
@@ -78,31 +74,10 @@
                 drawFocusFeedback="false"
             />
 
-            <Animation
-                id="homeAnim"
-                duration="0.22"
-                easeFunction="outCubic"
-                optional="true"
-                repeat="false"
-            >
-                <Vector2DFieldInterpolator
-                    id="billboardMove"
-                    key="[0.0, 1.0]"
-                    keyValue="[[0, 0], [0, 0]]"
-                    fieldToInterp="billboard.translation"
-                />
-                <FloatFieldInterpolator
-                    id="billboardFade"
-                    key="[0.0, 1.0]"
-                    keyValue="[1.0, 1.0]"
-                    fieldToInterp="billboard.opacity"
-                />
-                <Vector2DFieldInterpolator
-                    id="rowsMove"
-                    key="[0.0, 1.0]"
-                    keyValue="[[96, 560], [96, 560]]"
-                    fieldToInterp="rowList.translation"
-                />
+            <Animation id="homeAnim" duration="0.22" easeFunction="outCubic" optional="true" repeat="false">
+                <Vector2DFieldInterpolator id="billboardMove" key="[0.0, 1.0]" keyValue="[[0, 0], [0, 0]]" fieldToInterp="billboard.translation" />
+                <FloatFieldInterpolator id="billboardFade" key="[0.0, 1.0]" keyValue="[1.0, 1.0]" fieldToInterp="billboard.opacity" />
+                <Vector2DFieldInterpolator id="rowsMove" key="[0.0, 1.0]" keyValue="[[96, 560], [96, 560]]" fieldToInterp="rowList.translation" />
             </Animation>
         </Group>
     </children>

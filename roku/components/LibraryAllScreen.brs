@@ -5,6 +5,8 @@ sub init()
     m.spinner = m.top.findNode("spinner")
     m.filterBg = m.top.findNode("filterBg")
     m.searchBg = m.top.findNode("searchBg")
+    m.filterLabel = m.top.findNode("filterLabel")
+    m.searchLabel = m.top.findNode("searchLabel")
     m.filterPanel = m.top.findNode("filterPanel")
     m.filterList = m.top.findNode("filterList")
 
@@ -17,7 +19,7 @@ sub init()
     m.nextStart = 0
     m.hasMore = false
     m.loadingMore = false
-    m.pageSize = 48
+    m.pageSize = 66
     m.gridRoot = invalid
     m.focusZone = "grid" ' grid | toolbar | filter
     m.toolbarBtn = "filter"
@@ -340,12 +342,18 @@ sub paintToolbar(which as String)
     if which = "filter" then
         m.filterBg.color = "0xFFFFFF"
         m.searchBg.color = "0x2A2A32"
+        if m.filterLabel <> invalid then m.filterLabel.color = "0x111118"
+        if m.searchLabel <> invalid then m.searchLabel.color = "0xFFFFFF"
     else if which = "search" then
         m.filterBg.color = "0x2A2A32"
         m.searchBg.color = "0xFFFFFF"
+        if m.filterLabel <> invalid then m.filterLabel.color = "0xFFFFFF"
+        if m.searchLabel <> invalid then m.searchLabel.color = "0x111118"
     else
         m.filterBg.color = "0x2A2A32"
         m.searchBg.color = "0x2A2A32"
+        if m.filterLabel <> invalid then m.filterLabel.color = "0xFFFFFF"
+        if m.searchLabel <> invalid then m.searchLabel.color = "0xFFFFFF"
     end if
 end sub
 

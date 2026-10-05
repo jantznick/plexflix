@@ -15,13 +15,13 @@ sub init()
     m.billboardFade = m.top.findNode("billboardFade")
     m.rowsMove = m.top.findNode("rowsMove")
 
-    ' Expanded: hero + first shelf + next shelf clipped at bottom (Netflix).
-    ' Collapsed: shelves fill the screen; bottom shelf stays clipped.
+    ' Expanded: hero + first shelf fully visible; next shelf clips at bottom.
+    ' Collapsed: shelves fill screen; previous shelf peeks clipped above active.
     m.expandedRowY = 560
     m.collapsedRowY = 36
-    m.collapsedPeekY = -72
+    m.collapsedPeekY = -96
     m.rowsX = 96
-    m.heroHideY = -720
+    m.heroHideY = -600
     m.isCollapsed = false
     m.currentRow = -1
     m.peekActive = false
@@ -93,7 +93,7 @@ sub onHomeLoaded()
     end if
 
     rowCount = content.getChildCount()
-    m.buildLabel.text = "v0.4.3 · " + safeToStr(rowCount) + " rows"
+    m.buildLabel.text = "v0.4.4 · " + safeToStr(rowCount) + " rows"
 
     if m.loadingPanel <> invalid then m.loadingPanel.visible = false
     if m.frame <> invalid then m.frame.visible = true
@@ -130,15 +130,14 @@ sub applyFocusedRow(force as Boolean)
     if item = invalid then return
 
     m.currentRow = rowIndex
-    ' Any shelf below the first one hides the billboard and lifts the rails
     setBrowseMode(rowIndex > 0)
-    ' From the second collapsed row onward, peek the previous shelf above
     applyRowPeek(rowIndex)
     updateHeroContent(item)
 end sub
 
 sub applyRowPeek(rowIndex as Integer)
     if not m.isCollapsed then return
+    ' Peek previous shelf above once you're past the first collapsed row
     wantPeek = rowIndex > 1
     targetY = m.collapsedRowY
     if wantPeek then targetY = m.collapsedPeekY
@@ -177,7 +176,6 @@ sub setBrowseMode(collapsed as Boolean)
     m.pendingOpacity = toOpacity
     m.pendingVisible = not collapsed
 
-    ' Try a short animation; snap shortly after so brs-desktop still ends correctly
     if m.homeAnim <> invalid and m.billboardMove <> invalid then
         m.billboardMove.keyValue = [fromHero, toHero]
         m.rowsMove.keyValue = [fromRows, toRows]
@@ -292,7 +290,9 @@ sub onRowItemSelected()
         parentRatingKey: item.parentRatingKey,
         grandparentTitle: item.grandparentTitle,
         index: item.index,
-        shortTitle: item.shortTitle
+        shortTitle: item.shortTitle,
+        parentIndex: item.parentIndex,
+        isDiscover: item.isDiscover
     }
 end sub
 
@@ -301,33 +301,25 @@ sub onEscapeLeft()
 end sub
 
 sub onEscapeUp()
-    ' At top shelf — expand billboard if collapsed
-    if m.isCollapsed = true then
+    if m.isCollapsed then
         setBrowseMode(false)
+        if m.rowList.content <> invalid and m.rowList.content.getChildCount() > 0 then
+            m.rowList.jumpToRowItem = [0, 0]
+        end if
     end if
 end sub
 
 sub onRefocus()
-    if m.top.refocus = true and m.rowList <> invalid then
+    if m.top.refocus = true then
         m.rowList.setFocus(true)
     end if
 end sub
 
 function onKeyEvent(key as String, press as Boolean) as Boolean
     if not press then return false
-
     if key = "left" then
         m.top.openMenu = true
         return true
-    else if key = "OK" and not m.rowList.hasFocus() then
-        m.rowList.setFocus(true)
-        return true
     end if
-
-    ' Extra insurance if RowList swallows focus events in the simulator
-    if key = "down" or key = "up" then
-        applyFocusedRow(true)
-    end if
-
     return false
 end function

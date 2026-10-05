@@ -34,7 +34,7 @@
 
             <Group id="backBtn" translation="[268, 270]">
                 <Rectangle id="backBg" width="160" height="52" color="0x2A2A32" />
-                <Label width="160" height="52" horizAlign="center" vertAlign="center" text="Back" color="0xFFFFFF">
+                <Label id="backLabel" width="160" height="52" horizAlign="center" vertAlign="center" text="← Back" color="0xFFFFFF">
                     <Font role="font" uri="pkg:/fonts/Outfit-Medium.ttf" size="24" />
                 </Label>
             </Group>

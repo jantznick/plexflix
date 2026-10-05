@@ -5,13 +5,16 @@ sub init()
     m.focusGlow = m.top.findNode("focusGlow")
     m.focusRing = m.top.findNode("focusRing")
     m.focusAccent = m.top.findNode("focusAccent")
+    m.ringT = m.top.findNode("ringT")
+    m.ringB = m.top.findNode("ringB")
+    m.ringL = m.top.findNode("ringL")
+    m.ringR = m.top.findNode("ringR")
     m.progressBg = m.top.findNode("progressBg")
     m.progressFg = m.top.findNode("progressFg")
     m.titleBar = m.top.findNode("titleBar")
     m.titleLabel = m.top.findNode("titleLabel")
     m.itemWidth = 168
     m.itemHeight = 252
-    m.seenIdle = false
     setFocused(false)
 end sub
 
@@ -47,6 +50,26 @@ sub onSizeChange()
     if m.focusAccent <> invalid then
         m.focusAccent.width = ringW
         m.focusAccent.translation = [-pad, m.itemHeight]
+    end if
+    if m.ringT <> invalid then
+        m.ringT.width = ringW
+        m.ringT.height = 4
+        m.ringT.translation = [-pad, -pad]
+    end if
+    if m.ringB <> invalid then
+        m.ringB.width = ringW
+        m.ringB.height = 4
+        m.ringB.translation = [-pad, m.itemHeight + pad - 4]
+    end if
+    if m.ringL <> invalid then
+        m.ringL.width = 4
+        m.ringL.height = ringH
+        m.ringL.translation = [-pad, -pad]
+    end if
+    if m.ringR <> invalid then
+        m.ringR.width = 4
+        m.ringR.height = ringH
+        m.ringR.translation = [m.itemWidth + pad - 4, -pad]
     end if
 
     m.progressBg.width = m.itemWidth
@@ -119,17 +142,17 @@ end sub
 sub onFocusPercentChange()
     fp = m.top.focusPercent
     if fp = invalid then fp = 0
-    ' RowList often leaves item 0 at focusPercent=1 before the shelf is focused.
-    ' Require an idle (unfocused) moment before rings can appear.
-    if fp < 0.15 then m.seenIdle = true
-    show = (fp > 0.55) and (m.seenIdle = true)
-    setFocused(show)
+    setFocused(fp > 0.5)
 end sub
 
 sub setFocused(focused as Boolean)
     if m.focusGlow <> invalid then m.focusGlow.visible = focused
     if m.focusRing <> invalid then m.focusRing.visible = focused
     if m.focusAccent <> invalid then m.focusAccent.visible = focused
+    if m.ringT <> invalid then m.ringT.visible = focused
+    if m.ringB <> invalid then m.ringB.visible = focused
+    if m.ringL <> invalid then m.ringL.visible = focused
+    if m.ringR <> invalid then m.ringR.visible = focused
     if m.titleBar <> invalid then m.titleBar.visible = focused
     if m.titleLabel <> invalid then m.titleLabel.visible = focused
     if focused then

@@ -6,8 +6,10 @@ sub init()
     m.bioLabel = m.top.findNode("bioLabel")
     m.spinner = m.top.findNode("spinner")
     m.backBg = m.top.findNode("backBg")
+    m.backLabel = m.top.findNode("backLabel")
     m.creditRows = m.top.findNode("creditRows")
     m.focusZone = "back" ' back | rows
+    if m.creditRows <> invalid then m.creditRows.focusable = false
     m.creditRows.observeField("rowItemSelected", "onCreditSelected")
     m.creditRows.observeField("escapeBack", "onEscapeBack")
     m.creditRows.observeField("escapeUp", "onEscapeUp")
@@ -87,6 +89,7 @@ sub onLoaded()
 
     m.creditRows.content = root
     m.focusZone = "back"
+    if m.creditRows <> invalid then m.creditRows.focusable = false
     paintBackFocus()
     m.top.setFocus(true)
 end sub
@@ -121,9 +124,12 @@ end sub
 sub paintBackFocus()
     if m.backBg = invalid then return
     if m.focusZone = "back" then
+        ' Focused: white plate + dark label so Back is always readable
         m.backBg.color = "0xFFFFFF"
+        if m.backLabel <> invalid then m.backLabel.color = "0x111118"
     else
         m.backBg.color = "0x2A2A32"
+        if m.backLabel <> invalid then m.backLabel.color = "0xFFFFFF"
     end if
 end sub
 
@@ -157,6 +163,7 @@ end sub
 
 sub onEscapeUp()
     m.focusZone = "back"
+    if m.creditRows <> invalid then m.creditRows.focusable = false
     paintBackFocus()
     m.top.setFocus(true)
 end sub
@@ -180,10 +187,12 @@ function onKeyEvent(key as String, press as Boolean) as Boolean
             if m.creditRows.content <> invalid and m.creditRows.content.getChildCount() > 0 then
                 m.focusZone = "rows"
                 paintBackFocus()
+                m.creditRows.focusable = true
                 m.creditRows.setFocus(true)
                 return true
             end if
         end if
+        return true
     end if
     return false
 end function

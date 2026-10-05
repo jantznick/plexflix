@@ -5,6 +5,7 @@ sub init()
     m.statusLabel = m.top.findNode("statusLabel")
     m.clockLabel = m.top.findNode("clockLabel")
     m.watchBg = m.top.findNode("watchBg")
+    m.watchLabel = m.top.findNode("watchLabel")
     m.previewArt = m.top.findNode("previewArt")
     m.previewVideo = m.top.findNode("previewVideo")
     m.previewHint = m.top.findNode("previewHint")
@@ -49,9 +50,9 @@ end sub
 
 sub showGuideSkeleton()
     root = createObject("roSGNode", "ContentNode")
-    for i = 1 to 9
+    for i = 1 to 12
         child = root.createChild("ContentNode")
-        child.title = formatGuideColumns("—", "Loading…", "—", "")
+        setGuideCols(child, "—", "Loading…", "—", "")
     end for
     m.guideList.content = root
     m.guideList.setFocus(true)
@@ -100,7 +101,7 @@ sub onGuideLoaded()
     root = createObject("roSGNode", "ContentNode")
     for each ch in m.channels
         child = root.createChild("ContentNode")
-        child.title = formatGuideLine(ch)
+        applyGuideLine(child, ch)
     end for
     m.guideList.content = root
     m.guideLoaded = true
@@ -114,12 +115,12 @@ end sub
 
 sub showEmptyGuide(hint as String)
     root = createObject("roSGNode", "ContentNode")
-    for i = 1 to 9
+    for i = 1 to 12
         child = root.createChild("ContentNode")
         if i = 1 then
-            child.title = formatGuideColumns("—", hint, "—", "")
+            setGuideCols(child, "—", hint, "—", "")
         else
-            child.title = formatGuideColumns("—", "—", "—", "")
+            setGuideCols(child, "—", "—", "—", "")
         end if
     end for
     m.guideList.content = root
@@ -128,22 +129,30 @@ sub showEmptyGuide(hint as String)
     m.guideList.setFocus(true)
 end sub
 
-function formatGuideColumns(channelCol as String, nowCol as String, nextCol as String, statusCol as String) as String
-    return padRight(channelCol, 28) + padRight(nowCol, 42) + padRight(nextCol, 36) + statusCol
-end function
+sub setGuideCols(node as Object, c0 as String, c1 as String, c2 as String, c3 as String)
+    node.title = c1
+    if node.DoesExist("col0") then
+        node.col0 = c0
+        node.col1 = c1
+        node.col2 = c2
+        node.col3 = c3
+    else
+        node.addFields({ col0: c0, col1: c1, col2: c2, col3: c3 })
+    end if
+end sub
 
-function formatGuideLine(ch as Object) as String
+sub applyGuideLine(node as Object, ch as Object)
     num = asString(ch.channelNumber)
     callSign = asString(ch.callSign)
-    if Len(callSign) > 18 then callSign = Mid(callSign, 1, 18)
+    if Len(callSign) > 22 then callSign = Mid(callSign, 1, 22)
     program = asString(ch.programTitle)
     if program = "" then program = asString(ch.title)
     if program = "" then program = "On now"
-    if Len(program) > 36 then program = Mid(program, 1, 36)
+    if Len(program) > 42 then program = Mid(program, 1, 42)
 
     nextShow = asString(ch.nextTitle)
     if nextShow = "" then nextShow = "—"
-    if Len(nextShow) > 30 then nextShow = Mid(nextShow, 1, 30)
+    if Len(nextShow) > 36 then nextShow = Mid(nextShow, 1, 36)
 
     channelCol = ""
     if num <> "" and callSign <> "" then
@@ -155,24 +164,13 @@ function formatGuideLine(ch as Object) as String
     else
         channelCol = Mid(asString(ch.title), 1, 24)
     end if
-    if Len(channelCol) > 26 then channelCol = Mid(channelCol, 1, 26)
-
-    ' Avoid duplicating program into channel column
+    if Len(channelCol) > 28 then channelCol = Mid(channelCol, 1, 28)
     if LCase(channelCol) = LCase(program) then channelCol = "Ch"
 
     statusCol = asString(ch.timeRange)
     if statusCol = "" then statusCol = "LIVE"
-    return formatGuideColumns(channelCol, program, nextShow, statusCol)
-end function
-
-function padRight(text as String, width as Integer) as String
-    if Len(text) >= width then return Mid(text, 1, width)
-    out = text
-    while Len(out) < width
-        out = out + " "
-    end while
-    return out
-end function
+    setGuideCols(node, channelCol, program, nextShow, statusCol)
+end sub
 
 sub onGuideFocused()
     idx = m.guideList.itemFocused
@@ -273,8 +271,10 @@ end sub
 sub paintWatchFocus()
     if m.focusZone = "watch" then
         m.watchBg.color = "0xFFFFFF"
+        if m.watchLabel <> invalid then m.watchLabel.color = "0x111118"
     else
         m.watchBg.color = "0xE50914"
+        if m.watchLabel <> invalid then m.watchLabel.color = "0xFFFFFF"
     end if
 end sub
 

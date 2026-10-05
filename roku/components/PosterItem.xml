@@ -35,16 +35,12 @@
             opacity="0.78"
         />
 
-        <!-- Soft glow plate behind the ring -->
-        <Rectangle
-            id="focusGlow"
-            width="184"
-            height="268"
-            translation="[-8, -8]"
-            color="0xFFFFFF"
-            opacity="0.18"
-            visible="false"
-        />
+        <!-- High-contrast focus frame (4 solid edges — reliable on simulator) -->
+        <Rectangle id="focusGlow" width="184" height="268" translation="[-8, -8]" color="0x3B82F6" opacity="0.35" visible="false" />
+        <Rectangle id="ringT" width="184" height="4" translation="[-8, -8]" color="0xFFFFFF" visible="false" />
+        <Rectangle id="ringB" width="184" height="4" translation="[-8, 256]" color="0xFFFFFF" visible="false" />
+        <Rectangle id="ringL" width="4" height="268" translation="[-8, -8]" color="0xFFFFFF" visible="false" />
+        <Rectangle id="ringR" width="4" height="268" translation="[172, -8]" color="0xFFFFFF" visible="false" />
         <Poster
             id="focusRing"
             width="184"
