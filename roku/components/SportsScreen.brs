@@ -7,12 +7,23 @@ sub init()
     m.previewArt = m.top.findNode("previewArt")
     m.guideList = m.top.findNode("guideList")
 
+    m.previewH = 250
+    m.previewW = Int(m.previewH * 16 / 9)
+    m.previewX = 1020
+
     if m.previewArt <> invalid then
         m.previewArt.loadDisplayMode = "scaleToZoom"
         m.previewArt.loadWidth = 1280
         m.previewArt.loadHeight = 720
-        m.previewArt.width = 640
-        m.previewArt.height = 360
+        m.previewArt.width = m.previewW
+        m.previewArt.height = m.previewH
+        m.previewArt.translation = [m.previewX, 0]
+    end if
+    previewBg = m.top.findNode("previewBg")
+    if previewBg <> invalid then
+        previewBg.width = m.previewW
+        previewBg.height = m.previewH
+        previewBg.translation = [m.previewX, 0]
     end if
 
     m.events = []
@@ -170,8 +181,8 @@ sub updateInfo(idx as Integer)
         m.previewArt.loadDisplayMode = "scaleToZoom"
         m.previewArt.loadWidth = 1280
         m.previewArt.loadHeight = 720
-        m.previewArt.width = 640
-        m.previewArt.height = 360
+        m.previewArt.width = m.previewW
+        m.previewArt.height = m.previewH
         m.previewArt.uri = uri
         m.previewArt.opacity = 1.0
     end if

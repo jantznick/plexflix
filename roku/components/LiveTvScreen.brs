@@ -9,13 +9,33 @@ sub init()
     m.previewHint = m.top.findNode("previewHint")
     m.guideList = m.top.findNode("guideList")
 
+    ' Preview box: fixed height, width = height * 16/9
+    m.previewH = 250
+    m.previewW = Int(m.previewH * 16 / 9)
+    m.previewX = 1020
+
     if m.previewArt <> invalid then
         m.previewArt.loadDisplayMode = "scaleToZoom"
         m.previewArt.loadWidth = 1280
         m.previewArt.loadHeight = 720
-        m.previewArt.width = 640
-        m.previewArt.height = 360
-        m.previewArt.translation = [1184, 0]
+        m.previewArt.width = m.previewW
+        m.previewArt.height = m.previewH
+        m.previewArt.translation = [m.previewX, 0]
+    end if
+    if m.previewVideo <> invalid then
+        m.previewVideo.width = m.previewW
+        m.previewVideo.height = m.previewH
+        m.previewVideo.translation = [m.previewX, 0]
+    end if
+    previewBg = m.top.findNode("previewBg")
+    if previewBg <> invalid then
+        previewBg.width = m.previewW
+        previewBg.height = m.previewH
+        previewBg.translation = [m.previewX, 0]
+    end if
+    if m.previewHint <> invalid then
+        m.previewHint.width = m.previewW
+        m.previewHint.translation = [m.previewX, Int(m.previewH / 2) - 16]
     end if
 
     m.channels = []
@@ -212,15 +232,14 @@ sub updateInfo(idx as Integer)
     end if
     m.programSummary.text = summary
 
-    ' Prefer program poster; backdrop only as fallback
     uri = asString(ch.hdPosterUrl)
     if uri = "" then uri = asString(ch.hdBackdropUrl)
     if uri <> "" and m.previewArt <> invalid then
         m.previewArt.loadDisplayMode = "scaleToZoom"
         m.previewArt.loadWidth = 1280
         m.previewArt.loadHeight = 720
-        m.previewArt.width = 640
-        m.previewArt.height = 360
+        m.previewArt.width = m.previewW
+        m.previewArt.height = m.previewH
         m.previewArt.uri = uri
         m.previewArt.opacity = 1.0
         if m.previewHint <> invalid then m.previewHint.visible = false

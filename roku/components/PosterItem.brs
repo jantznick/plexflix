@@ -1,4 +1,5 @@
 sub init()
+    m.visual = m.top.findNode("visual")
     m.poster = m.top.findNode("poster")
     m.shadow = m.top.findNode("shadow")
     m.cardBg = m.top.findNode("cardBg")
@@ -15,7 +16,24 @@ sub init()
     m.titleLabel = m.top.findNode("titleLabel")
     m.itemWidth = 168
     m.itemHeight = 252
+    m.staggerX = 0
     setFocused(false)
+    applyRowStagger()
+end sub
+
+sub onRowIndexChange()
+    applyRowStagger()
+end sub
+
+sub applyRowStagger()
+    ' Odd shelves shift right by half a tile so columns don't form a grid.
+    ' Peek strip already has its own offset; this is for every content row.
+    row = 0
+    if m.top.rowIndex <> invalid then row = m.top.rowIndex
+    stagger = 0
+    if (row MOD 2) = 1 then stagger = 86
+    m.staggerX = stagger
+    if m.visual <> invalid then m.visual.translation = [stagger, 0]
 end sub
 
 sub onSizeChange()
@@ -89,6 +107,8 @@ end sub
 sub onContentChange()
     item = m.top.itemContent
     if item = invalid then return
+
+    applyRowStagger()
 
     if item.hdPosterUrl <> invalid and item.hdPosterUrl <> "" then
         m.poster.uri = item.hdPosterUrl
