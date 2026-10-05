@@ -13,6 +13,7 @@ sub init()
     m.tvPanel = m.top.findNode("tvPanel")
     m.seasonRows = m.top.findNode("seasonRows")
     m.seasonRows.observeField("rowItemSelected", "onEpisodeSelected")
+    m.seasonRows.observeField("rowItemFocused", "onSeasonItemFocused")
     m.seasonRows.observeField("escapeUp", "onSeasonEscapeUp")
     m.seasonRows.observeField("escapeBack", "onEscapeBack")
 
@@ -32,6 +33,8 @@ sub init()
     m.relatedContent = invalid
     m.focusEpisodeKey = ""
     m.focusSeasonKey = ""
+    m.showHeader = invalid
+    m.headerMode = "show"
 
     updateMovieButtonFocus()
 end sub
@@ -43,20 +46,8 @@ sub onContentSet()
     m.focusEpisodeKey = asString(item.focusEpisodeKey)
     m.focusSeasonKey = asString(item.focusSeasonKey)
 
-    m.titleLabel.text = asString(item.title)
-    m.summaryLabel.text = asString(item.description)
-    if m.softStatus <> invalid then m.softStatus.text = ""
-
-    metaBits = []
-    year = asString(item.year)
-    if year <> "" then metaBits.push(year)
-    contentRating = asString(item.contentRating)
-    if contentRating <> "" then metaBits.push(contentRating)
-    rating = asString(item.rating)
-    if rating <> "" then metaBits.push(rating + " ★")
-    mediaType = asString(item.mediaType)
-    if mediaType <> "" then metaBits.push(titleCaseType(mediaType))
-    m.metaLabel.text = joinStrings(metaBits, "  ·  ")
+    applyShowHeader(item)
+    rememberShowHeader()
 
     if item.hdBackdropUrl <> invalid and item.hdBackdropUrl <> "" then
         m.backdrop.uri = item.hdBackdropUrl
@@ -65,6 +56,7 @@ sub onContentSet()
         m.poster.uri = item.hdPosterUrl
     end if
 
+    mediaType = asString(item.mediaType)
     m.isShow = (mediaType = "show" or mediaType = "season")
     if mediaType = "show" then
         showTvMode()
@@ -84,6 +76,110 @@ sub onContentSet()
     end if
 end sub
 
+sub applyShowHeader(item as Object)
+    if item = invalid then return
+    m.titleLabel.text = asString(item.title)
+    m.summaryLabel.text = asString(item.description)
+    if m.softStatus <> invalid then m.softStatus.text = ""
+
+    metaBits = []
+    year = asString(item.year)
+    if year <> "" then metaBits.push(year)
+    contentRating = asString(item.contentRating)
+    if contentRating <> "" then metaBits.push(contentRating)
+    rating = asString(item.rating)
+    if rating <> "" then metaBits.push(rating + " ★")
+    mediaType = asString(item.mediaType)
+    if mediaType <> "" then metaBits.push(titleCaseType(mediaType))
+    m.metaLabel.text = joinStrings(metaBits, "  ·  ")
+    m.headerMode = "show"
+end sub
+
+sub rememberShowHeader()
+    m.showHeader = {
+        title: m.titleLabel.text,
+        meta: m.metaLabel.text,
+        summary: m.summaryLabel.text,
+        backdrop: ""
+    }
+    if m.backdrop <> invalid and m.backdrop.uri <> invalid then
+        m.showHeader.backdrop = m.backdrop.uri
+    end if
+end sub
+
+sub restoreShowHeader()
+    if m.showHeader = invalid then return
+    m.titleLabel.text = asString(m.showHeader.title)
+    m.metaLabel.text = asString(m.showHeader.meta)
+    m.summaryLabel.text = asString(m.showHeader.summary)
+    if asString(m.showHeader.backdrop) <> "" and m.backdrop <> invalid then
+        m.backdrop.uri = m.showHeader.backdrop
+    end if
+    m.headerMode = "show"
+end sub
+
+sub applyEpisodeHeader(ep as Object)
+    if ep = invalid then return
+
+    epTitle = asString(ep.shortTitle)
+    if epTitle = "" then epTitle = asString(ep.title)
+    showTitle = ""
+    if m.showHeader <> invalid then showTitle = asString(m.showHeader.title)
+    if showTitle = "" and m.top.content <> invalid then showTitle = asString(m.top.content.title)
+
+    seasonNo = asString(ep.parentIndex)
+    epNo = asString(ep.index)
+    headline = epTitle
+    if showTitle <> "" and epTitle <> "" then
+        if seasonNo <> "" and epNo <> "" then
+            headline = showTitle + " — S" + seasonNo + "E" + epNo + " " + epTitle
+        else
+            headline = showTitle + " — " + epTitle
+        end if
+    end if
+    m.titleLabel.text = headline
+
+    metaBits = []
+    year = asString(ep.year)
+    if year <> "" then metaBits.push(year)
+    if m.top.content <> invalid then
+        contentRating = asString(m.top.content.contentRating)
+        if contentRating <> "" then metaBits.push(contentRating)
+    end if
+    if seasonNo <> "" and epNo <> "" then
+        metaBits.push("S" + seasonNo + " · E" + epNo)
+    end if
+    metaBits.push("Episode")
+    m.metaLabel.text = joinStrings(metaBits, "  ·  ")
+
+    summary = asString(ep.description)
+    if summary = "" and m.showHeader <> invalid then summary = asString(m.showHeader.summary)
+    m.summaryLabel.text = summary
+
+    if asString(ep.hdBackdropUrl) <> "" and m.backdrop <> invalid then
+        m.backdrop.uri = ep.hdBackdropUrl
+    end if
+    m.headerMode = "episode"
+end sub
+
+sub onSeasonItemFocused()
+    info = m.seasonRows.rowItemFocused
+    if info = invalid or info.count() < 2 then return
+    if m.seasonRows.content = invalid then return
+    row = m.seasonRows.content.getChild(info[0])
+    if row = invalid then return
+    item = row.getChild(info[1])
+    if item = invalid then return
+
+    mediaType = asString(item.mediaType)
+    if mediaType = "episode" then
+        applyEpisodeHeader(item)
+    else
+        ' Cast / other rows under the same list — show synopsis again
+        restoreShowHeader()
+    end if
+end sub
+
 sub showTvMode()
     m.movieActions.visible = true
     m.relatedPanel.visible = false
@@ -95,7 +191,7 @@ sub showTvMode()
     m.titleLabel.translation = [248, 12]
     m.metaLabel.translation = [248, 92]
     m.summaryLabel.translation = [248, 136]
-    m.summaryLabel.height = 72
+    m.summaryLabel.height = 88
     m.focusIndex = 0
     updateMovieButtonFocus()
 end sub
@@ -111,6 +207,7 @@ sub showMovieMode()
     m.titleLabel.translation = [248, 12]
     m.metaLabel.translation = [248, 92]
     m.summaryLabel.translation = [248, 136]
+    m.summaryLabel.height = 88
     m.relatedContent = createObject("roSGNode", "ContentNode")
     m.relatedRows.content = m.relatedContent
     m.focusIndex = 0
@@ -243,7 +340,8 @@ sub fillSeasonRow(index as Integer, season as Object, episodes as Object)
             year: ep.year,
             hdBackdropUrl: ep.hdBackdropUrl,
             shortTitle: ep.shortTitle,
-            index: ep.index
+            index: ep.index,
+            parentIndex: ep.parentIndex
         })
     end for
 
@@ -307,7 +405,8 @@ sub appendSeasonRow(season as Object, episodes as Object)
             year: ep.year,
             hdBackdropUrl: ep.hdBackdropUrl,
             shortTitle: ep.shortTitle,
-            index: ep.index
+            index: ep.index,
+            parentIndex: ep.parentIndex
         })
     end for
 
@@ -322,20 +421,10 @@ sub onExtrasLoaded()
     ' Enrich header from full metadata (important when opened from Continue Watching episode)
     detail = response.detail
     if detail <> invalid then
-        if asString(detail.title) <> "" then m.titleLabel.text = asString(detail.title)
-        if asString(detail.description) <> "" then m.summaryLabel.text = asString(detail.description)
+        applyShowHeader(detail)
         if asString(detail.hdPosterUrl) <> "" then m.poster.uri = detail.hdPosterUrl
         if asString(detail.hdBackdropUrl) <> "" then m.backdrop.uri = detail.hdBackdropUrl
-        metaBits = []
-        year = asString(detail.year)
-        if year <> "" then metaBits.push(year)
-        contentRating = asString(detail.contentRating)
-        if contentRating <> "" then metaBits.push(contentRating)
-        rating = asString(detail.rating)
-        if rating <> "" then metaBits.push(rating + " ★")
-        mediaType = asString(detail.mediaType)
-        if mediaType <> "" then metaBits.push(titleCaseType(mediaType))
-        if metaBits.count() > 0 then m.metaLabel.text = joinStrings(metaBits, "  ·  ")
+        rememberShowHeader()
     end if
 
     castItems = response.cast
