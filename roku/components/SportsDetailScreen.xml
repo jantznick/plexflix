@@ -1,0 +1,75 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<component name="SportsDetailScreen" extends="Group">
+    <interface>
+        <field id="content" type="assocarray" onChange="onContentSet" />
+        <field id="playRequested" type="assocarray" />
+        <field id="closed" type="boolean" alwaysNotify="true" />
+        <field id="close" type="boolean" alwaysNotify="true" onChange="onCloseRequested" />
+    </interface>
+
+    <script type="text/brightscript" uri="SportsDetailScreen.brs" />
+
+    <children>
+        <Rectangle width="1920" height="1080" color="0x08080A" />
+
+        <Group translation="[64, 48]">
+            <Poster
+                id="thumb"
+                width="420"
+                height="236"
+                loadDisplayMode="scaleToZoom"
+                uri="pkg:/images/poster_placeholder.png"
+            />
+            <Rectangle width="420" height="236" color="0x000000" opacity="0.25" />
+
+            <Label
+                id="titleLabel"
+                translation="[460, 0]"
+                width="1200"
+                height="72"
+                color="0xFFFFFF"
+                font="font:LargeBoldSystemFont"
+                wrap="true"
+                maxLines="2"
+            />
+            <Label
+                id="metaLabel"
+                translation="[460, 78]"
+                width="1200"
+                height="36"
+                color="0xAAAAAA"
+                font="font:SmallSystemFont"
+            />
+            <Label
+                id="summaryLabel"
+                translation="[460, 120]"
+                width="1180"
+                height="80"
+                color="0xCCCCCC"
+                font="font:SmallSystemFont"
+                wrap="true"
+                maxLines="3"
+            />
+
+            <Label
+                translation="[0, 280]"
+                width="600"
+                height="40"
+                text="Available streams"
+                color="0xFFFFFF"
+                font="font:MediumBoldSystemFont"
+            />
+
+            <LabelList
+                id="streamList"
+                translation="[0, 330]"
+                itemSize="[900, 64]"
+                itemSpacing="[0, 8]"
+                numRows="8"
+                color="0xCCCCCC"
+                focusedColor="0xFFFFFF"
+                drawFocusFeedback="true"
+            />
+        </Group>
+    </children>
+</component>

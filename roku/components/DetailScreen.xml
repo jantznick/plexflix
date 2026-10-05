@@ -12,131 +12,132 @@
     <script type="text/brightscript" uri="DetailScreen.brs" />
 
     <children>
-        <Rectangle width="1640" height="1080" color="0x08080A" />
+        <Rectangle width="1920" height="1080" color="0x08080A" />
 
-        <Poster
-            id="backdrop"
-            width="1640"
-            height="520"
-            loadDisplayMode="scaleToFill"
-            opacity="0.34"
-        />
-        <Rectangle width="1640" height="520" color="0x08080A" opacity="0.55" />
-        <Rectangle width="1640" height="740" translation="[0, 340]" color="0x08080A" opacity="0.96" />
+        <Group id="frame" translation="[64, 48]">
+            <Poster
+                id="backdrop"
+                width="1792"
+                height="480"
+                loadDisplayMode="scaleToFill"
+                opacity="0.32"
+            />
+            <Rectangle width="1792" height="480" color="0x08080A" opacity="0.55" />
+            <Rectangle width="1792" height="720" translation="[0, 300]" color="0x08080A" opacity="0.96" />
 
-        <Poster
-            id="poster"
-            translation="[48, 36]"
-            width="200"
-            height="300"
-            loadDisplayMode="scaleToZoom"
-            uri="pkg:/images/poster_placeholder.png"
-        />
+            <Poster
+                id="poster"
+                translation="[0, 0]"
+                width="200"
+                height="300"
+                loadDisplayMode="scaleToZoom"
+                uri="pkg:/images/poster_placeholder.png"
+            />
 
-        <Label
-            id="titleLabel"
-            translation="[280, 40]"
-            width="1300"
-            height="64"
-            color="0xFFFFFF"
-            font="font:LargeBoldSystemFont"
-            wrap="true"
-            maxLines="2"
-        />
-        <Label
-            id="metaLabel"
-            translation="[280, 112]"
-            width="1300"
-            height="32"
-            color="0xB3B3B3"
-            font="font:SmallSystemFont"
-        />
-        <Label
-            id="summaryLabel"
-            translation="[280, 152]"
-            width="1280"
-            height="72"
-            color="0xD6D6D6"
-            font="font:SmallSystemFont"
-            wrap="true"
-            maxLines="2"
-            lineSpacing="4"
-        />
+            <Label
+                id="titleLabel"
+                translation="[232, 4]"
+                width="1400"
+                height="64"
+                color="0xFFFFFF"
+                font="font:LargeBoldSystemFont"
+                wrap="true"
+                maxLines="2"
+            />
+            <Label
+                id="metaLabel"
+                translation="[232, 76]"
+                width="1400"
+                height="32"
+                color="0xB3B3B3"
+                font="font:SmallSystemFont"
+            />
+            <Label
+                id="summaryLabel"
+                translation="[232, 116]"
+                width="1360"
+                height="72"
+                color="0xD6D6D6"
+                font="font:SmallSystemFont"
+                wrap="true"
+                maxLines="2"
+                lineSpacing="4"
+            />
 
-        <Group id="movieActions" translation="[280, 244]" visible="true">
-            <Group id="playBtn" translation="[0, 0]">
-                <Rectangle id="playBg" width="220" height="56" color="0xE50914" />
-                <Label
-                    id="playLabel"
-                    width="220"
-                    height="56"
-                    horizAlign="center"
-                    vertAlign="center"
-                    text="Play"
-                    color="0xFFFFFF"
-                    font="font:MediumBoldSystemFont"
+            <Group id="movieActions" translation="[232, 208]" visible="true">
+                <Group id="playBtn" translation="[0, 0]">
+                    <Rectangle id="playBg" width="220" height="56" color="0xE50914" />
+                    <Label
+                        id="playLabel"
+                        width="220"
+                        height="56"
+                        horizAlign="center"
+                        vertAlign="center"
+                        text="Play"
+                        color="0xFFFFFF"
+                        font="font:MediumBoldSystemFont"
+                    />
+                </Group>
+                <Group id="backBtn" translation="[240, 0]">
+                    <Rectangle id="backBg" width="160" height="56" color="0x2A2A2A" />
+                    <Label
+                        id="backLabel"
+                        width="160"
+                        height="56"
+                        horizAlign="center"
+                        vertAlign="center"
+                        text="Back"
+                        color="0xFFFFFF"
+                        font="font:MediumSystemFont"
+                    />
+                </Group>
+            </Group>
+
+            <Label
+                id="softStatus"
+                translation="[232, 280]"
+                width="1200"
+                height="28"
+                text=""
+                color="0x777777"
+                font="font:SmallestSystemFont"
+            />
+
+            <Group id="tvPanel" translation="[0, 340]" visible="false">
+                <RowList
+                    id="seasonRows"
+                    translation="[0, 0]"
+                    itemComponentName="EpisodeItem"
+                    numRows="2"
+                    rowItemSize="[[300, 170]]"
+                    rowItemSpacing="[[22, 0]]"
+                    itemSize="[1792, 240]"
+                    itemSpacing="[0, 22]"
+                    showRowLabel="[true]"
+                    rowLabelOffset="[[0, 8]]"
+                    rowFocusAnimationStyle="fixedFocus"
+                    focusXOffset="[0]"
+                    drawFocusFeedback="false"
                 />
             </Group>
-            <Group id="backBtn" translation="[240, 0]">
-                <Rectangle id="backBg" width="160" height="56" color="0x2A2A2A" />
-                <Label
-                    id="backLabel"
-                    width="160"
-                    height="56"
-                    horizAlign="center"
-                    vertAlign="center"
-                    text="Back"
-                    color="0xFFFFFF"
-                    font="font:MediumSystemFont"
+
+            <Group id="relatedPanel" translation="[0, 340]" visible="false">
+                <RowList
+                    id="relatedRows"
+                    translation="[0, 0]"
+                    itemComponentName="PosterItem"
+                    numRows="2"
+                    rowItemSize="[[140, 210]]"
+                    rowItemSpacing="[[18, 0]]"
+                    itemSize="[1792, 270]"
+                    itemSpacing="[0, 16]"
+                    showRowLabel="[true]"
+                    rowLabelOffset="[[0, 8]]"
+                    rowFocusAnimationStyle="fixedFocus"
+                    focusXOffset="[0]"
+                    drawFocusFeedback="false"
                 />
             </Group>
-        </Group>
-
-        <Label
-            id="softStatus"
-            translation="[280, 316]"
-            width="1200"
-            height="28"
-            text=""
-            color="0x777777"
-            font="font:SmallestSystemFont"
-        />
-
-        <!-- Rails start well below poster bottom (y=336) so Cast never sits under the art -->
-        <Group id="tvPanel" translation="[0, 380]" visible="false">
-            <RowList
-                id="seasonRows"
-                translation="[0, 0]"
-                itemComponentName="EpisodeItem"
-                numRows="2"
-                rowItemSize="[[300, 170]]"
-                rowItemSpacing="[[22, 0]]"
-                itemSize="[1640, 240]"
-                itemSpacing="[0, 22]"
-                showRowLabel="[true]"
-                rowLabelOffset="[[48, 8]]"
-                rowFocusAnimationStyle="fixedFocus"
-                focusXOffset="[48]"
-                drawFocusFeedback="false"
-            />
-        </Group>
-
-        <Group id="relatedPanel" translation="[0, 380]" visible="false">
-            <RowList
-                id="relatedRows"
-                translation="[0, 0]"
-                itemComponentName="PosterItem"
-                numRows="2"
-                rowItemSize="[[140, 210]]"
-                rowItemSpacing="[[18, 0]]"
-                itemSize="[1640, 270]"
-                itemSpacing="[0, 16]"
-                showRowLabel="[true]"
-                rowLabelOffset="[[48, 8]]"
-                rowFocusAnimationStyle="fixedFocus"
-                focusXOffset="[48]"
-                drawFocusFeedback="false"
-            />
         </Group>
     </children>
 </component>

@@ -3,27 +3,38 @@ sub init()
     m.top.backgroundColor = "0x08080A"
 
     m.sideNav = m.top.findNode("sideNav")
+    m.navScrim = m.top.findNode("navScrim")
     m.contentHost = m.top.findNode("contentHost")
     m.screens = m.top.findNode("screens")
     m.loadingBanner = m.top.findNode("loadingBanner")
-    m.loadingLogo = m.top.findNode("loadingLogo")
     m.statusLabel = m.top.findNode("statusLabel")
 
     m.config = GetPlexConfig()
     m.homeScreen = invalid
     m.detailScreen = invalid
     m.videoScreen = invalid
-    m.playlistsScreen = invalid
+    m.sourcesListScreen = invalid
+    m.libraryBrowseScreen = invalid
     m.sportsScreen = invalid
+    m.sportsDetailScreen = invalid
     m.section = "home"
-    m.navFocused = false
+    m.navExpanded = false
 
+    m.sideNav.expanded = false
     m.sideNav.observeField("selected", "onNavSelected")
     showHome()
 end sub
 
+sub setNavExpanded(expanded as Boolean)
+    m.navExpanded = expanded
+    m.sideNav.expanded = expanded
+    m.navScrim.visible = expanded
+    if not expanded then
+        restoreSectionFocus()
+    end if
+end sub
+
 sub setLoading(isLoading as Boolean, message = "" as String)
-    ' Non-blocking banner — never covers the interactive UI
     m.loadingBanner.visible = isLoading
     if isLoading then
         m.statusLabel.text = message
@@ -39,18 +50,21 @@ sub clearScreens()
     m.homeScreen = invalid
     m.detailScreen = invalid
     m.videoScreen = invalid
-    m.playlistsScreen = invalid
+    m.sourcesListScreen = invalid
+    m.libraryBrowseScreen = invalid
     m.sportsScreen = invalid
+    m.sportsDetailScreen = invalid
 end sub
 
 sub onNavSelected()
     section = m.sideNav.selected
     if section = invalid or section = "" then return
     m.section = section
+    setNavExpanded(false)
     if section = "home" then
         showHome()
-    else if section = "playlists" then
-        showPlaylists()
+    else if section = "sources" then
+        showSourcesList()
     else if section = "sports" then
         showSports()
     end if
@@ -61,23 +75,53 @@ sub showHome()
     m.sideNav.active = "home"
     m.homeScreen = createObject("roSGNode", "HomeScreen")
     m.homeScreen.config = m.config
-    m.homeScreen.observeField("selectedItem", "onHomeSelected")
+    m.homeScreen.observeField("selectedItem", "onBrowseSelected")
     m.homeScreen.observeField("loadingMessage", "onSoftLoading")
     m.screens.appendChild(m.homeScreen)
     m.homeScreen.setFocus(true)
-    m.navFocused = false
 end sub
 
-sub showPlaylists()
+sub showSourcesList()
     clearScreens()
-    m.sideNav.active = "playlists"
-    m.playlistsScreen = createObject("roSGNode", "PlaylistsScreen")
-    m.playlistsScreen.config = m.config
-    m.playlistsScreen.observeField("selectedItem", "onHomeSelected")
-    m.playlistsScreen.observeField("loadingMessage", "onSoftLoading")
-    m.screens.appendChild(m.playlistsScreen)
-    m.playlistsScreen.setFocus(true)
-    m.navFocused = false
+    m.sideNav.active = "sources"
+    m.sourcesListScreen = createObject("roSGNode", "SourcesListScreen")
+    m.sourcesListScreen.config = m.config
+    m.sourcesListScreen.observeField("selectedSource", "onSourcePicked")
+    m.sourcesListScreen.observeField("loadingMessage", "onSoftLoading")
+    m.screens.appendChild(m.sourcesListScreen)
+    m.sourcesListScreen.setFocus(true)
+end sub
+
+sub onSourcePicked()
+    source = m.sourcesListScreen.selectedSource
+    if source = invalid then return
+    showLibraryBrowse(source)
+end sub
+
+sub showLibraryBrowse(source as Object)
+    if m.libraryBrowseScreen <> invalid then
+        m.screens.removeChild(m.libraryBrowseScreen)
+        m.libraryBrowseScreen = invalid
+    end if
+
+    m.libraryBrowseScreen = createObject("roSGNode", "LibraryBrowseScreen")
+    m.libraryBrowseScreen.config = m.config
+    m.libraryBrowseScreen.source = source
+    m.libraryBrowseScreen.observeField("selectedItem", "onBrowseSelected")
+    m.libraryBrowseScreen.observeField("closed", "onLibraryBrowseClosed")
+    m.libraryBrowseScreen.observeField("loadingMessage", "onSoftLoading")
+    m.screens.appendChild(m.libraryBrowseScreen)
+    m.libraryBrowseScreen.setFocus(true)
+end sub
+
+sub onLibraryBrowseClosed()
+    if m.libraryBrowseScreen <> invalid then
+        m.screens.removeChild(m.libraryBrowseScreen)
+        m.libraryBrowseScreen = invalid
+    end if
+    if m.sourcesListScreen <> invalid then
+        m.sourcesListScreen.setFocus(true)
+    end if
 end sub
 
 sub showSports()
@@ -85,32 +129,60 @@ sub showSports()
     m.sideNav.active = "sports"
     m.sportsScreen = createObject("roSGNode", "SportsScreen")
     m.sportsScreen.config = m.config
-    m.sportsScreen.observeField("selectedItem", "onSportsSelected")
+    m.sportsScreen.observeField("selectedItem", "onSportsItemSelected")
     m.sportsScreen.observeField("loadingMessage", "onSoftLoading")
     m.screens.appendChild(m.sportsScreen)
     m.sportsScreen.setFocus(true)
-    m.navFocused = false
 end sub
 
 sub onSoftLoading()
     msg = ""
     if m.homeScreen <> invalid then msg = m.homeScreen.loadingMessage
-    if m.playlistsScreen <> invalid and (msg = invalid or msg = "") then msg = m.playlistsScreen.loadingMessage
+    if m.sourcesListScreen <> invalid and (msg = invalid or msg = "") then msg = m.sourcesListScreen.loadingMessage
+    if m.libraryBrowseScreen <> invalid and (msg = invalid or msg = "") then msg = m.libraryBrowseScreen.loadingMessage
     if m.sportsScreen <> invalid and (msg = invalid or msg = "") then msg = m.sportsScreen.loadingMessage
     if msg = invalid then msg = ""
     setLoading(msg <> "", msg)
 end sub
 
-sub onHomeSelected()
+sub onBrowseSelected()
     item = invalid
     if m.homeScreen <> invalid then item = m.homeScreen.selectedItem
-    if item = invalid and m.playlistsScreen <> invalid then item = m.playlistsScreen.selectedItem
+    if item = invalid and m.libraryBrowseScreen <> invalid then item = m.libraryBrowseScreen.selectedItem
     if item = invalid then return
     showDetail(item)
 end sub
 
-sub onSportsSelected()
+sub onSportsItemSelected()
     item = m.sportsScreen.selectedItem
+    if item = invalid then return
+    showSportsDetail(item)
+end sub
+
+sub showSportsDetail(item as Object)
+    if m.sportsDetailScreen <> invalid then
+        m.screens.removeChild(m.sportsDetailScreen)
+        m.sportsDetailScreen = invalid
+    end if
+
+    m.sportsDetailScreen = createObject("roSGNode", "SportsDetailScreen")
+    m.sportsDetailScreen.content = item
+    m.sportsDetailScreen.observeField("playRequested", "onSportsPlayRequested")
+    m.sportsDetailScreen.observeField("closed", "onSportsDetailClosed")
+    m.screens.appendChild(m.sportsDetailScreen)
+    m.sportsDetailScreen.setFocus(true)
+end sub
+
+sub onSportsDetailClosed()
+    if m.sportsDetailScreen <> invalid then
+        m.screens.removeChild(m.sportsDetailScreen)
+        m.sportsDetailScreen = invalid
+    end if
+    if m.sportsScreen <> invalid then m.sportsScreen.setFocus(true)
+end sub
+
+sub onSportsPlayRequested()
+    item = m.sportsDetailScreen.playRequested
     if item = invalid then return
     showVideo(item)
 end sub
@@ -118,23 +190,71 @@ end sub
 sub showDetail(item as Object)
     if item = invalid then return
 
-    ' Continue Watching episodes open the parent show with that episode focused
-    if asString(item.mediaType) = "episode" and asString(item.grandparentRatingKey) <> "" then
-        focusEpisodeKey = asString(item.ratingKey)
-        focusSeasonKey = asString(item.parentRatingKey)
-        item = {
-            title: asString(item.grandparentTitle),
-            mediaType: "show",
-            ratingKey: asString(item.grandparentRatingKey),
-            key: "/library/metadata/" + asString(item.grandparentRatingKey),
-            hdPosterUrl: item.hdPosterUrl,
-            hdBackdropUrl: item.hdBackdropUrl,
-            description: item.description,
-            focusEpisodeKey: focusEpisodeKey,
-            focusSeasonKey: focusSeasonKey
-        }
+    if asString(item.mediaType) = "episode" then
+        if asString(item.grandparentRatingKey) <> "" then
+            openShowForEpisode(item)
+            return
+        end if
+        resolveEpisodeThenShow(item)
+        return
     end if
 
+    openDetailScreen(item)
+end sub
+
+sub openShowForEpisode(episode as Object)
+    focusEpisodeKey = asString(episode.ratingKey)
+    focusSeasonKey = asString(episode.parentRatingKey)
+    showItem = {
+        title: asString(episode.grandparentTitle),
+        mediaType: "show",
+        ratingKey: asString(episode.grandparentRatingKey),
+        key: "/library/metadata/" + asString(episode.grandparentRatingKey),
+        hdPosterUrl: episode.hdPosterUrl,
+        hdBackdropUrl: episode.hdBackdropUrl,
+        description: episode.description,
+        focusEpisodeKey: focusEpisodeKey,
+        focusSeasonKey: focusSeasonKey
+    }
+    openDetailScreen(showItem)
+end sub
+
+sub resolveEpisodeThenShow(episode as Object)
+    setLoading(true, "Opening series...")
+    m.resolveTask = createObject("roSGNode", "PlexTask")
+    m.resolveTask.config = m.config
+    m.resolveTask.action = "resolveEpisodeShow"
+    m.resolveTask.item = episode
+    m.resolveTask.observeField("response", "onEpisodeShowResolved")
+    m.resolveTask.control = "RUN"
+end sub
+
+sub onEpisodeShowResolved()
+    setLoading(false, "")
+    response = m.resolveTask.response
+    if response = invalid or response.ok <> true or response.show = invalid then
+        openDetailScreen(m.resolveTask.item)
+        return
+    end if
+
+    show = response.show
+    openDetailScreen({
+        title: show.title,
+        description: show.description,
+        year: show.year,
+        rating: show.rating,
+        contentRating: show.contentRating,
+        mediaType: "show",
+        ratingKey: show.ratingKey,
+        key: show.key,
+        hdPosterUrl: show.hdPosterUrl,
+        hdBackdropUrl: show.hdBackdropUrl,
+        focusEpisodeKey: response.focusEpisodeKey,
+        focusSeasonKey: response.focusSeasonKey
+    })
+end sub
+
+sub openDetailScreen(item as Object)
     if m.detailScreen <> invalid then
         m.screens.removeChild(m.detailScreen)
         m.detailScreen = invalid
@@ -148,7 +268,6 @@ sub showDetail(item as Object)
     m.detailScreen.observeField("closed", "onDetailClosed")
     m.screens.appendChild(m.detailScreen)
     m.detailScreen.setFocus(true)
-    m.navFocused = false
 end sub
 
 sub onDetailClosed()
@@ -183,7 +302,6 @@ sub showVideo(item as Object)
     m.videoScreen.observeField("closed", "onVideoClosed")
     m.screens.appendChild(m.videoScreen)
     m.videoScreen.setFocus(true)
-    m.navFocused = false
 end sub
 
 sub onVideoClosed()
@@ -193,14 +311,18 @@ sub onVideoClosed()
     end if
     if m.detailScreen <> invalid then
         m.detailScreen.setFocus(true)
+    else if m.sportsDetailScreen <> invalid then
+        m.sportsDetailScreen.setFocus(true)
     else
         restoreSectionFocus()
     end if
 end sub
 
 sub restoreSectionFocus()
-    if m.section = "playlists" and m.playlistsScreen <> invalid then
-        m.playlistsScreen.setFocus(true)
+    if m.section = "sources" and m.libraryBrowseScreen <> invalid then
+        m.libraryBrowseScreen.setFocus(true)
+    else if m.section = "sources" and m.sourcesListScreen <> invalid then
+        m.sourcesListScreen.setFocus(true)
     else if m.section = "sports" and m.sportsScreen <> invalid then
         m.sportsScreen.setFocus(true)
     else if m.homeScreen <> invalid then
@@ -215,18 +337,29 @@ function onKeyEvent(key as String, press as Boolean) as Boolean
         if m.videoScreen <> invalid then
             m.videoScreen.close = true
             return true
+        else if m.sportsDetailScreen <> invalid then
+            m.sportsDetailScreen.close = true
+            return true
         else if m.detailScreen <> invalid then
             m.detailScreen.close = true
             return true
+        else if m.libraryBrowseScreen <> invalid then
+            m.libraryBrowseScreen.close = true
+            return true
+        else if m.navExpanded then
+            setNavExpanded(false)
+            return true
         end if
-    else if key = "left" and not m.navFocused and m.detailScreen = invalid and m.videoScreen = invalid then
-        m.navFocused = true
+    else if key = "left" and not m.navExpanded and m.detailScreen = invalid and m.videoScreen = invalid and m.sportsDetailScreen = invalid and m.libraryBrowseScreen = invalid then
+        setNavExpanded(true)
         m.sideNav.setFocus(true)
         return true
-    else if key = "right" and m.navFocused then
-        m.navFocused = false
-        restoreSectionFocus()
+    else if key = "right" and m.navExpanded then
+        setNavExpanded(false)
         return true
+    else if m.navExpanded and (key = "OK" or key = "play") then
+        ' SideNav handles selection; collapse after pick via onNavSelected
+        return false
     end if
 
     return false

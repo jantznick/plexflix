@@ -2,7 +2,7 @@ sub init()
     m.statusLabel = m.top.findNode("statusLabel")
     m.sportsRows = m.top.findNode("sportsRows")
     m.sportsRows.observeField("rowItemSelected", "onItemSelected")
-    m.items = []
+    m.events = []
 end sub
 
 sub onConfigReady()
@@ -33,6 +33,7 @@ sub onFeedLoaded()
     rows = response.rows
     if rows = invalid then rows = []
 
+    m.events = []
     root = createObject("roSGNode", "ContentNode")
     total = 0
     for each rowData in rows
@@ -42,27 +43,21 @@ sub onFeedLoaded()
         items = rowData.items
         if items = invalid then items = []
         for each item in items
+            m.events.push(item)
             total = total + 1
             child = row.createChild("ContentNode")
             child.title = item.title
             child.hdPosterUrl = item.hdPosterUrl
             child.description = item.description
-            child.addFields({
-                mediaType: "sport",
-                key: item.key,
-                streamUrl: item.streamUrl,
-                ratingKey: "",
-                duration: 0,
-                viewOffset: 0
-            })
+            child.addFields({ eventIndex: total - 1 })
         end for
     end for
 
     m.sportsRows.content = root
     if total = 0 then
-        m.statusLabel.text = "No live sports found in feed"
+        m.statusLabel.text = "No live sports found — check sportsFeedUrl in PlexConfig.brs"
     else
-        m.statusLabel.text = ""
+        m.statusLabel.text = safeToStr(total) + " events · OK for details & streams"
         m.sportsRows.setFocus(true)
     end if
 end sub
@@ -74,13 +69,21 @@ sub onItemSelected()
     if row = invalid then return
     item = row.getChild(info[1])
     if item = invalid then return
+
+    idx = item.eventIndex
+    if idx = invalid or idx < 0 or idx >= m.events.count() then return
+    event = m.events[idx]
+    if event = invalid then return
+
     m.top.selectedItem = {
-        title: item.title,
-        description: item.description,
+        title: event.title,
+        description: event.description,
         mediaType: "sport",
-        key: item.key,
-        streamUrl: item.streamUrl,
-        hdPosterUrl: item.hdPosterUrl,
+        key: event.key,
+        streamUrl: event.streamUrl,
+        streams: event.streams,
+        hdPosterUrl: event.hdPosterUrl,
+        hdBackdropUrl: event.hdBackdropUrl,
         ratingKey: "",
         duration: 0,
         viewOffset: 0
@@ -98,8 +101,9 @@ function asString(value as Dynamic) as String
     if valueType = "Integer" or valueType = "roInt" or valueType = "roInteger" or valueType = "LongInteger" then
         return StrI(value).Trim()
     end if
-    if valueType = "Float" or valueType = "Double" or valueType = "roFloat" or valueType = "roDouble" then
-        return Str(value).Trim()
-    end if
     return ""
+end function
+
+function safeToStr(value as Dynamic) as String
+    return asString(value)
 end function

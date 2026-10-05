@@ -7,7 +7,7 @@ This is intentionally a **design/UX shell** on top of existing Plex data. Creden
 ## What you get
 
 - Dark Netflix-like home: billboard hero + horizontal shelves
-- Left sidebar: **Home**, **Playlists**, **Live Sports**
+- Collapsible sidebar (hidden until you press Left): **Home**, **Libraries**, **Live Sports**
 - **Continue Watching**, **Recently Added**, Plex home hubs, and library shelves
 - Continue Watching episodes open the parent show with that episode focused
 - Title detail screen (Cast + More Like This)
@@ -58,7 +58,8 @@ Optional CLI (if `ROKU_IP` / `ROKU_PASSWORD` are set):
 
 ## Remote / focus
 
-- Left on Home/Playlists/Sports focuses the sidebar
+- **Left** opens the sidebar; **Right** or **Back** hides it again
+- **Libraries** lists your Plex movie/TV libraries (server sections — the same sources you pin in Plex Web)
 - Arrow keys move across poster rows
 - Focused title updates the hero billboard
 - OK opens the detail screen (episodes open the show with that episode selected)

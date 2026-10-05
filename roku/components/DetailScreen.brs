@@ -86,10 +86,10 @@ sub showTvMode()
     m.tvPanel.visible = true
     m.poster.width = 200
     m.poster.height = 300
-    m.poster.translation = [48, 36]
-    m.titleLabel.translation = [280, 40]
-    m.metaLabel.translation = [280, 112]
-    m.summaryLabel.translation = [280, 152]
+    m.poster.translation = [0, 0]
+    m.titleLabel.translation = [232, 4]
+    m.metaLabel.translation = [232, 76]
+    m.summaryLabel.translation = [232, 116]
     m.summaryLabel.height = 72
 end sub
 
@@ -100,10 +100,10 @@ sub showMovieMode()
     m.playLabel.text = "Play"
     m.poster.width = 200
     m.poster.height = 300
-    m.poster.translation = [48, 36]
-    m.titleLabel.translation = [280, 40]
-    m.metaLabel.translation = [280, 112]
-    m.summaryLabel.translation = [280, 152]
+    m.poster.translation = [0, 0]
+    m.titleLabel.translation = [232, 4]
+    m.metaLabel.translation = [232, 76]
+    m.summaryLabel.translation = [232, 116]
     m.relatedContent = createObject("roSGNode", "ContentNode")
     m.relatedRows.content = m.relatedContent
     m.focusIndex = 0
@@ -156,6 +156,7 @@ sub onChildrenLoaded()
         if items.count() = 0 then return
         ' Prefer the Continue Watching season first so focus lands sooner
         prioritizeFocusSeason()
+        if m.focusEpisodeKey <> "" then m.seasonRows.setFocus(true)
         loadSeasonEpisodes()
     else if m.loadMode = "episodes" then
         fillSeasonRow(m.seasonQueue, m.pendingSeason, items)

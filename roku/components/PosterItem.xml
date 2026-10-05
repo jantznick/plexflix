@@ -10,6 +10,14 @@
     <script type="text/brightscript" uri="PosterItem.brs" />
 
     <children>
+        <Rectangle
+            id="cardBg"
+            width="180"
+            height="270"
+            translation="[0, 6]"
+            color="0x141418"
+            opacity="0.85"
+        />
         <Poster
             id="poster"
             width="180"

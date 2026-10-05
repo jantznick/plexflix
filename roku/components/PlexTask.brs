@@ -15,10 +15,12 @@ sub exec()
         m.top.response = fetchChildren(cfg, m.top.item)
     else if action = "extras" then
         m.top.response = fetchExtras(cfg, m.top.item)
-    else if action = "playlists" then
-        m.top.response = fetchPlaylists(cfg)
-    else if action = "playlistItems" then
-        m.top.response = fetchPlaylistItems(cfg, m.top.item)
+    else if action = "pinnedSources" then
+        m.top.response = fetchPinnedSources(cfg)
+    else if action = "sectionBrowse" then
+        m.top.response = fetchSectionBrowse(cfg, m.top.item)
+    else if action = "resolveEpisodeShow" then
+        m.top.response = resolveEpisodeShow(cfg, m.top.item)
     else if action = "sportsFeed" then
         m.top.response = fetchSportsFeed(cfg)
     else if action = "streamUrl" then
@@ -229,7 +231,13 @@ function appendRow(root as Object, title as String, items as Object) as Boolean
             duration: item.duration,
             viewOffset: item.viewOffset,
             leafCount: item.leafCount,
-            childCount: item.childCount
+            childCount: item.childCount,
+            grandparentRatingKey: item.grandparentRatingKey,
+            parentRatingKey: item.parentRatingKey,
+            grandparentTitle: item.grandparentTitle,
+            index: item.index,
+            shortTitle: item.shortTitle,
+            parentIndex: item.parentIndex
         })
     end for
     return true
@@ -463,47 +471,115 @@ function fetchExtras(cfg as Object, item as Object) as Object
     return { ok: true, cast: castItems, similar: similarItems, detail: detail }
 end function
 
-function fetchPlaylists(cfg as Object) as Object
-    result = plexGet(cfg, "/playlists/all")
+function sectionIdFromKey(key as String) as String
+    if key = "" then return ""
+    marker = "/library/sections/"
+    idx = Instr(1, key, marker)
+    if idx > 0 then return Mid(key, idx + Len(marker))
+    lastSlash = 0
+    for i = 1 to Len(key)
+        if Mid(key, i, 1) = "/" then lastSlash = i
+    end for
+    if lastSlash > 0 and lastSlash < Len(key) then return Mid(key, lastSlash + 1)
+    return key
+end function
+
+function fetchPinnedSources(cfg as Object) as Object
+    ' Plex sidebar pins are client-side; server exposes libraries via /library/sections
+    result = plexGet(cfg, "/library/sections")
     if result.ok <> true then return result
+
     items = []
     container = result.json
-    metaList = invalid
+    dirs = invalid
     if container <> invalid and container.MediaContainer <> invalid then
-        metaList = container.MediaContainer.Metadata
-        if metaList = invalid then metaList = container.MediaContainer.Directory
+        dirs = container.MediaContainer.Directory
     end if
-    if metaList = invalid then return { ok: true, items: [] }
-    if GetInterface(metaList, "ifArray") = invalid then metaList = [metaList]
-    for each meta in metaList
-        items.push({
-            title: safeToStr(meta.title),
-            ratingKey: safeToStr(meta.ratingKey),
-            key: safeToStr(meta.key),
-            mediaType: "playlist",
-            leafCount: meta.leafCount,
-            summary: safeToStr(meta.summary)
-        })
+    if dirs = invalid then return { ok: true, items: [] }
+    if GetInterface(dirs, "ifArray") = invalid then dirs = [dirs]
+
+    for each dir in dirs
+        sectionType = safeToStr(dir.type)
+        if sectionType = "movie" or sectionType = "show" then
+            key = safeToStr(dir.key)
+            sectionId = sectionIdFromKey(key)
+            if sectionId <> "" then
+                thumb = ""
+                if dir.thumb <> invalid then thumb = safeToStr(dir.thumb)
+                art = ""
+                if dir.art <> invalid then art = safeToStr(dir.art)
+                items.push({
+                    title: safeToStr(dir.title),
+                    mediaType: "library",
+                    sectionType: sectionType,
+                    sectionId: sectionId,
+                    key: key,
+                    ratingKey: sectionId,
+                    description: safeToStr(dir.summary),
+                    hdPosterUrl: imageUrl(cfg, thumb, 360, 540),
+                    hdBackdropUrl: imageUrl(cfg, art, 1920, 1080),
+                    childCount: dir.count
+                })
+            end if
+        end if
     end for
     return { ok: true, items: items }
 end function
 
-function fetchPlaylistItems(cfg as Object, item as Object) as Object
-    if item = invalid then return { ok: false, error: "No playlist" }
-    ratingKey = safeToStr(item.ratingKey)
-    key = safeToStr(item.key)
-    path = ""
-    if key <> "" then
-        path = key
-    else if ratingKey <> "" then
-        path = "/playlists/" + ratingKey + "/items"
-    else
-        return { ok: false, error: "Missing playlist key" }
+function fetchSectionBrowse(cfg as Object, item as Object) as Object
+    if item = invalid then return { ok: false, error: "No library" }
+    sectionId = safeToStr(item.sectionId)
+    if sectionId = "" then sectionId = sectionIdFromKey(safeToStr(item.key))
+    if sectionId = "" then return { ok: false, error: "Missing library section id" }
+
+    root = createObject("roSGNode", "ContentNode")
+    seenTitles = {}
+    title = safeToStr(item.title)
+    if title = "" then title = "Library"
+
+    hubs = plexGet(cfg, "/hubs/sections/" + sectionId + "?count=" + safeToStr(cfg.rowSize))
+    if hubs.ok = true and hubs.json <> invalid and hubs.json.MediaContainer <> invalid then
+        appendHubRows(root, seenTitles, hubs.json.MediaContainer.Hub, cfg)
     end if
-    if Left(path, 1) <> "/" then path = "/" + path
-    result = plexGet(cfg, path)
+
+    allItems = plexGet(cfg, "/library/sections/" + sectionId + "/all?sort=addedAt:desc")
+    if allItems.ok = true then
+        label = title + " · All"
+        addUniqueRow(root, seenTitles, label, collectMetadata(cfg, allItems.json))
+    end if
+
+    if root.getChildCount() = 0 then
+        return { ok: false, error: "No titles found in " + title }
+    end if
+    return { ok: true, content: root, title: title }
+end function
+
+function resolveEpisodeShow(cfg as Object, item as Object) as Object
+    if item = invalid then return { ok: false, error: "No episode" }
+    ratingKey = safeToStr(item.ratingKey)
+    if ratingKey = "" then return { ok: false, error: "Missing episode ratingKey" }
+
+    result = plexGet(cfg, "/library/metadata/" + ratingKey)
     if result.ok <> true then return result
-    return { ok: true, items: collectMetadata(cfg, result.json) }
+
+    episodes = collectMetadata(cfg, result.json)
+    if episodes.count() = 0 then return { ok: false, error: "Episode metadata missing" }
+    ep = episodes[0]
+
+    showKey = safeToStr(ep.grandparentRatingKey)
+    if showKey = "" then return { ok: false, error: "Episode has no parent show" }
+
+    showMeta = plexGet(cfg, "/library/metadata/" + showKey)
+    if showMeta.ok <> true then return showMeta
+    shows = collectMetadata(cfg, showMeta.json)
+    if shows.count() = 0 then return { ok: false, error: "Show metadata missing" }
+
+    return {
+        ok: true,
+        show: shows[0],
+        focusEpisodeKey: safeToStr(ep.ratingKey),
+        focusSeasonKey: safeToStr(ep.parentRatingKey)
+    }
 end function
 
 function fetchSportsFeed(cfg as Object) as Object
@@ -609,13 +685,19 @@ function mapSportsEntries(list as Object) as Object
             thumb = firstString(entry, ["thumbnail", "logo", "image", "poster", "thumb", "icon"])
             league = firstString(entry, ["league", "sport", "category", "shortDescription"])
             if title = "" then title = "Live event"
-            if streamUrl <> "" then
+            streams = extractSportsStreams(entry)
+            if streams.count() = 0 and streamUrl <> "" then
+                streams.push({ title: "Stream 1", streamUrl: streamUrl })
+            end if
+            if streams.count() > 0 then
+                primary = streams[0].streamUrl
                 items.push({
                     title: title,
                     description: league,
                     mediaType: "sport",
-                    key: streamUrl,
-                    streamUrl: streamUrl,
+                    key: primary,
+                    streamUrl: primary,
+                    streams: streams,
                     hdPosterUrl: thumb,
                     hdBackdropUrl: thumb,
                     ratingKey: "",
@@ -629,6 +711,53 @@ function mapSportsEntries(list as Object) as Object
         end if
     end for
     return items
+end function
+
+function extractSportsStreams(entry as Object) as Object
+    streams = []
+    if entry.content <> invalid and entry.content.videos <> invalid then
+        videos = entry.content.videos
+        if GetInterface(videos, "ifArray") = invalid then videos = [videos]
+        idx = 1
+        for each video in videos
+            if video <> invalid then
+                url = safeToStr(video.url)
+                if url <> "" then
+                    label = firstString(video, ["quality", "videoType"])
+                    if label = "" then label = "Stream " + safeToStr(idx)
+                    streams.push({ title: label, streamUrl: url })
+                    idx = idx + 1
+                end if
+            end if
+        end for
+    end if
+    if streams.count() > 0 then return streams
+
+    direct = firstString(entry, ["url", "stream", "streamUrl", "src", "link", "playbackUrl"])
+    if direct <> "" then streams.push({ title: "Stream", streamUrl: direct })
+
+    sig = safeToStr(entry.streamSignature)
+    if sig <> "" then
+        startAt = 1
+        pipeAt = Instr(startAt, sig, "|")
+        altIdx = 1
+        while startAt <= Len(sig)
+            if pipeAt = 0 then
+                url = Mid(sig, startAt)
+                pipeAt = Len(sig) + 1
+            else
+                url = Mid(sig, startAt, pipeAt - startAt)
+            end if
+            url = Trim(url)
+            if url <> "" then
+                streams.push({ title: "Alt " + safeToStr(altIdx), streamUrl: url })
+                altIdx = altIdx + 1
+            end if
+            startAt = pipeAt + 1
+            pipeAt = Instr(startAt, sig, "|")
+        end while
+    end if
+    return streams
 end function
 
 function extractSportsStreamUrl(entry as Object) as String

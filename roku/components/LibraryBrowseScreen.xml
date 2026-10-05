@@ -1,21 +1,25 @@
 <?xml version="1.0" encoding="utf-8" ?>
-<component name="SportsScreen" extends="Group">
+<component name="LibraryBrowseScreen" extends="Group">
     <interface>
-        <field id="config" type="assocarray" onChange="onConfigReady" />
+        <field id="config" type="assocarray" />
+        <field id="source" type="assocarray" onChange="onSourceSet" />
         <field id="selectedItem" type="assocarray" />
+        <field id="closed" type="boolean" alwaysNotify="true" />
+        <field id="close" type="boolean" alwaysNotify="true" onChange="onCloseRequested" />
         <field id="loadingMessage" type="string" />
     </interface>
 
-    <script type="text/brightscript" uri="SportsScreen.brs" />
+    <script type="text/brightscript" uri="LibraryBrowseScreen.brs" />
 
     <children>
         <Rectangle width="1920" height="1080" color="0x08080A" />
 
         <Group translation="[64, 48]">
             <Label
-                width="1200"
+                id="titleLabel"
+                width="1400"
                 height="56"
-                text="Live Sports"
+                text="Library"
                 color="0xFFFFFF"
                 font="font:LargeBoldSystemFont"
             />
@@ -23,21 +27,21 @@
                 id="statusLabel"
                 translation="[0, 58]"
                 width="1500"
-                height="36"
-                text="Loading sports feed..."
+                height="32"
+                text=""
                 color="0x777777"
                 font="font:SmallSystemFont"
             />
 
             <RowList
-                id="sportsRows"
+                id="rowList"
                 translation="[0, 120]"
-                itemComponentName="EpisodeItem"
-                numRows="6"
-                rowItemSize="[[300, 170]]"
-                rowItemSpacing="[[22, 0]]"
-                itemSize="[1792, 240]"
-                itemSpacing="[0, 22]"
+                itemComponentName="PosterItem"
+                numRows="4"
+                rowItemSize="[[170, 255]]"
+                rowItemSpacing="[[24, 0]]"
+                itemSize="[1792, 320]"
+                itemSpacing="[0, 26]"
                 showRowLabel="[true]"
                 rowLabelOffset="[[0, 6]]"
                 rowFocusAnimationStyle="fixedFocus"

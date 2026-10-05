@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<component name="SourcesListScreen" extends="Group">
+    <interface>
+        <field id="config" type="assocarray" onChange="onConfigReady" />
+        <field id="selectedSource" type="assocarray" />
+        <field id="loadingMessage" type="string" />
+    </interface>
+
+    <script type="text/brightscript" uri="SourcesListScreen.brs" />
+
+    <children>
+        <Rectangle width="1920" height="1080" color="0x08080A" />
+
+        <Group translation="[64, 48]">
+            <Label
+                width="1200"
+                height="56"
+                text="Your Libraries"
+                color="0xFFFFFF"
+                font="font:LargeBoldSystemFont"
+            />
+            <Label
+                id="hintLabel"
+                translation="[0, 58]"
+                width="1500"
+                height="36"
+                text="Pinned Plex sidebar sources (movie &amp; TV libraries on your server)"
+                color="0x888888"
+                font="font:SmallSystemFont"
+            />
+            <Label
+                id="statusLabel"
+                translation="[0, 96]"
+                width="1500"
+                height="36"
+                text="Loading libraries..."
+                color="0x666666"
+                font="font:SmallSystemFont"
+            />
+
+            <LabelList
+                id="sourceList"
+                translation="[0, 160]"
+                itemSize="[900, 68]"
+                itemSpacing="[0, 10]"
+                numRows="10"
+                color="0xBBBBBB"
+                focusedColor="0xFFFFFF"
+                drawFocusFeedback="true"
+            />
+        </Group>
+    </children>
+</component>

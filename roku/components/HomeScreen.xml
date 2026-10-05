@@ -9,125 +9,116 @@
     <script type="text/brightscript" uri="HomeScreen.brs" />
 
     <children>
-        <Rectangle width="1640" height="1080" color="0x08080A" />
+        <Rectangle width="1920" height="1080" color="0x08080A" />
 
-        <Group id="billboard" translation="[0, 0]">
-            <Poster
-                id="heroArt"
-                width="1640"
-                height="760"
-                loadDisplayMode="scaleToFill"
-                uri="pkg:/images/splash-screen_fhd.jpg"
-            />
-            <Rectangle width="1640" height="760" color="0x000000" opacity="0.18" />
-            <Rectangle width="900" height="760" color="0x000000" opacity="0.42" />
-            <Rectangle
-                width="1640"
-                height="280"
-                translation="[0, 480]"
-                color="0x08080A"
-                opacity="0.95"
-            />
+        <Group id="frame" translation="[64, 48]">
+            <Group id="billboard" translation="[0, 0]">
+                <Poster
+                    id="heroArt"
+                    width="1792"
+                    height="680"
+                    loadDisplayMode="scaleToFill"
+                    uri="pkg:/images/splash-screen_fhd.jpg"
+                />
+                <Rectangle width="1792" height="680" color="0x000000" opacity="0.22" />
+                <Rectangle width="960" height="680" color="0x000000" opacity="0.5" />
+                <Rectangle
+                    width="1792"
+                    height="320"
+                    translation="[0, 360]"
+                    color="0x08080A"
+                    opacity="0.92"
+                />
 
-            <Group id="heroCopy" translation="[80, 280]">
-                <Label
-                    id="heroTitle"
-                    width="920"
-                    height="90"
-                    text="Loading your library..."
-                    color="0xFFFFFF"
-                    font="font:LargeBoldSystemFont"
-                    wrap="true"
-                    maxLines="2"
-                    lineSpacing="2"
-                />
-                <Label
-                    id="heroMeta"
-                    translation="[0, 100]"
-                    width="900"
-                    height="32"
-                    text=""
-                    color="0xC7C7C7"
-                    font="font:SmallSystemFont"
-                />
-                <Label
-                    id="heroSummary"
-                    translation="[0, 140]"
-                    width="820"
-                    height="70"
-                    text=""
-                    color="0xD0D0D0"
-                    font="font:SmallSystemFont"
-                    wrap="true"
-                    maxLines="2"
-                    lineSpacing="4"
-                />
+                <Group id="heroCopy" translation="[0, 260]">
+                    <Label
+                        id="heroTitle"
+                        width="920"
+                        height="90"
+                        text="Loading your library..."
+                        color="0xFFFFFF"
+                        font="font:LargeBoldSystemFont"
+                        wrap="true"
+                        maxLines="2"
+                        lineSpacing="2"
+                    />
+                    <Label
+                        id="heroMeta"
+                        translation="[0, 96]"
+                        width="900"
+                        height="32"
+                        text=""
+                        color="0xC7C7C7"
+                        font="font:SmallSystemFont"
+                    />
+                    <Label
+                        id="heroSummary"
+                        translation="[0, 132]"
+                        width="820"
+                        height="72"
+                        text=""
+                        color="0xD0D0D0"
+                        font="font:SmallSystemFont"
+                        wrap="true"
+                        maxLines="2"
+                        lineSpacing="4"
+                    />
+                </Group>
             </Group>
+
+            <Label
+                id="buildLabel"
+                translation="[1400, 0]"
+                width="380"
+                height="36"
+                horizAlign="right"
+                text="v0.3.4"
+                color="0x555555"
+                font="font:SmallestSystemFont"
+            />
+
+            <RowList
+                id="rowList"
+                translation="[0, 560]"
+                itemComponentName="PosterItem"
+                numRows="3"
+                rowItemSize="[[170, 255]]"
+                rowItemSpacing="[[24, 0]]"
+                itemSize="[1792, 310]"
+                itemSpacing="[0, 28]"
+                showRowLabel="[true]"
+                rowLabelOffset="[[0, 6]]"
+                rowFocusAnimationStyle="fixedFocus"
+                focusXOffset="[0]"
+                drawFocusFeedback="false"
+            />
+
+            <Animation
+                id="homeAnim"
+                duration="0.18"
+                easeFunction="outCubic"
+                optional="true"
+                repeat="false"
+            >
+                <Vector2DFieldInterpolator
+                    id="billboardMove"
+                    key="[0.0, 1.0]"
+                    keyValue="[[0, 0], [0, 0]]"
+                    fieldToInterp="billboard.translation"
+                />
+                <FloatFieldInterpolator
+                    id="billboardFade"
+                    key="[0.0, 1.0]"
+                    keyValue="[1.0, 1.0]"
+                    fieldToInterp="billboard.opacity"
+                />
+                <Vector2DFieldInterpolator
+                    id="rowsMove"
+                    key="[0.0, 1.0]"
+                    keyValue="[[0, 560], [0, 560]]"
+                    fieldToInterp="rowList.translation"
+                />
+            </Animation>
         </Group>
-
-        <Label
-            id="brandLabel"
-            translation="[80, 28]"
-            width="500"
-            height="44"
-            text="PLEXFLIX"
-            color="0xE50914"
-            font="font:MediumBoldSystemFont"
-            visible="false"
-        />
-
-        <Label
-            id="buildLabel"
-            translation="[1320, 32]"
-            width="280"
-            height="36"
-            horizAlign="right"
-            text="v0.3.3"
-            color="0x555555"
-            font="font:SmallestSystemFont"
-        />
-
-        <RowList
-            id="rowList"
-            translation="[0, 600]"
-            itemComponentName="PosterItem"
-            numRows="3"
-            rowItemSize="[[180, 270]]"
-            rowItemSpacing="[[28, 0]]"
-            itemSize="[1640, 340]"
-            itemSpacing="[0, 28]"
-            showRowLabel="[true]"
-            rowLabelOffset="[[48, 8]]"
-            rowFocusAnimationStyle="fixedFocus"
-            focusXOffset="[48]"
-            drawFocusFeedback="false"
-        />
-
-        <Animation
-            id="homeAnim"
-            duration="0.18"
-            easeFunction="outCubic"
-            optional="true"
-            repeat="false"
-        >
-            <Vector2DFieldInterpolator
-                id="billboardMove"
-                key="[0.0, 1.0]"
-                keyValue="[[0, 0], [0, 0]]"
-                fieldToInterp="billboard.translation"
-            />
-            <FloatFieldInterpolator
-                id="billboardFade"
-                key="[0.0, 1.0]"
-                keyValue="[1.0, 1.0]"
-                fieldToInterp="billboard.opacity"
-            />
-            <Vector2DFieldInterpolator
-                id="rowsMove"
-                key="[0.0, 1.0]"
-                keyValue="[[0, 600], [0, 600]]"
-                fieldToInterp="rowList.translation"
-            />
-        </Animation>
     </children>
 </component>

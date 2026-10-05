@@ -3,34 +3,36 @@
     <interface>
         <field id="selected" type="string" alwaysNotify="true" />
         <field id="active" type="string" onChange="onActiveChange" value="home" />
+        <field id="expanded" type="boolean" value="false" onChange="onExpandedChange" />
     </interface>
 
     <script type="text/brightscript" uri="SideNav.brs" />
 
     <children>
-        <Rectangle id="rail" width="280" height="1080" color="0x101014" />
-        <Rectangle width="2" height="1080" translation="[278, 0]" color="0x2A2A2E" />
+        <Rectangle id="rail" width="252" height="1080" color="0x0C0C10" opacity="0.96" />
+        <Rectangle width="252" height="1080" color="0x000000" opacity="0.35" />
+        <Rectangle width="1" height="1080" translation="[251, 0]" color="0xFFFFFF" opacity="0.08" />
 
         <Label
-            translation="[28, 36]"
-            width="220"
-            height="48"
+            translation="[32, 52]"
+            width="188"
+            height="44"
             text="PLEXFLIX"
             color="0xE50914"
             font="font:MediumBoldSystemFont"
         />
 
-        <Group id="homeItem" translation="[16, 140]">
-            <Rectangle id="homeBg" width="248" height="64" color="0xE50914" />
-            <Label width="248" height="64" horizAlign="center" vertAlign="center" text="Home" color="0xFFFFFF" font="font:SmallBoldSystemFont" />
+        <Group id="homeItem" translation="[20, 150]">
+            <Rectangle id="homeBg" width="212" height="58" color="0xE50914" />
+            <Label width="212" height="58" horizAlign="center" vertAlign="center" text="Home" color="0xFFFFFF" font="font:SmallBoldSystemFont" />
         </Group>
-        <Group id="playlistsItem" translation="[16, 220]">
-            <Rectangle id="playlistsBg" width="248" height="64" color="0x1A1A1E" />
-            <Label width="248" height="64" horizAlign="center" vertAlign="center" text="Playlists" color="0xDDDDDD" font="font:SmallSystemFont" />
+        <Group id="sourcesItem" translation="[20, 224]">
+            <Rectangle id="sourcesBg" width="212" height="58" color="0x1E1E24" />
+            <Label width="212" height="58" horizAlign="center" vertAlign="center" text="Libraries" color="0xDDDDDD" font="font:SmallSystemFont" />
         </Group>
-        <Group id="sportsItem" translation="[16, 300]">
-            <Rectangle id="sportsBg" width="248" height="64" color="0x1A1A1E" />
-            <Label width="248" height="64" horizAlign="center" vertAlign="center" text="Live Sports" color="0xDDDDDD" font="font:SmallSystemFont" />
+        <Group id="sportsItem" translation="[20, 298]">
+            <Rectangle id="sportsBg" width="212" height="58" color="0x1E1E24" />
+            <Label width="212" height="58" horizAlign="center" vertAlign="center" text="Live Sports" color="0xDDDDDD" font="font:SmallSystemFont" />
         </Group>
     </children>
 </component>
