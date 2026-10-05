@@ -18,6 +18,24 @@ sub exec()
     end if
 end sub
 
+' brs-engine/desktop: numbers often lack .toStr(); never call it blindly.
+function safeToStr(value as Dynamic) as String
+    if value = invalid then return ""
+    valueType = type(value)
+    if valueType = "String" or valueType = "roString" then return value
+    if valueType = "Integer" or valueType = "roInt" or valueType = "roInteger" or valueType = "LongInteger" then
+        return StrI(value).Trim()
+    end if
+    if valueType = "Float" or valueType = "Double" or valueType = "roFloat" or valueType = "roDouble" then
+        return Str(value).Trim()
+    end if
+    if valueType = "Boolean" or valueType = "roBoolean" then
+        if value = true then return "true"
+        return "false"
+    end if
+    return ""
+end function
+
 function plexGet(cfg as Object, path as String) as Object
     url = cfg.baseUrl + path
     if path.Instr("?") > 0 then
@@ -28,7 +46,7 @@ function plexGet(cfg as Object, path as String) as Object
 
     ' Prefer JSON for simpler parsing on device
     if url.Instr("X-Plex-Container-Size") = 0 then
-        url = url + "&X-Plex-Container-Size=" + cfg.rowSize.toStr()
+        url = url + "&X-Plex-Container-Size=" + safeToStr(cfg.rowSize)
     end if
 
     request = CreateObject("roUrlTransfer")
@@ -67,7 +85,7 @@ function plexGet(cfg as Object, path as String) as Object
             code = msg.GetResponseCode()
             body = msg.GetString()
             if code < 200 or code >= 300 then
-                return { ok: false, error: "Plex HTTP " + code.toStr() + " for " + path }
+                return { ok: false, error: "Plex HTTP " + safeToStr(code) + " for " + path }
             end if
             parsed = ParseJson(body)
             if parsed = invalid then
@@ -80,9 +98,9 @@ end function
 
 function imageUrl(cfg as Object, path as Dynamic, width = 420 as Integer, height = 630 as Integer) as String
     if path = invalid or path = "" then return ""
-    pathStr = path.toStr()
+    pathStr = safeToStr(path)
     if Left(pathStr, 4) = "http" then return pathStr
-    return cfg.baseUrl + "/photo/:/transcode?width=" + width.toStr() + "&height=" + height.toStr() + "&minSize=1&upscale=1&url=" + requestEncode(pathStr) + "&X-Plex-Token=" + cfg.token
+    return cfg.baseUrl + "/photo/:/transcode?width=" + safeToStr(width) + "&height=" + safeToStr(height) + "&minSize=1&upscale=1&url=" + requestEncode(pathStr) + "&X-Plex-Token=" + cfg.token
 end function
 
 function requestEncode(value as String) as String
@@ -90,55 +108,62 @@ function requestEncode(value as String) as String
     return transfer.Escape(value)
 end function
 
+' brs-engine/desktop: numbers often lack .toStr(); never call it blindly.
+function safeToStr(value as Dynamic) as String
+    if value = invalid then return ""
+    valueType = type(value)
+    if valueType = "String" or valueType = "roString" then return value
+    if valueType = "Integer" or valueType = "roInt" or valueType = "roInteger" or valueType = "LongInteger" then
+        return StrI(value).Trim()
+    end if
+    if valueType = "Float" or valueType = "Double" or valueType = "roFloat" or valueType = "roDouble" then
+        return Str(value).Trim()
+    end if
+    if valueType = "Boolean" or valueType = "roBoolean" then
+        if value = true then return "true"
+        return "false"
+    end if
+    ' Last resort — avoid unsupported method calls in the simulator
+    return ""
+end function
+
 function metadataToItem(cfg as Object, meta as Object) as Object
     if meta = invalid then return invalid
 
-    mediaType = ""
-    if meta.type <> invalid then mediaType = meta.type
+    mediaType = safeToStr(meta.type)
 
     thumb = ""
     art = ""
-    if meta.thumb <> invalid then thumb = meta.thumb
-    if meta.art <> invalid then art = meta.art
+    if meta.thumb <> invalid then thumb = safeToStr(meta.thumb)
+    if meta.art <> invalid then art = safeToStr(meta.art)
 
-    ratingKey = ""
-    key = ""
-    if meta.ratingKey <> invalid then ratingKey = meta.ratingKey.toStr()
-    if meta.key <> invalid then key = meta.key.toStr()
-
-    title = ""
-    if meta.title <> invalid then title = meta.title.toStr()
+    ratingKey = safeToStr(meta.ratingKey)
+    key = safeToStr(meta.key)
+    title = safeToStr(meta.title)
 
     ' Episodes: prefer grandparent/parent context in title
     if mediaType = "episode" then
-        showTitle = ""
-        if meta.grandparentTitle <> invalid then showTitle = meta.grandparentTitle.toStr()
-        season = ""
-        episode = ""
-        if meta.parentIndex <> invalid then season = meta.parentIndex.toStr()
-        if meta.index <> invalid then episode = meta.index.toStr()
+        showTitle = safeToStr(meta.grandparentTitle)
+        season = safeToStr(meta.parentIndex)
+        episode = safeToStr(meta.index)
         if showTitle <> "" then
             title = showTitle + " — S" + season + "E" + episode + " " + title
         end if
-        if meta.grandparentThumb <> invalid and thumb = "" then thumb = meta.grandparentThumb
-        if meta.grandparentArt <> invalid and art = "" then art = meta.grandparentArt
+        if meta.grandparentThumb <> invalid and thumb = "" then thumb = safeToStr(meta.grandparentThumb)
+        if meta.grandparentArt <> invalid and art = "" then art = safeToStr(meta.grandparentArt)
     end if
 
-    description = ""
-    if meta.summary <> invalid then description = meta.summary.toStr()
-
-    year = ""
-    if meta.year <> invalid then year = meta.year.toStr()
+    description = safeToStr(meta.summary)
+    year = safeToStr(meta.year)
 
     rating = ""
     if meta.audienceRating <> invalid then
-        rating = meta.audienceRating.toStr()
+        rating = safeToStr(meta.audienceRating)
     else if meta.rating <> invalid then
-        rating = meta.rating.toStr()
+        rating = safeToStr(meta.rating)
     end if
 
-    contentRating = ""
-    if meta.contentRating <> invalid then contentRating = meta.contentRating.toStr()
+    contentRating = safeToStr(meta.contentRating)
 
     duration = 0
     if meta.duration <> invalid then duration = meta.duration
@@ -233,7 +258,7 @@ function buildHome(cfg as Object) as Object
     end if
 
     ' Home hubs
-    hubs = plexGet(cfg, "/hubs/home?count=" + cfg.rowSize.toStr())
+    hubs = plexGet(cfg, "/hubs/home?count=" + safeToStr(cfg.rowSize))
     if hubs.ok = true and hubs.json <> invalid and hubs.json.MediaContainer <> invalid then
         appendHubRows(root, seenTitles, hubs.json.MediaContainer.Hub, cfg)
     end if
@@ -245,13 +270,12 @@ function buildHome(cfg as Object) as Object
         if dirs <> invalid then
             if GetInterface(dirs, "ifArray") = invalid then dirs = [dirs]
             for each dir in dirs
-                sectionType = ""
-                if dir.type <> invalid then sectionType = dir.type.toStr()
+                sectionType = safeToStr(dir.type)
                 if sectionType = "movie" or sectionType = "show" then
-                    key = dir.key.toStr()
-                    title = dir.title.toStr()
+                    key = safeToStr(dir.key)
+                    title = safeToStr(dir.title)
 
-                    sectionHubs = plexGet(cfg, "/hubs/sections/" + key + "?count=" + cfg.rowSize.toStr())
+                    sectionHubs = plexGet(cfg, "/hubs/sections/" + key + "?count=" + safeToStr(cfg.rowSize))
                     if sectionHubs.ok = true and sectionHubs.json <> invalid and sectionHubs.json.MediaContainer <> invalid then
                         appendHubRows(root, seenTitles, sectionHubs.json.MediaContainer.Hub, cfg)
                     end if
@@ -284,8 +308,7 @@ sub appendHubRows(root as Object, seenTitles as Object, hubList as Dynamic, cfg 
     if hubList = invalid then return
     if GetInterface(hubList, "ifArray") = invalid then hubList = [hubList]
     for each hub in hubList
-        hubTitle = ""
-        if hub.title <> invalid then hubTitle = hub.title.toStr()
+        hubTitle = safeToStr(hub.title)
         if hubTitle = "" then hubTitle = "Browse"
         if hub.Metadata <> invalid then
             addUniqueRow(root, seenTitles, hubTitle, collectMetadata(cfg, hub))
@@ -343,12 +366,14 @@ function resolvePlayable(cfg as Object, item as Object) as Object
 end function
 
 function buildStreamUrl(cfg as Object, item as Object) as Object
-    if item = invalid or item.key = invalid or item.key = "" then
+    if item = invalid then return { ok: false, error: "Missing media key for playback" }
+
+    path = safeToStr(item.key)
+    if path = "" then
         return { ok: false, error: "Missing media key for playback" }
     end if
 
     ' Universal transcoder → HLS, which Roku Video handles reliably
-    path = item.key.toStr()
     query = []
     query.push("hasMDE=1")
     query.push("path=" + requestEncode(path))
@@ -370,7 +395,7 @@ function buildStreamUrl(cfg as Object, item as Object) as Object
     query.push("X-Plex-Token=" + cfg.token)
 
     if item.viewOffset <> invalid and item.viewOffset > 0 then
-        query.push("offset=" + Int(item.viewOffset).toStr())
+        query.push("offset=" + safeToStr(Int(item.viewOffset)))
     end if
 
     url = cfg.baseUrl + "/video/:/transcode/universal/start.m3u8?" + joinStrings(query, "&")

@@ -75,5 +75,13 @@ end function
 
 function valueOrEmpty(value as Dynamic) as String
     if value = invalid then return ""
-    return value.toStr()
+    valueType = type(value)
+    if valueType = "String" or valueType = "roString" then return value
+    if valueType = "Integer" or valueType = "roInt" or valueType = "roInteger" or valueType = "LongInteger" then
+        return StrI(value).Trim()
+    end if
+    if valueType = "Float" or valueType = "Double" or valueType = "roFloat" or valueType = "roDouble" then
+        return Str(value).Trim()
+    end if
+    return ""
 end function

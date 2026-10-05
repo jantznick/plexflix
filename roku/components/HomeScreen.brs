@@ -65,7 +65,7 @@ sub onHomeLoaded()
     end if
 
     rowCount = content.getChildCount()
-    m.buildLabel.text = "v0.2.0 · " + rowCount.toStr() + " rows"
+    m.buildLabel.text = "v0.2.1 · " + safeToStr(rowCount) + " rows"
 
     m.rowList.content = content
     m.currentRow = -1
@@ -155,7 +155,19 @@ end function
 
 function asString(value as Dynamic) as String
     if value = invalid then return ""
-    return value.toStr()
+    valueType = type(value)
+    if valueType = "String" or valueType = "roString" then return value
+    if valueType = "Integer" or valueType = "roInt" or valueType = "roInteger" or valueType = "LongInteger" then
+        return StrI(value).Trim()
+    end if
+    if valueType = "Float" or valueType = "Double" or valueType = "roFloat" or valueType = "roDouble" then
+        return Str(value).Trim()
+    end if
+    return ""
+end function
+
+function safeToStr(value as Dynamic) as String
+    return asString(value)
 end function
 
 function joinStrings(parts as Object, sep as String) as String
