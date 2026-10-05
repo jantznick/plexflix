@@ -961,17 +961,46 @@ function fetchSectionAll(cfg as Object, item as Object) as Object
     if title = "" then title = "Library"
     genre = safeToStr(item.genre)
     search = safeToStr(item.search)
+    sortKey = safeToStr(item.sort)
+    if sortKey = "" then sortKey = "titleSort"
+    decade = safeToStr(item.decade)
 
-    path = "/library/sections/" + sectionId + "/all?sort=titleSort"
+    startAt = 0
+    if item.start <> invalid then startAt = item.start
+    pageSize = 48
+    if item.pageSize <> invalid then pageSize = item.pageSize
+    if pageSize < 12 then pageSize = 12
+    if pageSize > 60 then pageSize = 60
+
+    path = "/library/sections/" + sectionId + "/all?sort=" + requestEncode(sortKey)
+    path = path + "&X-Plex-Container-Start=" + safeToStr(startAt)
+    path = path + "&X-Plex-Container-Size=" + safeToStr(pageSize)
     if genre <> "" and genre <> "All" then
         path = path + "&genre=" + requestEncode(genre)
     end if
     if search <> "" then
         path = path + "&title=" + requestEncode(search)
     end if
+    if decade <> "" and decade <> "All" then
+        decadeStart = Int(Val(decade))
+        if decadeStart > 1900 then
+            for y = decadeStart to decadeStart + 9
+                path = path + "&year=" + safeToStr(y)
+            end for
+        end if
+    end if
 
     result = plexGet(cfg, path)
     if result.ok <> true then return result
+
+    totalSize = 0
+    if result.json <> invalid and result.json.MediaContainer <> invalid then
+        if result.json.MediaContainer.totalSize <> invalid then
+            totalSize = result.json.MediaContainer.totalSize
+        else if result.json.MediaContainer.size <> invalid then
+            totalSize = result.json.MediaContainer.size
+        end if
+    end if
 
     items = collectMetadata(cfg, result.json)
     grid = createObject("roSGNode", "ContentNode")
@@ -994,7 +1023,30 @@ function fetchSectionAll(cfg as Object, item as Object) as Object
         })
     end for
 
-    return { ok: true, content: grid, title: title, sectionId: sectionId, count: items.count(), genre: genre, search: search }
+    nextStart = startAt + items.count()
+    hasMore = false
+    if totalSize > 0 then
+        hasMore = nextStart < totalSize
+    else
+        hasMore = items.count() >= pageSize
+    end if
+
+    return {
+        ok: true,
+        content: grid,
+        title: title,
+        sectionId: sectionId,
+        count: items.count(),
+        totalSize: totalSize,
+        start: startAt,
+        nextStart: nextStart,
+        hasMore: hasMore,
+        pageSize: pageSize,
+        genre: genre,
+        search: search,
+        sort: sortKey,
+        decade: decade
+    }
 end function
 
 function collectSectionGenres(cfg as Object, sectionId as String) as Object

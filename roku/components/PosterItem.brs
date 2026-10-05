@@ -11,6 +11,7 @@ sub init()
     m.titleLabel = m.top.findNode("titleLabel")
     m.itemWidth = 168
     m.itemHeight = 252
+    m.seenIdle = false
     setFocused(false)
 end sub
 
@@ -116,7 +117,13 @@ sub refreshProgress()
 end sub
 
 sub onFocusPercentChange()
-    setFocused(m.top.focusPercent > 0.5)
+    fp = m.top.focusPercent
+    if fp = invalid then fp = 0
+    ' RowList often leaves item 0 at focusPercent=1 before the shelf is focused.
+    ' Require an idle (unfocused) moment before rings can appear.
+    if fp < 0.15 then m.seenIdle = true
+    show = (fp > 0.55) and (m.seenIdle = true)
+    setFocused(show)
 end sub
 
 sub setFocused(focused as Boolean)

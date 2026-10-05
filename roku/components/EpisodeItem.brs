@@ -10,6 +10,7 @@ sub init()
     m.progressFg = m.top.findNode("progressFg")
     m.itemWidth = 320
     m.itemHeight = 180
+    m.seenIdle = false
     setFocused(false)
 end sub
 
@@ -96,7 +97,10 @@ sub refreshProgress()
 end sub
 
 sub onFocusPercentChange()
-    setFocused(m.top.focusPercent > 0.5)
+    fp = m.top.focusPercent
+    if fp = invalid then fp = 0
+    if fp < 0.15 then m.seenIdle = true
+    setFocused((fp > 0.55) and (m.seenIdle = true))
 end sub
 
 sub setFocused(focused as Boolean)

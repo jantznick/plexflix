@@ -15,12 +15,13 @@ sub init()
     m.billboardFade = m.top.findNode("billboardFade")
     m.rowsMove = m.top.findNode("rowsMove")
 
-    ' Expanded = billboard mode. Collapsed = shelves fill the screen with a top peek.
-    m.expandedRowY = 720
-    m.collapsedRowY = 48
-    m.collapsedPeekY = -96
+    ' Expanded: hero + first shelf + next shelf clipped at bottom (Netflix).
+    ' Collapsed: shelves fill the screen; bottom shelf stays clipped.
+    m.expandedRowY = 560
+    m.collapsedRowY = 36
+    m.collapsedPeekY = -72
     m.rowsX = 96
-    m.heroHideY = -920
+    m.heroHideY = -720
     m.isCollapsed = false
     m.currentRow = -1
     m.peekActive = false
@@ -92,7 +93,7 @@ sub onHomeLoaded()
     end if
 
     rowCount = content.getChildCount()
-    m.buildLabel.text = "v0.4.2 · " + safeToStr(rowCount) + " rows"
+    m.buildLabel.text = "v0.4.3 · " + safeToStr(rowCount) + " rows"
 
     if m.loadingPanel <> invalid then m.loadingPanel.visible = false
     if m.frame <> invalid then m.frame.visible = true

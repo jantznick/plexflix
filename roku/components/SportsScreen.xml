@@ -12,34 +12,64 @@
     <script type="text/brightscript" uri="pkg:/source/Fonts.brs" />
 
     <children>
-        <Rectangle width="1920" height="1080" color="0x07070B" />
+        <Rectangle width="1920" height="1080" color="0x0A0E18" />
 
-        <Group translation="[96, 64]">
-            <Label width="1200" height="56" text="Live Sports" color="0xFFFFFF">
-                <Font role="font" uri="pkg:/fonts/Outfit-Bold.ttf" size="44" />
+        <Rectangle width="1920" height="64" color="0x121A2A" />
+        <Label translation="[96, 14]" width="500" height="40" text="LIVE SPORTS GUIDE" color="0xE50914">
+            <Font role="font" uri="pkg:/fonts/Outfit-Bold.ttf" size="28" />
+        </Label>
+        <Label id="clockLabel" translation="[1400, 18]" width="420" height="36" horizAlign="right" text="" color="0xA8B0C0">
+            <Font role="font" uri="pkg:/fonts/Outfit-Medium.ttf" size="22" />
+        </Label>
+
+        <Group translation="[96, 80]">
+            <Label id="eventTitle" width="900" height="60" color="0xFFFFFF" wrap="true" maxLines="2" text="Select a game">
+                <Font role="font" uri="pkg:/fonts/Outfit-Bold.ttf" size="40" />
             </Label>
-            <Label id="statusLabel" translation="[0, 58]" width="1500" height="36" text="Loading sports feed..." color="0x777780">
+            <Label id="eventMeta" translation="[0, 68]" width="900" height="32" color="0x8FA0B8" text="">
+                <Font role="font" uri="pkg:/fonts/Outfit-Medium.ttf" size="20" />
+            </Label>
+            <Label id="eventSummary" translation="[0, 108]" width="900" height="100" color="0xC5CCD8" wrap="true" maxLines="3" lineSpacing="4" text="">
                 <Font role="font" uri="pkg:/fonts/Outfit-Regular.ttf" size="20" />
             </Label>
 
-            <ShimmerRow id="shimmer" translation="[0, 120]" />
+            <Group id="watchBtn" translation="[0, 230]">
+                <Rectangle id="watchBg" width="260" height="52" color="0xE50914" />
+                <Label width="260" height="52" horizAlign="center" vertAlign="center" text="Open streams" color="0xFFFFFF">
+                    <Font role="font" uri="pkg:/fonts/Outfit-SemiBold.ttf" size="24" />
+                </Label>
+            </Group>
+            <Label id="statusLabel" translation="[280, 240]" width="600" height="36" text="" color="0x778099">
+                <Font role="font" uri="pkg:/fonts/Outfit-Regular.ttf" size="18" />
+            </Label>
 
-            <ShelfRowList
-                id="sportsRows"
-                translation="[0, 120]"
-                itemComponentName="EpisodeItem"
-                numRows="6"
-                rowItemSize="[[300, 170]]"
-                rowItemSpacing="[[24, 0]]"
-                itemSize="[1728, 250]"
-                itemSpacing="[0, 28]"
-                showRowLabel="[true]"
-                rowLabelOffset="[[0, 8]]"
-                rowFocusAnimationStyle="fixedFocus"
-                focusXOffset="[0]"
-                drawFocusFeedback="false"
-                visible="false"
-            />
+            <Rectangle translation="[1020, 0]" width="700" height="294" color="0x000000" />
+            <Poster id="previewArt" translation="[1020, 0]" width="700" height="294" loadDisplayMode="scaleToZoom" loadWidth="1280" loadHeight="720" uri="pkg:/images/poster_placeholder.png" opacity="0.5" />
         </Group>
+
+        <Rectangle translation="[0, 400]" width="1920" height="48" color="0x1A2438" />
+        <Label translation="[96, 410]" width="280" height="32" text="LEAGUE" color="0x8FA0B8">
+            <Font role="font" uri="pkg:/fonts/Outfit-SemiBold.ttf" size="18" />
+        </Label>
+        <Label translation="[420, 410]" width="700" height="32" text="EVENT" color="0xE8EEF8">
+            <Font role="font" uri="pkg:/fonts/Outfit-SemiBold.ttf" size="18" />
+        </Label>
+        <Label translation="[1200, 410]" width="400" height="32" text="INFO" color="0x8FA0B8">
+            <Font role="font" uri="pkg:/fonts/Outfit-SemiBold.ttf" size="18" />
+        </Label>
+        <Label translation="[1640, 410]" width="180" height="32" text="STATUS" color="0x8FA0B8">
+            <Font role="font" uri="pkg:/fonts/Outfit-SemiBold.ttf" size="18" />
+        </Label>
+
+        <LabelList
+            id="guideList"
+            translation="[72, 456]"
+            itemSize="[1776, 68]"
+            itemSpacing="[0, 0]"
+            numRows="9"
+            color="0xD0D8E8"
+            focusedColor="0x0A0E18"
+            drawFocusFeedback="true"
+        />
     </children>
 </component>

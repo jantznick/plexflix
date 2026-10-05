@@ -473,6 +473,15 @@ end sub
 sub focusActionButtons()
     m.focusIndex = 0
     updateMovieButtonFocus()
+    ' Drop shelf focus so cast/episode rings cannot linger while Play is active
+    if m.relatedRows <> invalid then
+        m.relatedRows.setFocus(false)
+        m.relatedRows.visible = false
+        m.relatedRows.visible = true
+    end if
+    if m.seasonRows <> invalid then
+        m.seasonRows.setFocus(false)
+    end if
     m.movieActions.setFocus(true)
     m.top.setFocus(true)
 end sub

@@ -4,7 +4,6 @@ sub init()
     m.rowList = m.top.findNode("rowList")
     m.shimmer = m.top.findNode("shimmer")
     m.viewAllBg = m.top.findNode("viewAllBg")
-    m.searchBg = m.top.findNode("searchBg")
     m.heroTiles = []
     for i = 0 to 7
         tile = m.top.findNode("tile" + StrI(i).Trim())
@@ -13,8 +12,7 @@ sub init()
 
     m.sectionId = ""
     m.genres = []
-    m.focusZone = "hero" ' hero | rows
-    m.heroBtn = "viewAll"
+    m.focusZone = "hero"
 
     m.rowList.observeField("rowItemSelected", "onRowItemSelected")
     m.rowList.observeField("escapeLeft", "onEscapeLeft")
@@ -110,50 +108,20 @@ end sub
 sub paintHeroFocus()
     if m.viewAllBg = invalid then return
     if m.focusZone = "hero" then
-        if m.heroBtn = "search" then
-            m.viewAllBg.color = "0xE50914"
-            m.searchBg.color = "0xFFFFFF"
-        else
-            m.viewAllBg.color = "0xFFFFFF"
-            m.searchBg.color = "0x2A2A32"
-        end if
+        m.viewAllBg.color = "0xFFFFFF"
     else
         m.viewAllBg.color = "0xE50914"
-        m.searchBg.color = "0x2A2A32"
     end if
 end sub
 
 sub requestViewAll()
     src = m.top.source
     if src = invalid then src = {}
-    payload = {
-        title: m.titleLabel.text,
-        sectionId: m.sectionId,
-        key: asString(src.key),
-        genres: m.genres
-    }
-    m.top.viewAllRequested = payload
-end sub
-
-sub runSearch()
-    m.searchTask = createObject("roSGNode", "SearchKeyboardTask")
-    m.searchTask.prompt = "Search " + m.titleLabel.text
-    m.searchTask.observeField("result", "onSearchDone")
-    m.searchTask.control = "RUN"
-end sub
-
-sub onSearchDone()
-    if m.searchTask.cancelled = true then return
-    query = asString(m.searchTask.result)
-    if query = "" then return
-    src = m.top.source
-    if src = invalid then src = {}
     m.top.viewAllRequested = {
         title: m.titleLabel.text,
         sectionId: m.sectionId,
         key: asString(src.key),
-        genres: m.genres,
-        search: query
+        genres: m.genres
     }
 end sub
 
@@ -200,15 +168,6 @@ function onKeyEvent(key as String, press as Boolean) as Boolean
         if key = "left" then
             m.top.openMenu = true
             return true
-        else if key = "right" then
-            if m.heroBtn = "search" then
-                m.heroBtn = "viewAll"
-            else
-                m.heroBtn = "search"
-            end if
-            if m.heroBtn = invalid then m.heroBtn = "viewAll"
-            paintHeroFocus()
-            return true
         else if key = "down" then
             if m.rowList.visible = true and m.rowList.content <> invalid and m.rowList.content.getChildCount() > 0 then
                 m.focusZone = "rows"
@@ -217,18 +176,13 @@ function onKeyEvent(key as String, press as Boolean) as Boolean
                 return true
             end if
         else if key = "OK" then
-            if m.heroBtn = "search" then
-                runSearch()
-            else
-                requestViewAll()
-            end if
+            requestViewAll()
             return true
         end if
     else if key = "back" then
         m.top.closed = true
         return true
     end if
-
     return false
 end function
 
