@@ -19,7 +19,7 @@
         </Group>
 
         <Group id="frame" translation="[0, 0]" visible="false" clippingRect="[0, 0, 1920, 1080]">
-            <!-- Restore tall 0.4.2-style billboard -->
+            <!-- Tall 0.4.2-style billboard -->
             <Group id="billboard" translation="[0, 0]">
                 <Poster
                     id="heroArt"
@@ -47,31 +47,34 @@
                 </Group>
             </Group>
 
-            <!-- Previous shelf peek — posters only, half-tile horizontal stagger -->
+            <!-- Our staggered peek — RowList's own previous-row peek is clipped away below -->
             <Group id="peekStrip" translation="[96, 0]" visible="false" clippingRect="[0, 0, 1728, 140]">
                 <Group id="peekPosters" translation="[0, -100]" />
             </Group>
 
-            <ShelfRowList
-                id="rowList"
-                translation="[96, 720]"
-                itemComponentName="PosterItem"
-                numRows="3"
-                rowItemSize="[[150, 225]]"
-                rowItemSpacing="[[22, 0]]"
-                itemSize="[1728, 300]"
-                itemSpacing="[0, 10]"
-                showRowLabel="[true]"
-                rowLabelOffset="[[0, 4]]"
-                rowFocusAnimationStyle="fixedFocus"
-                focusXOffset="[0]"
-                drawFocusFeedback="false"
-            />
+            <!-- Clip TOP of the RowList so fixedFocus can't show an aligned previous shelf -->
+            <Group id="rowsClip" translation="[0, 720]" clippingRect="[0, 0, 1920, 960]">
+                <ShelfRowList
+                    id="rowList"
+                    translation="[96, 0]"
+                    itemComponentName="PosterItem"
+                    numRows="3"
+                    rowItemSize="[[150, 225]]"
+                    rowItemSpacing="[[22, 0]]"
+                    itemSize="[1728, 300]"
+                    itemSpacing="[0, 10]"
+                    showRowLabel="[true]"
+                    rowLabelOffset="[[0, 4]]"
+                    rowFocusAnimationStyle="fixedFocus"
+                    focusXOffset="[0]"
+                    drawFocusFeedback="false"
+                />
+            </Group>
 
             <Animation id="homeAnim" duration="0.16" easeFunction="outCubic" optional="true" repeat="false">
                 <Vector2DFieldInterpolator id="billboardMove" key="[0.0, 1.0]" keyValue="[[0, 0], [0, 0]]" fieldToInterp="billboard.translation" />
                 <FloatFieldInterpolator id="billboardFade" key="[0.0, 1.0]" keyValue="[1.0, 1.0]" fieldToInterp="billboard.opacity" />
-                <Vector2DFieldInterpolator id="rowsMove" key="[0.0, 1.0]" keyValue="[[96, 720], [96, 720]]" fieldToInterp="rowList.translation" />
+                <Vector2DFieldInterpolator id="rowsMove" key="[0.0, 1.0]" keyValue="[[0, 720], [0, 720]]" fieldToInterp="rowsClip.translation" />
             </Animation>
         </Group>
     </children>

@@ -13,9 +13,9 @@ sub init()
         m.previewArt.loadDisplayMode = "scaleToZoom"
         m.previewArt.loadWidth = 1280
         m.previewArt.loadHeight = 720
-        m.previewArt.width = 700
-        m.previewArt.height = 394
-        m.previewArt.translation = [0, -72]
+        m.previewArt.width = 640
+        m.previewArt.height = 360
+        m.previewArt.translation = [1184, 0]
     end if
 
     m.channels = []
@@ -219,9 +219,8 @@ sub updateInfo(idx as Integer)
         m.previewArt.loadDisplayMode = "scaleToZoom"
         m.previewArt.loadWidth = 1280
         m.previewArt.loadHeight = 720
-        m.previewArt.width = 700
-        m.previewArt.height = 394
-        m.previewArt.translation = [0, -72]
+        m.previewArt.width = 640
+        m.previewArt.height = 360
         m.previewArt.uri = uri
         m.previewArt.opacity = 1.0
         if m.previewHint <> invalid then m.previewHint.visible = false

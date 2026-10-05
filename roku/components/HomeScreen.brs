@@ -8,6 +8,7 @@ sub init()
     m.heroMeta = m.top.findNode("heroMeta")
     m.heroSummary = m.top.findNode("heroSummary")
     m.rowList = m.top.findNode("rowList")
+    m.rowsClip = m.top.findNode("rowsClip")
     m.peekStrip = m.top.findNode("peekStrip")
     m.peekPosters = m.top.findNode("peekPosters")
     m.homeAnim = m.top.findNode("homeAnim")
@@ -16,14 +17,14 @@ sub init()
     m.rowsMove = m.top.findNode("rowsMove")
 
     ' Active shelf is ALWAYS the RowList focus slot — never the peek strip.
-    ' Expanded: tall hero (0.4.2-style) + shelves below.
-    ' Collapsed: peek strip shows previous; RowList jumps up so the active shelf is fully on-screen.
+    ' rowsClip clips away RowList's native previous-row peek (which was aligned + moved).
     m.expandedRowY = 720
     m.collapsedRowY = 130
     m.rowsX = 96
     m.heroHideY = -920
     m.isCollapsed = false
     m.currentRow = -1
+    m.tileStep = 172
 
     if m.heroArt <> invalid then
         m.heroArt.loadDisplayMode = "scaleToZoom"
@@ -135,16 +136,25 @@ sub applyFocusedRow(force as Boolean)
     if info = invalid or info.count() < 2 then return
 
     rowIndex = info[0]
+    colIndex = info[1]
     rowChanged = (rowIndex <> m.currentRow)
     if not force and not rowChanged then return
 
     row = m.rowList.content.getChild(rowIndex)
     if row = invalid then return
-    item = row.getChild(info[1])
+    item = row.getChild(colIndex)
     if item = invalid then return
 
+    ' Skip invisible stagger spacers — jump to the next real poster
+    if item.isSpacer = true then
+        nextCol = colIndex + 1
+        if nextCol < row.getChildCount() then
+            m.rowList.jumpToRowItem = [rowIndex, nextCol]
+        end if
+        return
+    end if
+
     m.currentRow = rowIndex
-    ' Only rebuild the clipped peek when the active ROW changes — never on horizontal scroll
     if rowChanged then
         setBrowseMode(rowIndex > 0)
         updatePeek(rowIndex)
@@ -165,7 +175,7 @@ sub clearPeekPosters()
 end sub
 
 sub updatePeek(rowIndex as Integer)
-    ' Peek = previous shelf only. It is never focusable / never the active row.
+    ' Peek = previous shelf only. Never focusable. Offset so columns don't align.
     if rowIndex < 1 or m.isCollapsed <> true then
         hidePeek()
         return
@@ -179,15 +189,17 @@ sub updatePeek(rowIndex as Integer)
 
     clearPeekPosters()
 
-    ' Half-tile offset so peek columns don't line up with the active shelf (Netflix-style)
-    stagger = 86
-    if (rowIndex MOD 2) = 0 then stagger = -86
-    maxN = prev.getChildCount()
-    if maxN > 10 then maxN = 10
+    ' Always half-tile off the focused row's left edge so EVERY peek is staggered
+    stagger = Int(m.tileStep / 2)
+    if (rowIndex MOD 2) = 0 then stagger = -stagger
+
+    maxN = 10
+    drawn = 0
     x = stagger
-    for i = 0 to maxN - 1
+    for i = 0 to prev.getChildCount() - 1
+        if drawn >= maxN then exit for
         it = prev.getChild(i)
-        if it <> invalid then
+        if it <> invalid and it.isSpacer <> true then
             p = createObject("roSGNode", "Poster")
             p.width = 150
             p.height = 225
@@ -200,7 +212,8 @@ sub updatePeek(rowIndex as Integer)
             if uri <> "" then p.uri = uri else p.uri = "pkg:/images/poster_placeholder.png"
             p.translation = [x, 0]
             m.peekPosters.appendChild(p)
-            x = x + 172
+            x = x + m.tileStep
+            drawn = drawn + 1
         end if
     end for
 
@@ -211,19 +224,16 @@ end sub
 sub setBrowseMode(collapsed as Boolean)
     if collapsed then
         m.pendingHero = [0, m.heroHideY]
-        m.pendingRows = [m.rowsX, m.collapsedRowY]
+        m.pendingRows = [0, m.collapsedRowY]
         m.pendingOpacity = 0.0
     else
         m.pendingHero = [0, 0]
-        m.pendingRows = [m.rowsX, m.expandedRowY]
+        m.pendingRows = [0, m.expandedRowY]
         m.pendingOpacity = 1.0
         hidePeek()
     end if
 
     m.isCollapsed = collapsed
-
-    ' Always apply layout immediately — Animation is unreliable in brs-desktop
-    ' and was leaving the hero-sized black gap with rows still at expanded Y.
     applyBrowseModeSnap()
 end sub
 
@@ -235,7 +245,11 @@ sub applyBrowseModeSnap()
     if m.pendingHero = invalid then return
     if m.homeAnim <> invalid then m.homeAnim.control = "stop"
     m.billboard.translation = m.pendingHero
-    m.rowList.translation = m.pendingRows
+    if m.rowsClip <> invalid then
+        m.rowsClip.translation = m.pendingRows
+    else
+        m.rowList.translation = [m.rowsX, m.pendingRows[1]]
+    end if
     m.billboard.opacity = m.pendingOpacity
     if m.isCollapsed then
         m.billboard.visible = false
@@ -325,6 +339,7 @@ sub onRowItemSelected()
     if row = invalid then return
     item = row.getChild(info[1])
     if item = invalid then return
+    if item.isSpacer = true then return
 
     m.top.selectedItem = {
         title: item.title,
