@@ -23,7 +23,7 @@
             id="progressBg"
             width="148"
             height="5"
-            translation="[0, 226]"
+            translation="[0, 217]"
             color="0x404040"
             visible="false"
         />
@@ -31,7 +31,7 @@
             id="progressFg"
             width="0"
             height="5"
-            translation="[0, 226]"
+            translation="[0, 217]"
             color="0xE50914"
             visible="false"
         />
