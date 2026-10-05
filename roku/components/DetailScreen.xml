@@ -20,7 +20,7 @@
                 id="backdrop"
                 width="1728"
                 height="460"
-                loadDisplayMode="scaleToFill"
+                loadDisplayMode="scaleToZoom"
                 opacity="0.28"
             />
             <Rectangle width="1728" height="460" color="0x07070B" opacity="0.5" />

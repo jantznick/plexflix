@@ -18,7 +18,7 @@
                     id="heroArt"
                     width="1728"
                     height="640"
-                    loadDisplayMode="scaleToFill"
+                    loadDisplayMode="scaleToZoom"
                     uri="pkg:/images/splash-screen_fhd.jpg"
                 />
                 <!-- Depth: soft left wash + bottom fade -->
