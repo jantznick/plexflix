@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<component name="VideoScreen" extends="Group">
+    <interface>
+        <field id="config" type="assocarray" />
+        <field id="content" type="assocarray" onChange="onContentSet" />
+        <field id="closed" type="boolean" alwaysNotify="true" />
+        <field id="close" type="boolean" alwaysNotify="true" onChange="onCloseRequested" />
+    </interface>
+
+    <script type="text/brightscript" uri="VideoScreen.brs" />
+
+    <children>
+        <Rectangle width="1920" height="1080" color="0x000000" />
+        <Video
+            id="video"
+            width="1920"
+            height="1080"
+            enableUI="true"
+            notificationInterval="1"
+        />
+        <Label
+            id="statusLabel"
+            width="1920"
+            height="60"
+            translation="[0, 500]"
+            horizAlign="center"
+            color="0xFFFFFF"
+            font="font:MediumSystemFont"
+            text="Starting playback..."
+        />
+    </children>
+</component>

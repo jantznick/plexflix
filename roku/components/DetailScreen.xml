@@ -1,0 +1,102 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<component name="DetailScreen" extends="Group">
+    <interface>
+        <field id="config" type="assocarray" />
+        <field id="content" type="assocarray" onChange="onContentSet" />
+        <field id="playRequested" type="assocarray" />
+        <field id="closed" type="boolean" alwaysNotify="true" />
+        <field id="close" type="boolean" alwaysNotify="true" onChange="onCloseRequested" />
+    </interface>
+
+    <script type="text/brightscript" uri="DetailScreen.brs" />
+
+    <children>
+        <Rectangle width="1920" height="1080" color="0x0A0A0A" />
+
+        <Poster
+            id="backdrop"
+            width="1920"
+            height="1080"
+            loadDisplayMode="scaleToFill"
+            opacity="0.35"
+        />
+        <Rectangle width="1920" height="1080" color="0x0A0A0A" opacity="0.55" />
+
+        <Poster
+            id="poster"
+            translation="[120, 160]"
+            width="420"
+            height="630"
+            loadDisplayMode="scaleToZoom"
+            uri="pkg:/images/poster_placeholder.png"
+        />
+
+        <Label
+            id="titleLabel"
+            translation="[620, 180]"
+            width="1160"
+            height="90"
+            color="0xFFFFFF"
+            font="font:LargeBoldSystemFont"
+            wrap="true"
+            maxLines="2"
+        />
+        <Label
+            id="metaLabel"
+            translation="[620, 290]"
+            width="1160"
+            height="40"
+            color="0xB3B3B3"
+            font="font:MediumSystemFont"
+        />
+        <Label
+            id="summaryLabel"
+            translation="[620, 360]"
+            width="1100"
+            height="240"
+            color="0xE5E5E5"
+            font="font:SmallSystemFont"
+            wrap="true"
+            maxLines="8"
+            lineSpacing="6"
+        />
+
+        <Group id="playBtn" translation="[620, 650]">
+            <Rectangle id="playBg" width="220" height="64" color="0xE50914" />
+            <Label
+                id="playLabel"
+                width="220"
+                height="64"
+                horizAlign="center"
+                vertAlign="center"
+                text="Play"
+                color="0xFFFFFF"
+                font="font:MediumBoldSystemFont"
+            />
+        </Group>
+
+        <Group id="backBtn" translation="[868, 650]">
+            <Rectangle id="backBg" width="180" height="64" color="0x2A2A2A" />
+            <Label
+                id="backLabel"
+                width="180"
+                height="64"
+                horizAlign="center"
+                vertAlign="center"
+                text="Back"
+                color="0xFFFFFF"
+                font="font:MediumSystemFont"
+            />
+        </Group>
+
+        <Label
+            id="hintLabel"
+            translation="[620, 740]"
+            width="1100"
+            height="40"
+            text="OK to play  •  Back to return"
+            color="0x808080"
+            font="font:SmallestSystemFont"
+        />
+    </children>
+</component>

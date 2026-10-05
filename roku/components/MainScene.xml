@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<component name="MainScene" extends="Scene">
+    <script type="text/brightscript" uri="MainScene.brs" />
+    <script type="text/brightscript" uri="pkg:/source/PlexConfig.brs" />
+
+    <children>
+        <Rectangle
+            id="background"
+            width="1920"
+            height="1080"
+            color="0x0A0A0A"
+        />
+
+        <Group id="screens" />
+
+        <Rectangle
+            id="loadingDim"
+            width="1920"
+            height="1080"
+            color="0x000000"
+            opacity="0.55"
+            visible="false"
+        />
+        <Label
+            id="statusLabel"
+            width="1920"
+            height="60"
+            translation="[0, 510]"
+            horizAlign="center"
+            color="0xFFFFFF"
+            font="font:MediumBoldSystemFont"
+            text=""
+        />
+    </children>
+</component>

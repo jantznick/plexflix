@@ -1,0 +1,95 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<component name="HomeScreen" extends="Group">
+    <interface>
+        <field id="config" type="assocarray" />
+        <field id="selectedItem" type="assocarray" />
+        <field id="loadingMessage" type="string" />
+    </interface>
+
+    <script type="text/brightscript" uri="HomeScreen.brs" />
+
+    <children>
+        ' Hero / billboard
+        <Poster
+            id="heroArt"
+            width="1920"
+            height="720"
+            loadDisplayMode="scaleToFill"
+            uri="pkg:/images/splash-screen_fhd.jpg"
+        />
+        <Rectangle
+            id="heroGradient"
+            width="1920"
+            height="720"
+            color="0x0A0A0A"
+            opacity="0.35"
+        />
+        <Rectangle
+            width="1920"
+            height="280"
+            translation="[0, 440]"
+            color="0x0A0A0A"
+            opacity="0.85"
+        />
+
+        <Label
+            id="brandLabel"
+            translation="[72, 36]"
+            width="600"
+            height="60"
+            text="PLEXFLIX"
+            color="0xE50914"
+            font="font:LargeBoldSystemFont"
+        />
+
+        <Label
+            id="heroTitle"
+            translation="[72, 460]"
+            width="1100"
+            height="70"
+            text="Loading your library..."
+            color="0xFFFFFF"
+            font="font:LargeBoldSystemFont"
+            wrap="true"
+            lineSpacing="4"
+        />
+        <Label
+            id="heroMeta"
+            translation="[72, 535]"
+            width="900"
+            height="36"
+            text=""
+            color="0xB3B3B3"
+            font="font:SmallSystemFont"
+        />
+        <Label
+            id="heroSummary"
+            translation="[72, 575]"
+            width="900"
+            height="100"
+            text=""
+            color="0xE5E5E5"
+            font="font:SmallSystemFont"
+            wrap="true"
+            maxLines="3"
+            lineSpacing="4"
+        />
+
+        <RowList
+            id="rowList"
+            translation="[0, 700]"
+            itemComponentName="PosterItem"
+            numRows="3"
+            rowItemSize="[[210, 315]]"
+            rowItemSpacing="[[18, 0]]"
+            itemSize="[1920, 370]"
+            itemSpacing="[0, 18]"
+            showRowLabel="[true]"
+            rowLabelOffset="[[72, 12]]"
+            rowFocusAnimationStyle="fixedFocus"
+            focusXOffset="[72]"
+            drawFocusFeedback="true"
+            focusBitmapUri="pkg:/images/focus_border.png"
+        />
+    </children>
+</component>
