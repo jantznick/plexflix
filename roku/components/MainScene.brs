@@ -459,8 +459,38 @@ sub showVideo(item as Object)
     m.videoScreen.config = m.config
     m.videoScreen.content = item
     m.videoScreen.observeField("closed", "onVideoClosed")
+    m.videoScreen.observeField("playbackReport", "onPlaybackReport")
     m.screens.appendChild(m.videoScreen)
     m.videoScreen.setFocus(true)
+end sub
+
+sub onPlaybackReport(event as Object)
+    payload = event.getData()
+    if payload = invalid or payload.actions = invalid then return
+
+    ' Run from here, not from the player: the final timeline, the scrobble and
+    ' the transcode teardown all fire as VideoScreen is being removed, and a
+    ' Task whose owning node has gone can be collected before it finishes.
+    if m.playbackTasks = invalid then
+        m.playbackTasks = [invalid, invalid, invalid, invalid, invalid, invalid]
+        m.playbackSlot = 0
+    end if
+
+    for each entry in payload.actions
+        action = asString(entry.action)
+        if action <> "" then
+            task = createObject("roSGNode", "PlexTask")
+            task.config = m.config
+            task.action = action
+            task.item = entry.item
+            task.control = "RUN"
+
+            ' A small ring keeps each call referenced long enough to finish
+            ' without the list growing for the life of the channel
+            m.playbackTasks[m.playbackSlot] = task
+            m.playbackSlot = (m.playbackSlot + 1) MOD m.playbackTasks.count()
+        end if
+    end for
 end sub
 
 sub onVideoClosed()

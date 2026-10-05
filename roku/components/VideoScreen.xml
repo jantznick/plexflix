@@ -5,19 +5,37 @@
         <field id="content" type="assocarray" onChange="onContentSet" />
         <field id="closed" type="boolean" alwaysNotify="true" />
         <field id="close" type="boolean" alwaysNotify="true" onChange="onCloseRequested" />
+        <!-- Plex calls are handed to MainScene rather than run here: the last
+             ones fire as this screen is torn down and a Task owned by a node
+             that is going away can be collected before it finishes -->
+        <field id="playbackReport" type="assocarray" alwaysNotify="true" />
     </interface>
 
     <script type="text/brightscript" uri="VideoScreen.brs" />
 
     <children>
+        <Timer id="hideTimer" duration="5" repeat="false" />
+        <Timer id="seekTimer" duration="0.7" repeat="false" />
+        <Timer id="reportTimer" duration="10" repeat="true" />
+
+        <Animation id="fade" duration="0.22" easeFunction="outQuad">
+            <FloatFieldInterpolator id="fadeInterp" key="[0.0, 1.0]" keyValue="[0.0, 1.0]" fieldToInterp="controls.opacity" />
+        </Animation>
+
         <Rectangle width="1920" height="1080" color="0x000000" />
+
+        <!-- enableUI="false": every control below is ours, so Roku's stock
+             trick-play overlay must stay out of the way. Focus also stays on
+             this Group rather than the Video node so one key handler owns the
+             remote for the whole screen. -->
         <Video
             id="video"
             width="1920"
             height="1080"
-            enableUI="true"
+            enableUI="false"
             notificationInterval="1"
         />
+
         <Label
             id="statusLabel"
             width="1920"
@@ -28,5 +46,57 @@
             font="font:MediumSystemFont"
             text="Starting playback..."
         />
+        <BusySpinner id="spinner" translation="[920, 580]" uri="pkg:/images/spinner.png" visible="false" />
+
+        <Group id="controls" visible="false" opacity="0">
+            <Poster
+                id="scrim"
+                width="1920"
+                height="560"
+                translation="[0, 520]"
+                loadDisplayMode="scaleToFill"
+                uri="pkg:/images/player_scrim.png"
+            />
+
+            <Group id="castPanel" translation="[96, 548]" visible="false">
+                <Label id="castHeading" width="400" height="26" text="Cast" color="0x9A9AA4">
+                    <Font role="font" uri="pkg:/fonts/Outfit-Medium.ttf" size="20" />
+                </Label>
+                <Group id="castRow" translation="[0, 32]" />
+            </Group>
+
+            <Label id="titleLabel" width="1500" height="48" translation="[96, 782]" color="0xFFFFFF">
+                <Font role="font" uri="pkg:/fonts/Outfit-Bold.ttf" size="38" />
+            </Label>
+            <Label id="subtitleLabel" width="1500" height="34" translation="[96, 836]" color="0xB8B8C4">
+                <Font role="font" uri="pkg:/fonts/Outfit-Medium.ttf" size="24" />
+            </Label>
+
+            <Rectangle id="track" width="1728" height="8" translation="[96, 894]" color="0x45454F" />
+            <Rectangle id="fill" width="0" height="8" translation="[96, 894]" color="0xE50914" />
+            <Rectangle id="thumb" width="8" height="26" translation="[96, 885]" color="0xFFFFFF" />
+
+            <Label id="elapsedLabel" width="1728" height="30" translation="[96, 916]" horizAlign="left" color="0xFFFFFF">
+                <Font role="font" uri="pkg:/fonts/Outfit-Medium.ttf" size="22" />
+            </Label>
+            <Label id="endsAtLabel" width="1728" height="30" translation="[96, 916]" horizAlign="center" color="0x9A9AA4">
+                <Font role="font" uri="pkg:/fonts/Outfit-Medium.ttf" size="22" />
+            </Label>
+            <Label id="remainingLabel" width="1728" height="30" translation="[96, 916]" horizAlign="right" color="0xFFFFFF">
+                <Font role="font" uri="pkg:/fonts/Outfit-Medium.ttf" size="22" />
+            </Label>
+
+            <Group id="buttonRow" translation="[96, 960]" />
+        </Group>
+
+        <Group id="picker" visible="false">
+            <Rectangle width="1920" height="1080" color="0x000000" opacity="0.6" />
+            <Rectangle translation="[600, 230]" width="720" height="620" color="0x14141C" />
+            <Rectangle translation="[600, 230]" width="720" height="4" color="0xE50914" />
+            <Label id="pickerTitle" translation="[640, 260]" width="640" height="44" color="0xFFFFFF">
+                <Font role="font" uri="pkg:/fonts/Outfit-Bold.ttf" size="32" />
+            </Label>
+            <Group id="pickerRows" translation="[620, 320]" />
+        </Group>
     </children>
 </component>

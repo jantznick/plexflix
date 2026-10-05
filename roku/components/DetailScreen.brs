@@ -265,7 +265,9 @@ sub fillSeasonRow(index as Integer, season as Object, episodes as Object)
             year: ep.year,
             hdBackdropUrl: ep.hdBackdropUrl,
             shortTitle: ep.shortTitle,
-            index: ep.index
+            grandparentTitle: ep.grandparentTitle,
+            index: ep.index,
+            parentIndex: ep.parentIndex
         })
     end for
 
@@ -331,7 +333,9 @@ sub appendSeasonRow(season as Object, episodes as Object)
             year: ep.year,
             hdBackdropUrl: ep.hdBackdropUrl,
             shortTitle: ep.shortTitle,
-            index: ep.index
+            grandparentTitle: ep.grandparentTitle,
+            index: ep.index,
+            parentIndex: ep.parentIndex
         })
     end for
 
@@ -530,7 +534,10 @@ function nodeToItem(item as Object) as Object
         viewedLeafCount: item.viewedLeafCount,
         leafCount: item.leafCount,
         personId: item.personId,
-        shortTitle: item.shortTitle
+        shortTitle: item.shortTitle,
+        grandparentTitle: item.grandparentTitle,
+        index: item.index,
+        parentIndex: item.parentIndex
     }
 end function
 
