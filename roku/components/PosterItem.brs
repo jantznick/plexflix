@@ -1,4 +1,5 @@
 sub init()
+    m.visual = m.top.findNode("visual")
     m.poster = m.top.findNode("poster")
     m.shadow = m.top.findNode("shadow")
     m.cardBg = m.top.findNode("cardBg")
@@ -16,6 +17,10 @@ sub init()
     m.itemWidth = 168
     m.itemHeight = 252
     setFocused(false)
+    if m.visual <> invalid then m.visual.translation = [0, 0]
+end sub
+
+sub onRowIndexChange()
 end sub
 
 sub onSizeChange()
@@ -89,20 +94,6 @@ end sub
 sub onContentChange()
     item = m.top.itemContent
     if item = invalid then return
-
-    ' Invisible stagger spacer — takes a tile slot so the row starts offset
-    if item.isSpacer = true then
-        m.top.visible = false
-        m.poster.uri = ""
-        if m.shadow <> invalid then m.shadow.visible = false
-        if m.cardBg <> invalid then m.cardBg.visible = false
-        setFocused(false)
-        return
-    end if
-
-    m.top.visible = true
-    if m.shadow <> invalid then m.shadow.visible = true
-    if m.cardBg <> invalid then m.cardBg.visible = true
 
     if item.hdPosterUrl <> invalid and item.hdPosterUrl <> "" then
         m.poster.uri = item.hdPosterUrl
