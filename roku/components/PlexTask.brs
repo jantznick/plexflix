@@ -1048,7 +1048,8 @@ function fetchSectionAll(cfg as Object, item as Object) as Object
             key: it.key,
             duration: it.duration,
             viewOffset: it.viewOffset,
-            shortTitle: it.shortTitle
+            shortTitle: it.shortTitle,
+            hdBackdropUrl: it.hdBackdropUrl
         })
     end for
 
