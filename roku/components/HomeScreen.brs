@@ -13,11 +13,14 @@ sub init()
     m.rowsMove = m.top.findNode("rowsMove")
 
     ' Expanded = billboard mode. Collapsed = shelves fill the screen.
-    m.expandedRowY = 560
-    m.collapsedRowY = 72
-    m.heroHideY = -700
+    m.expandedRowY = 520
+    m.collapsedRowY = 80
+    m.heroHideY = -680
     m.isCollapsed = false
     m.currentRow = -1
+
+    m.shimmer = m.top.findNode("shimmer")
+    if m.shimmer <> invalid then m.shimmer.active = true
 
     m.snapTimer = createObject("roSGNode", "Timer")
     m.snapTimer.repeat = false
@@ -55,6 +58,7 @@ end sub
 sub onHomeLoaded()
     response = m.task.response
     m.top.loadingMessage = ""
+    if m.shimmer <> invalid then m.shimmer.active = false
 
     if response = invalid or response.ok <> true then
         err = "Could not reach Plex. Check baseUrl/token in roku/source/PlexConfig.brs"
@@ -74,9 +78,10 @@ sub onHomeLoaded()
     end if
 
     rowCount = content.getChildCount()
-    m.buildLabel.text = "v0.3.4 · " + safeToStr(rowCount) + " rows"
+    m.buildLabel.text = "v0.3.5 · " + safeToStr(rowCount) + " rows"
 
     m.rowList.content = content
+    m.rowList.visible = true
     m.currentRow = -1
     setBrowseMode(false)
     m.rowList.setFocus(true)

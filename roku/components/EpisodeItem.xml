@@ -34,10 +34,11 @@
             width="300"
             height="40"
             color="0xFFFFFF"
-            font="font:SmallestSystemFont"
             wrap="true"
             maxLines="2"
-        />
+        >
+            <Font role="font" uri="pkg:/fonts/Outfit-Medium.ttf" size="18" />
+        </Label>
 
         <Rectangle id="focusTop" width="328" height="3" translation="[-4, -4]" color="0xFFFFFF" visible="false" />
         <Rectangle id="focusBottom" width="328" height="3" translation="[-4, 180]" color="0xFFFFFF" visible="false" />

@@ -2,6 +2,7 @@ sub init()
     m.titleLabel = m.top.findNode("titleLabel")
     m.statusLabel = m.top.findNode("statusLabel")
     m.rowList = m.top.findNode("rowList")
+    m.shimmer = m.top.findNode("shimmer")
     m.rowList.observeField("rowItemSelected", "onRowItemSelected")
 end sub
 
@@ -16,6 +17,8 @@ end sub
 sub loadBrowse()
     m.statusLabel.text = "Loading shelves..."
     m.top.loadingMessage = "Loading " + m.titleLabel.text + "..."
+    if m.shimmer <> invalid then m.shimmer.active = true
+    m.rowList.visible = false
     m.task = createObject("roSGNode", "PlexTask")
     m.task.config = m.top.config
     m.task.action = "sectionBrowse"
@@ -27,6 +30,8 @@ end sub
 sub onBrowseLoaded()
     response = m.task.response
     m.top.loadingMessage = ""
+    if m.shimmer <> invalid then m.shimmer.active = false
+
     if response = invalid or response.ok <> true then
         err = "Could not load library"
         if response <> invalid and response.error <> invalid then err = response.error
@@ -42,6 +47,7 @@ sub onBrowseLoaded()
 
     m.statusLabel.text = ""
     m.rowList.content = content
+    m.rowList.visible = true
     m.rowList.setFocus(true)
 end sub
 
@@ -79,7 +85,7 @@ end function
 
 sub onCloseRequested()
     if m.top.close = true then m.top.closed = true
-end function
+end sub
 
 function onKeyEvent(key as String, press as Boolean) as Boolean
     if not press then return false

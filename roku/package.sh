@@ -11,7 +11,7 @@ rm -f "$OUT"
 # Roku packages are zip files with manifest at the archive root (no top-level folder).
 (
   cd "$ROOT"
-  zip -r "$OUT" manifest source components images \
+  zip -r "$OUT" manifest source components images fonts \
     -x "*.DS_Store" \
     -x "dist/*" \
     -x "README.md" \

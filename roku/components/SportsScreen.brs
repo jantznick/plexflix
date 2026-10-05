@@ -1,6 +1,7 @@
 sub init()
     m.statusLabel = m.top.findNode("statusLabel")
     m.sportsRows = m.top.findNode("sportsRows")
+    m.shimmer = m.top.findNode("shimmer")
     m.sportsRows.observeField("rowItemSelected", "onItemSelected")
     m.events = []
 end sub
@@ -13,6 +14,8 @@ end sub
 sub loadFeed()
     m.statusLabel.text = "Loading sports feed..."
     m.top.loadingMessage = "Loading sports feed..."
+    if m.shimmer <> invalid then m.shimmer.active = true
+    m.sportsRows.visible = false
     m.task = createObject("roSGNode", "PlexTask")
     m.task.config = m.top.config
     m.task.action = "sportsFeed"
@@ -23,6 +26,7 @@ end sub
 sub onFeedLoaded()
     response = m.task.response
     m.top.loadingMessage = ""
+    if m.shimmer <> invalid then m.shimmer.active = false
     if response = invalid or response.ok <> true then
         err = "Could not load sports feed"
         if response <> invalid and response.error <> invalid then err = response.error
@@ -58,6 +62,7 @@ sub onFeedLoaded()
         m.statusLabel.text = "No live sports found — check sportsFeedUrl in PlexConfig.brs"
     else
         m.statusLabel.text = safeToStr(total) + " events · OK for details & streams"
+        m.sportsRows.visible = true
         m.sportsRows.setFocus(true)
     end if
 end sub

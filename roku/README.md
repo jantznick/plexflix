@@ -7,12 +7,14 @@ This is intentionally a **design/UX shell** on top of existing Plex data. Creden
 ## What you get
 
 - Dark Netflix-like home: billboard hero + horizontal shelves
-- Collapsible sidebar (hidden until you press Left): **Home**, **Libraries**, **Live Sports**
+- **Collapsible sidebar** (Left to open): Home, your **Libraries** listed inline, Live Sports
+- Selecting a library in the sidebar opens that library’s shelves
 - **Continue Watching**, **Recently Added**, Plex home hubs, and library shelves
 - Continue Watching episodes open the parent show with that episode focused
 - Title detail screen (Cast + More Like This)
 - Playback via Plex universal transcoder (HLS)
-- Live sports from a configurable JSON feed URL
+- Live sports from a configurable JSON feed URL (event detail + stream picker)
+- Custom **Outfit** font, poster shadows, shimmer loading skeletons
 
 ## Configure before sideload
 
@@ -25,6 +27,7 @@ sportsFeedUrl: "https://roku-hockey.s3.us-west-004.backblazeb2.com/secretfeedfil
 ```
 
 `sportsFeedUrl` can point at any JSON feed. Category maps like `{ "FOOTBALL": [ { title, thumbnail, content.videos[].url } ] }` are supported.
+
 Notes:
 
 - Use the Plex server IP reachable from your Roku (usually LAN HTTP on `32400`)
@@ -59,13 +62,18 @@ Optional CLI (if `ROKU_IP` / `ROKU_PASSWORD` are set):
 ## Remote / focus
 
 - **Left** opens the sidebar; **Right** or **Back** hides it again
-- **Libraries** lists your Plex movie/TV libraries (server sections — the same sources you pin in Plex Web)
+- Libraries appear **in the sidebar** (movie/TV sections from your Plex server)
 - Arrow keys move across poster rows
 - Focused title updates the hero billboard
 - OK opens the detail screen (episodes open the show with that episode selected)
 - Play / OK starts playback
 - Back returns to the previous screen
-- Loading uses a bottom banner only — the UI stays navigable
+- Loading uses a bottom banner + shimmer skeletons — the UI stays navigable
+
+## Fonts
+
+Outfit (Google Fonts / OFL) ships under `roku/fonts/`. Swap TTFs there and update `pkg:/fonts/...` references if you prefer another face.
+
 ## Out of scope for this MVP
 
 - Account login / PIN pairing UI
@@ -80,7 +88,9 @@ roku/
   manifest
   source/main.brs
   source/PlexConfig.brs
-  components/   # Home, Detail, Video, PlexTask, PosterItem
+  source/Fonts.brs
+  components/
+  fonts/
   images/
   package.sh
 ```

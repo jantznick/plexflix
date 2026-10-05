@@ -10,43 +10,36 @@
     </interface>
 
     <script type="text/brightscript" uri="LibraryBrowseScreen.brs" />
+    <script type="text/brightscript" uri="pkg:/source/Fonts.brs" />
 
     <children>
-        <Rectangle width="1920" height="1080" color="0x08080A" />
+        <Rectangle width="1920" height="1080" color="0x07070B" />
 
-        <Group translation="[64, 48]">
-            <Label
-                id="titleLabel"
-                width="1400"
-                height="56"
-                text="Library"
-                color="0xFFFFFF"
-                font="font:LargeBoldSystemFont"
-            />
-            <Label
-                id="statusLabel"
-                translation="[0, 58]"
-                width="1500"
-                height="32"
-                text=""
-                color="0x777777"
-                font="font:SmallSystemFont"
-            />
+        <Group translation="[96, 64]">
+            <Label id="titleLabel" width="1400" height="56" text="Library" color="0xFFFFFF">
+                <Font role="font" uri="pkg:/fonts/Outfit-Bold.ttf" size="44" />
+            </Label>
+            <Label id="statusLabel" translation="[0, 58]" width="1500" height="32" text="" color="0x777780">
+                <Font role="font" uri="pkg:/fonts/Outfit-Regular.ttf" size="20" />
+            </Label>
+
+            <ShimmerRow id="shimmer" translation="[0, 120]" />
 
             <RowList
                 id="rowList"
                 translation="[0, 120]"
                 itemComponentName="PosterItem"
                 numRows="4"
-                rowItemSize="[[170, 255]]"
-                rowItemSpacing="[[24, 0]]"
-                itemSize="[1792, 320]"
-                itemSpacing="[0, 26]"
+                rowItemSize="[[168, 252]]"
+                rowItemSpacing="[[28, 0]]"
+                itemSize="[1728, 320]"
+                itemSpacing="[0, 32]"
                 showRowLabel="[true]"
-                rowLabelOffset="[[0, 6]]"
+                rowLabelOffset="[[0, 8]]"
                 rowFocusAnimationStyle="fixedFocus"
                 focusXOffset="[0]"
                 drawFocusFeedback="false"
+                visible="false"
             />
         </Group>
     </children>

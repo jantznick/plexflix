@@ -2,48 +2,44 @@
 <component name="MainScene" extends="Scene">
     <script type="text/brightscript" uri="MainScene.brs" />
     <script type="text/brightscript" uri="pkg:/source/PlexConfig.brs" />
+    <script type="text/brightscript" uri="pkg:/source/Fonts.brs" />
 
     <children>
-        <Rectangle
-            id="background"
-            width="1920"
-            height="1080"
-            color="0x08080A"
-        />
+        <Rectangle id="background" width="1920" height="1080" color="0x07070B" />
 
         <Group id="contentHost" translation="[0, 0]">
             <Group id="screens" />
         </Group>
 
-        <SideNav id="sideNav" />
+        <!-- Soft vignette edges for depth -->
+        <Rectangle width="96" height="1080" color="0x000000" opacity="0.35" />
+        <Rectangle width="96" height="1080" translation="[1824, 0]" color="0x000000" opacity="0.28" />
+        <Rectangle width="1920" height="72" color="0x000000" opacity="0.3" />
+        <Rectangle width="1920" height="80" translation="[0, 1000]" color="0x000000" opacity="0.4" />
 
         <Rectangle
             id="navScrim"
             width="1920"
             height="1080"
             color="0x000000"
-            opacity="0.45"
+            opacity="0.55"
             visible="false"
         />
 
-        <Group id="loadingBanner" translation="[64, 1000]" visible="false">
-            <Rectangle width="1792" height="72" color="0x121218" opacity="0.92" />
+        <SideNav id="sideNav" />
+
+        <Group id="loadingBanner" translation="[96, 992]" visible="false">
+            <Rectangle width="1728" height="68" color="0x16161E" opacity="0.94" />
             <Poster
                 id="loadingLogo"
-                width="160"
-                height="44"
-                translation="[32, 14]"
+                width="150"
+                height="40"
+                translation="[28, 14]"
                 uri="pkg:/images/loading-logo.png"
             />
-            <Label
-                id="statusLabel"
-                translation="[200, 18]"
-                width="1500"
-                height="36"
-                color="0xDDDDDD"
-                font="font:SmallSystemFont"
-                text=""
-            />
+            <Label id="statusLabel" translation="[190, 18]" width="1480" height="36" color="0xEEEEEE" text="">
+                <Font role="font" uri="pkg:/fonts/Outfit-Medium.ttf" size="22" />
+            </Label>
         </Group>
     </children>
 </component>

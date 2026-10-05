@@ -1,6 +1,6 @@
 sub init()
     m.top.backgroundURI = ""
-    m.top.backgroundColor = "0x08080A"
+    m.top.backgroundColor = "0x07070B"
 
     m.sideNav = m.top.findNode("sideNav")
     m.navScrim = m.top.findNode("navScrim")
@@ -13,15 +13,17 @@ sub init()
     m.homeScreen = invalid
     m.detailScreen = invalid
     m.videoScreen = invalid
-    m.sourcesListScreen = invalid
     m.libraryBrowseScreen = invalid
     m.sportsScreen = invalid
     m.sportsDetailScreen = invalid
     m.section = "home"
     m.navExpanded = false
+    m.activeLibraryId = ""
 
+    m.sideNav.config = m.config
     m.sideNav.expanded = false
     m.sideNav.observeField("selected", "onNavSelected")
+    m.sideNav.observeField("selectedLibrary", "onLibrarySelected")
     showHome()
 end sub
 
@@ -50,7 +52,6 @@ sub clearScreens()
     m.homeScreen = invalid
     m.detailScreen = invalid
     m.videoScreen = invalid
-    m.sourcesListScreen = invalid
     m.libraryBrowseScreen = invalid
     m.sportsScreen = invalid
     m.sportsDetailScreen = invalid
@@ -59,15 +60,25 @@ end sub
 sub onNavSelected()
     section = m.sideNav.selected
     if section = invalid or section = "" then return
+    if section = "library" then return ' handled by onLibrarySelected
+
     m.section = section
+    m.activeLibraryId = ""
     setNavExpanded(false)
     if section = "home" then
         showHome()
-    else if section = "sources" then
-        showSourcesList()
     else if section = "sports" then
         showSports()
     end if
+end sub
+
+sub onLibrarySelected()
+    lib = m.sideNav.selectedLibrary
+    if lib = invalid then return
+    m.section = "library"
+    m.activeLibraryId = asString(lib.sectionId)
+    setNavExpanded(false)
+    showLibraryBrowse(lib)
 end sub
 
 sub showHome()
@@ -81,29 +92,8 @@ sub showHome()
     m.homeScreen.setFocus(true)
 end sub
 
-sub showSourcesList()
-    clearScreens()
-    m.sideNav.active = "sources"
-    m.sourcesListScreen = createObject("roSGNode", "SourcesListScreen")
-    m.sourcesListScreen.config = m.config
-    m.sourcesListScreen.observeField("selectedSource", "onSourcePicked")
-    m.sourcesListScreen.observeField("loadingMessage", "onSoftLoading")
-    m.screens.appendChild(m.sourcesListScreen)
-    m.sourcesListScreen.setFocus(true)
-end sub
-
-sub onSourcePicked()
-    source = m.sourcesListScreen.selectedSource
-    if source = invalid then return
-    showLibraryBrowse(source)
-end sub
-
 sub showLibraryBrowse(source as Object)
-    if m.libraryBrowseScreen <> invalid then
-        m.screens.removeChild(m.libraryBrowseScreen)
-        m.libraryBrowseScreen = invalid
-    end if
-
+    clearScreens()
     m.libraryBrowseScreen = createObject("roSGNode", "LibraryBrowseScreen")
     m.libraryBrowseScreen.config = m.config
     m.libraryBrowseScreen.source = source
@@ -115,13 +105,8 @@ sub showLibraryBrowse(source as Object)
 end sub
 
 sub onLibraryBrowseClosed()
-    if m.libraryBrowseScreen <> invalid then
-        m.screens.removeChild(m.libraryBrowseScreen)
-        m.libraryBrowseScreen = invalid
-    end if
-    if m.sourcesListScreen <> invalid then
-        m.sourcesListScreen.setFocus(true)
-    end if
+    ' From library browse, Back returns to Home (sidebar still has libs)
+    showHome()
 end sub
 
 sub showSports()
@@ -138,7 +123,6 @@ end sub
 sub onSoftLoading()
     msg = ""
     if m.homeScreen <> invalid then msg = m.homeScreen.loadingMessage
-    if m.sourcesListScreen <> invalid and (msg = invalid or msg = "") then msg = m.sourcesListScreen.loadingMessage
     if m.libraryBrowseScreen <> invalid and (msg = invalid or msg = "") then msg = m.libraryBrowseScreen.loadingMessage
     if m.sportsScreen <> invalid and (msg = invalid or msg = "") then msg = m.sportsScreen.loadingMessage
     if msg = invalid then msg = ""
@@ -319,10 +303,8 @@ sub onVideoClosed()
 end sub
 
 sub restoreSectionFocus()
-    if m.section = "sources" and m.libraryBrowseScreen <> invalid then
+    if m.section = "library" and m.libraryBrowseScreen <> invalid then
         m.libraryBrowseScreen.setFocus(true)
-    else if m.section = "sources" and m.sourcesListScreen <> invalid then
-        m.sourcesListScreen.setFocus(true)
     else if m.section = "sports" and m.sportsScreen <> invalid then
         m.sportsScreen.setFocus(true)
     else if m.homeScreen <> invalid then
@@ -350,16 +332,13 @@ function onKeyEvent(key as String, press as Boolean) as Boolean
             setNavExpanded(false)
             return true
         end if
-    else if key = "left" and not m.navExpanded and m.detailScreen = invalid and m.videoScreen = invalid and m.sportsDetailScreen = invalid and m.libraryBrowseScreen = invalid then
+    else if key = "left" and not m.navExpanded and m.detailScreen = invalid and m.videoScreen = invalid and m.sportsDetailScreen = invalid then
         setNavExpanded(true)
         m.sideNav.setFocus(true)
         return true
     else if key = "right" and m.navExpanded then
         setNavExpanded(false)
         return true
-    else if m.navExpanded and (key = "OK" or key = "play") then
-        ' SideNav handles selection; collapse after pick via onNavSelected
-        return false
     end if
 
     return false

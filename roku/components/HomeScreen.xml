@@ -7,95 +7,63 @@
     </interface>
 
     <script type="text/brightscript" uri="HomeScreen.brs" />
+    <script type="text/brightscript" uri="pkg:/source/Fonts.brs" />
 
     <children>
-        <Rectangle width="1920" height="1080" color="0x08080A" />
+        <Rectangle width="1920" height="1080" color="0x07070B" />
 
-        <Group id="frame" translation="[64, 48]">
+        <Group id="frame" translation="[96, 64]">
             <Group id="billboard" translation="[0, 0]">
                 <Poster
                     id="heroArt"
-                    width="1792"
-                    height="680"
+                    width="1728"
+                    height="640"
                     loadDisplayMode="scaleToFill"
                     uri="pkg:/images/splash-screen_fhd.jpg"
                 />
-                <Rectangle width="1792" height="680" color="0x000000" opacity="0.22" />
-                <Rectangle width="960" height="680" color="0x000000" opacity="0.5" />
-                <Rectangle
-                    width="1792"
-                    height="320"
-                    translation="[0, 360]"
-                    color="0x08080A"
-                    opacity="0.92"
-                />
+                <!-- Depth: soft left wash + bottom fade -->
+                <Rectangle width="1000" height="640" color="0x07070B" opacity="0.55" />
+                <Rectangle width="1728" height="280" translation="[0, 360]" color="0x07070B" opacity="0.92" />
 
-                <Group id="heroCopy" translation="[0, 260]">
-                    <Label
-                        id="heroTitle"
-                        width="920"
-                        height="90"
-                        text="Loading your library..."
-                        color="0xFFFFFF"
-                        font="font:LargeBoldSystemFont"
-                        wrap="true"
-                        maxLines="2"
-                        lineSpacing="2"
-                    />
-                    <Label
-                        id="heroMeta"
-                        translation="[0, 96]"
-                        width="900"
-                        height="32"
-                        text=""
-                        color="0xC7C7C7"
-                        font="font:SmallSystemFont"
-                    />
-                    <Label
-                        id="heroSummary"
-                        translation="[0, 132]"
-                        width="820"
-                        height="72"
-                        text=""
-                        color="0xD0D0D0"
-                        font="font:SmallSystemFont"
-                        wrap="true"
-                        maxLines="2"
-                        lineSpacing="4"
-                    />
+                <Group id="heroCopy" translation="[0, 250]">
+                    <Label id="heroTitle" width="980" height="100" text="Loading your library..." color="0xFFFFFF" wrap="true" maxLines="2" lineSpacing="2">
+                        <Font role="font" uri="pkg:/fonts/Outfit-Bold.ttf" size="56" />
+                    </Label>
+                    <Label id="heroMeta" translation="[0, 108]" width="900" height="32" text="" color="0xB8B8C0">
+                        <Font role="font" uri="pkg:/fonts/Outfit-Medium.ttf" size="22" />
+                    </Label>
+                    <Label id="heroSummary" translation="[0, 148]" width="860" height="80" text="" color="0xD0D0D6" wrap="true" maxLines="2" lineSpacing="5">
+                        <Font role="font" uri="pkg:/fonts/Outfit-Regular.ttf" size="22" />
+                    </Label>
                 </Group>
             </Group>
 
-            <Label
-                id="buildLabel"
-                translation="[1400, 0]"
-                width="380"
-                height="36"
-                horizAlign="right"
-                text="v0.3.4"
-                color="0x555555"
-                font="font:SmallestSystemFont"
-            />
+            <Label id="buildLabel" translation="[1340, 0]" width="380" height="36" horizAlign="right" text="v0.3.5" color="0x55555A">
+                <Font role="font" uri="pkg:/fonts/Outfit-Medium.ttf" size="16" />
+            </Label>
+
+            <ShimmerRow id="shimmer" translation="[0, 540]" />
 
             <RowList
                 id="rowList"
-                translation="[0, 560]"
+                translation="[0, 520]"
                 itemComponentName="PosterItem"
                 numRows="3"
-                rowItemSize="[[170, 255]]"
-                rowItemSpacing="[[24, 0]]"
-                itemSize="[1792, 310]"
-                itemSpacing="[0, 28]"
+                rowItemSize="[[168, 252]]"
+                rowItemSpacing="[[28, 0]]"
+                itemSize="[1728, 320]"
+                itemSpacing="[0, 32]"
                 showRowLabel="[true]"
-                rowLabelOffset="[[0, 6]]"
+                rowLabelOffset="[[0, 8]]"
                 rowFocusAnimationStyle="fixedFocus"
                 focusXOffset="[0]"
                 drawFocusFeedback="false"
+                visible="false"
             />
 
             <Animation
                 id="homeAnim"
-                duration="0.18"
+                duration="0.22"
                 easeFunction="outCubic"
                 optional="true"
                 repeat="false"
@@ -115,7 +83,7 @@
                 <Vector2DFieldInterpolator
                     id="rowsMove"
                     key="[0.0, 1.0]"
-                    keyValue="[[0, 560], [0, 560]]"
+                    keyValue="[[0, 520], [0, 520]]"
                     fieldToInterp="rowList.translation"
                 />
             </Animation>

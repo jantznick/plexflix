@@ -10,21 +10,24 @@
     </interface>
 
     <script type="text/brightscript" uri="DetailScreen.brs" />
+    <script type="text/brightscript" uri="pkg:/source/Fonts.brs" />
 
     <children>
-        <Rectangle width="1920" height="1080" color="0x08080A" />
+        <Rectangle width="1920" height="1080" color="0x07070B" />
 
-        <Group id="frame" translation="[64, 48]">
+        <Group id="frame" translation="[96, 64]">
             <Poster
                 id="backdrop"
-                width="1792"
-                height="480"
+                width="1728"
+                height="460"
                 loadDisplayMode="scaleToFill"
-                opacity="0.32"
+                opacity="0.28"
             />
-            <Rectangle width="1792" height="480" color="0x08080A" opacity="0.55" />
-            <Rectangle width="1792" height="720" translation="[0, 300]" color="0x08080A" opacity="0.96" />
+            <Rectangle width="1728" height="460" color="0x07070B" opacity="0.5" />
+            <Rectangle width="1728" height="700" translation="[0, 280]" color="0x07070B" opacity="0.96" />
 
+            <!-- Poster with depth shadow -->
+            <Rectangle width="208" height="312" translation="[8, 10]" color="0x000000" opacity="0.5" />
             <Poster
                 id="poster"
                 translation="[0, 0]"
@@ -34,74 +37,35 @@
                 uri="pkg:/images/poster_placeholder.png"
             />
 
-            <Label
-                id="titleLabel"
-                translation="[232, 4]"
-                width="1400"
-                height="64"
-                color="0xFFFFFF"
-                font="font:LargeBoldSystemFont"
-                wrap="true"
-                maxLines="2"
-            />
-            <Label
-                id="metaLabel"
-                translation="[232, 76]"
-                width="1400"
-                height="32"
-                color="0xB3B3B3"
-                font="font:SmallSystemFont"
-            />
-            <Label
-                id="summaryLabel"
-                translation="[232, 116]"
-                width="1360"
-                height="72"
-                color="0xD6D6D6"
-                font="font:SmallSystemFont"
-                wrap="true"
-                maxLines="2"
-                lineSpacing="4"
-            />
+            <Label id="titleLabel" translation="[248, 8]" width="1400" height="70" color="0xFFFFFF" wrap="true" maxLines="2">
+                <Font role="font" uri="pkg:/fonts/Outfit-Bold.ttf" size="48" />
+            </Label>
+            <Label id="metaLabel" translation="[248, 86]" width="1400" height="32" color="0xA8A8B0">
+                <Font role="font" uri="pkg:/fonts/Outfit-Medium.ttf" size="22" />
+            </Label>
+            <Label id="summaryLabel" translation="[248, 128]" width="1360" height="80" color="0xD0D0D6" wrap="true" maxLines="2" lineSpacing="5">
+                <Font role="font" uri="pkg:/fonts/Outfit-Regular.ttf" size="22" />
+            </Label>
 
-            <Group id="movieActions" translation="[232, 208]" visible="true">
+            <Group id="movieActions" translation="[248, 228]" visible="true">
                 <Group id="playBtn" translation="[0, 0]">
+                    <Rectangle width="224" height="58" translation="[4, 4]" color="0x000000" opacity="0.45" />
                     <Rectangle id="playBg" width="220" height="56" color="0xE50914" />
-                    <Label
-                        id="playLabel"
-                        width="220"
-                        height="56"
-                        horizAlign="center"
-                        vertAlign="center"
-                        text="Play"
-                        color="0xFFFFFF"
-                        font="font:MediumBoldSystemFont"
-                    />
+                    <Label id="playLabel" width="220" height="56" horizAlign="center" vertAlign="center" text="Play" color="0xFFFFFF">
+                        <Font role="font" uri="pkg:/fonts/Outfit-SemiBold.ttf" size="26" />
+                    </Label>
                 </Group>
-                <Group id="backBtn" translation="[240, 0]">
-                    <Rectangle id="backBg" width="160" height="56" color="0x2A2A2A" />
-                    <Label
-                        id="backLabel"
-                        width="160"
-                        height="56"
-                        horizAlign="center"
-                        vertAlign="center"
-                        text="Back"
-                        color="0xFFFFFF"
-                        font="font:MediumSystemFont"
-                    />
+                <Group id="backBtn" translation="[248, 0]">
+                    <Rectangle id="backBg" width="160" height="56" color="0x24242C" />
+                    <Label id="backLabel" width="160" height="56" horizAlign="center" vertAlign="center" text="Back" color="0xFFFFFF">
+                        <Font role="font" uri="pkg:/fonts/Outfit-Medium.ttf" size="24" />
+                    </Label>
                 </Group>
             </Group>
 
-            <Label
-                id="softStatus"
-                translation="[232, 280]"
-                width="1200"
-                height="28"
-                text=""
-                color="0x777777"
-                font="font:SmallestSystemFont"
-            />
+            <Label id="softStatus" translation="[248, 300]" width="1200" height="28" text="" color="0x666670">
+                <Font role="font" uri="pkg:/fonts/Outfit-Regular.ttf" size="18" />
+            </Label>
 
             <Group id="tvPanel" translation="[0, 340]" visible="false">
                 <RowList
@@ -110,9 +74,9 @@
                     itemComponentName="EpisodeItem"
                     numRows="2"
                     rowItemSize="[[300, 170]]"
-                    rowItemSpacing="[[22, 0]]"
-                    itemSize="[1792, 240]"
-                    itemSpacing="[0, 22]"
+                    rowItemSpacing="[[24, 0]]"
+                    itemSize="[1728, 250]"
+                    itemSpacing="[0, 28]"
                     showRowLabel="[true]"
                     rowLabelOffset="[[0, 8]]"
                     rowFocusAnimationStyle="fixedFocus"
@@ -128,9 +92,9 @@
                     itemComponentName="PosterItem"
                     numRows="2"
                     rowItemSize="[[140, 210]]"
-                    rowItemSpacing="[[18, 0]]"
-                    itemSize="[1792, 270]"
-                    itemSpacing="[0, 16]"
+                    rowItemSpacing="[[20, 0]]"
+                    itemSize="[1728, 280]"
+                    itemSpacing="[0, 24]"
                     showRowLabel="[true]"
                     rowLabelOffset="[[0, 8]]"
                     rowFocusAnimationStyle="fixedFocus"

@@ -10,36 +10,45 @@
     <script type="text/brightscript" uri="PosterItem.brs" />
 
     <children>
+        <!-- Soft shadow for depth -->
+        <Rectangle
+            id="shadow"
+            width="176"
+            height="258"
+            translation="[8, 10]"
+            color="0x000000"
+            opacity="0.45"
+        />
         <Rectangle
             id="cardBg"
-            width="180"
-            height="270"
-            translation="[0, 6]"
-            color="0x141418"
-            opacity="0.85"
+            width="168"
+            height="252"
+            translation="[0, 0]"
+            color="0x16161E"
+            opacity="1"
         />
         <Poster
             id="poster"
-            width="180"
-            height="270"
+            width="168"
+            height="252"
             loadDisplayMode="scaleToZoom"
             failedBitmapUri="pkg:/images/poster_placeholder.png"
             loadingBitmapUri="pkg:/images/poster_placeholder.png"
             uri="pkg:/images/poster_placeholder.png"
-            opacity="0.75"
+            opacity="0.82"
         />
 
-        <Rectangle id="focusTop" width="188" height="4" translation="[-4, -4]" color="0xFFFFFF" visible="false" />
-        <Rectangle id="focusBottom" width="188" height="4" translation="[-4, 270]" color="0xFFFFFF" visible="false" />
-        <Rectangle id="focusLeft" width="4" height="278" translation="[-4, -4]" color="0xFFFFFF" visible="false" />
-        <Rectangle id="focusRight" width="4" height="278" translation="[180, -4]" color="0xFFFFFF" visible="false" />
-        <Rectangle id="focusAccent" width="188" height="4" translation="[-4, 270]" color="0xE50914" visible="false" />
+        <Rectangle id="focusTop" width="176" height="3" translation="[-4, -4]" color="0xFFFFFF" visible="false" />
+        <Rectangle id="focusBottom" width="176" height="3" translation="[-4, 252]" color="0xFFFFFF" visible="false" />
+        <Rectangle id="focusLeft" width="3" height="259" translation="[-4, -4]" color="0xFFFFFF" visible="false" />
+        <Rectangle id="focusRight" width="3" height="259" translation="[168, -4]" color="0xFFFFFF" visible="false" />
+        <Rectangle id="focusAccent" width="176" height="4" translation="[-4, 252]" color="0xE50914" visible="false" />
 
         <Rectangle
             id="progressBg"
-            width="180"
+            width="168"
             height="5"
-            translation="[0, 265]"
+            translation="[0, 247]"
             color="0x404040"
             visible="false"
         />
@@ -47,7 +56,7 @@
             id="progressFg"
             width="0"
             height="5"
-            translation="[0, 265]"
+            translation="[0, 247]"
             color="0xE50914"
             visible="false"
         />

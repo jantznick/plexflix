@@ -87,9 +87,9 @@ sub showTvMode()
     m.poster.width = 200
     m.poster.height = 300
     m.poster.translation = [0, 0]
-    m.titleLabel.translation = [232, 4]
-    m.metaLabel.translation = [232, 76]
-    m.summaryLabel.translation = [232, 116]
+    m.titleLabel.translation = [248, 8]
+    m.metaLabel.translation = [248, 86]
+    m.summaryLabel.translation = [248, 128]
     m.summaryLabel.height = 72
 end sub
 
@@ -101,9 +101,9 @@ sub showMovieMode()
     m.poster.width = 200
     m.poster.height = 300
     m.poster.translation = [0, 0]
-    m.titleLabel.translation = [232, 4]
-    m.metaLabel.translation = [232, 76]
-    m.summaryLabel.translation = [232, 116]
+    m.titleLabel.translation = [248, 8]
+    m.metaLabel.translation = [248, 86]
+    m.summaryLabel.translation = [248, 128]
     m.relatedContent = createObject("roSGNode", "ContentNode")
     m.relatedRows.content = m.relatedContent
     m.focusIndex = 0

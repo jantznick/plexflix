@@ -1,5 +1,7 @@
 sub init()
     m.poster = m.top.findNode("poster")
+    m.shadow = m.top.findNode("shadow")
+    m.cardBg = m.top.findNode("cardBg")
     m.focusTop = m.top.findNode("focusTop")
     m.focusBottom = m.top.findNode("focusBottom")
     m.focusLeft = m.top.findNode("focusLeft")
@@ -7,8 +9,8 @@ sub init()
     m.focusAccent = m.top.findNode("focusAccent")
     m.progressBg = m.top.findNode("progressBg")
     m.progressFg = m.top.findNode("progressFg")
-    m.itemWidth = 180
-    m.itemHeight = 270
+    m.itemWidth = 168
+    m.itemHeight = 252
     setFocused(false)
 end sub
 
@@ -18,6 +20,15 @@ sub onSizeChange()
 
     m.poster.width = m.itemWidth
     m.poster.height = m.itemHeight
+    if m.cardBg <> invalid then
+        m.cardBg.width = m.itemWidth
+        m.cardBg.height = m.itemHeight
+    end if
+    if m.shadow <> invalid then
+        m.shadow.width = m.itemWidth + 8
+        m.shadow.height = m.itemHeight + 6
+        m.shadow.translation = [8, 10]
+    end if
 
     m.focusTop.width = m.itemWidth + 8
     m.focusBottom.width = m.itemWidth + 8
@@ -84,7 +95,14 @@ sub setFocused(focused as Boolean)
     m.focusAccent.visible = focused
     if focused then
         m.poster.opacity = 1.0
+        if m.shadow <> invalid then m.shadow.opacity = 0.65
+        ' Slight lift via shadow offset — SceneGraph scale on RowList items is limited
+        if m.shadow <> invalid then m.shadow.translation = [10, 14]
     else
-        m.poster.opacity = 0.75
+        m.poster.opacity = 0.82
+        if m.shadow <> invalid then
+            m.shadow.opacity = 0.45
+            m.shadow.translation = [8, 10]
+        end if
     end if
 end sub
