@@ -281,6 +281,7 @@ function metadataToItem(cfg as Object, meta as Object) as Object
         ratingKey: ratingKey,
         key: key,
         hdPosterUrl: imageUrl(cfg, thumb, posterW, posterH),
+        thumbPath: thumb,
         hdShowPosterUrl: showPosterUrl,
         hdBackdropUrl: imageUrl(cfg, art, 1920, 1080),
         duration: duration,
@@ -941,12 +942,13 @@ function fetchSectionHub(cfg as Object, item as Object) as Object
 
     title = safeToStr(item.title)
     if title = "" then title = "Library"
+    sectionType = safeToStr(item.sectionType)
 
     heroPosters = []
     pool = []
-    sample = plexGet(cfg, "/library/sections/" + sectionId + "/all?sort=addedAt:desc&X-Plex-Container-Start=0&X-Plex-Container-Size=60")
+    sample = plexGet(cfg, "/library/sections/" + sectionId + "/all?sort=addedAt:desc&X-Plex-Container-Start=0&X-Plex-Container-Size=48")
     if sample.ok = true then pool = collectMetadata(cfg, sample.json)
-    heroPosters = pickRandomPosterUrls(pool, 36)
+    heroPosters = pickRandomPosterUrls(cfg, pool, 24, 200, 300)
 
     root = createObject("roSGNode", "ContentNode")
     seenTitles = {}
@@ -986,7 +988,15 @@ function fetchSectionHub(cfg as Object, item as Object) as Object
     if root.getChildCount() = 0 and heroPosters.count() = 0 then
         return { ok: false, error: "No titles found in " + title }
     end if
-    return { ok: true, content: root, title: title, sectionId: sectionId, heroPosters: heroPosters, genres: genres }
+    return {
+        ok: true,
+        content: root,
+        title: title,
+        sectionId: sectionId,
+        sectionType: sectionType,
+        heroPosters: heroPosters,
+        genres: genres
+    }
 end function
 
 function fetchSectionAll(cfg as Object, item as Object) as Object
@@ -998,37 +1008,68 @@ function fetchSectionAll(cfg as Object, item as Object) as Object
     title = safeToStr(item.title)
     if title = "" then title = "Library"
     genre = safeToStr(item.genre)
+    genreId = safeToStr(item.genreId)
     search = safeToStr(item.search)
     sortKey = safeToStr(item.sort)
     if sortKey = "" then sortKey = "titleSort"
     decade = safeToStr(item.decade)
+    unwatched = (item.unwatched = true)
 
     startAt = 0
     if item.start <> invalid then startAt = item.start
+    if startAt < 0 then startAt = 0
     pageSize = 48
     if item.pageSize <> invalid then pageSize = item.pageSize
-    if pageSize < 12 then pageSize = 12
-    if pageSize > 80 then pageSize = 80
+    if pageSize < 1 then pageSize = 48
+    if pageSize > 120 then pageSize = 120
+
+    ' Plex needs an explicit metadata type or filters silently return everything
+    sectionType = safeToStr(item.sectionType)
+    typeParam = ""
+    if sectionType = "movie" then
+        typeParam = "1"
+    else if sectionType = "show" then
+        typeParam = "2"
+    end if
 
     path = "/library/sections/" + sectionId + "/all?sort=" + requestEncode(sortKey)
+    if typeParam <> "" then path = path + "&type=" + typeParam
     path = path + "&X-Plex-Container-Start=" + safeToStr(startAt)
     path = path + "&X-Plex-Container-Size=" + safeToStr(pageSize)
-    if genre <> "" and genre <> "All" then
+    ' Tag filters (genre) must use the tag id, not its label
+    if genreId <> "" then
+        path = path + "&genre=" + requestEncode(genreId)
+    else if genre <> "" and genre <> "All" then
         path = path + "&genre=" + requestEncode(genre)
     end if
     if search <> "" then
+        ' "title=" is a contains match on the Plex filter API
         path = path + "&title=" + requestEncode(search)
     end if
+
+    ' Filters that some library types reject outright — kept separate so a 4xx
+    ' can be retried without them instead of leaving the grid empty
+    extra = ""
     if decade <> "" and decade <> "All" then
         decadeStart = Int(Val(decade))
         if decadeStart > 1900 then
+            ' Comma separated values are OR'd; repeating &year= would AND them
+            years = ""
             for y = decadeStart to decadeStart + 9
-                path = path + "&year=" + safeToStr(y)
+                if years <> "" then years = years + ","
+                years = years + safeToStr(y)
             end for
+            extra = extra + "&year=" + years
         end if
     end if
+    if unwatched then extra = extra + "&unwatched=1"
 
-    result = plexGet(cfg, path)
+    warning = ""
+    result = plexGet(cfg, path + extra)
+    if result.ok <> true and extra <> "" then
+        result = plexGet(cfg, path)
+        if result.ok = true then warning = "Your server ignored the year / unwatched filter"
+    end if
     if result.ok <> true then return result
 
     totalSize = 0
@@ -1081,15 +1122,19 @@ function fetchSectionAll(cfg as Object, item as Object) as Object
         hasMore: hasMore,
         pageSize: pageSize,
         genre: genre,
+        genreId: genreId,
         search: search,
         sort: sortKey,
-        decade: decade
+        decade: decade,
+        unwatched: unwatched,
+        warning: warning,
+        requestId: safeToStr(item.requestId)
     }
 end function
 
 function collectSectionGenres(cfg as Object, sectionId as String) as Object
-    genres = [{ title: "All", tag: "" }]
-    result = plexGet(cfg, "/library/sections/" + sectionId + "/genre")
+    genres = []
+    result = plexGet(cfg, "/library/sections/" + sectionId + "/genre?X-Plex-Container-Start=0&X-Plex-Container-Size=200")
     if result.ok <> true or result.json = invalid then return genres
     container = result.json.MediaContainer
     if container = invalid then return genres
@@ -1097,20 +1142,43 @@ function collectSectionGenres(cfg as Object, sectionId as String) as Object
     if list = invalid then return genres
     if GetInterface(list, "ifArray") = invalid then list = [list]
     for each g in list
-        tag = safeToStr(g.title)
-        if tag = "" then tag = safeToStr(g.tag)
-        if tag <> "" then genres.push({ title: tag, tag: tag })
+        label = safeToStr(g.title)
+        if label = "" then label = safeToStr(g.tag)
+        id = genreIdFromDirectory(g)
+        if label <> "" then genres.push({ title: label, id: id })
     end for
     return genres
 end function
 
-function pickRandomPosterUrls(items as Object, maxCount as Integer) as Object
+function genreIdFromDirectory(dir as Object) as String
+    ' /library/sections/N/genre returns key="23" (sometimes a fastKey URL instead)
+    id = safeToStr(dir.key)
+    if id <> "" and Instr(1, id, "=") = 0 and Instr(1, id, "/") = 0 then return id
+
+    candidates = [safeToStr(dir.fastKey), id]
+    for each candidate in candidates
+        marker = "genre="
+        at = Instr(1, candidate, marker)
+        if at > 0 then
+            value = Mid(candidate, at + Len(marker))
+            amp = Instr(1, value, "&")
+            if amp > 0 then value = Left(value, amp - 1)
+            if value <> "" then return value
+        end if
+    end for
+    return ""
+end function
+
+function pickRandomPosterUrls(cfg as Object, items as Object, maxCount as Integer, width = 240 as Integer, height = 360 as Integer) as Object
+    ' Mosaic tiles render small — ask Plex for small transcodes so the hero stays light
     urls = []
     if items = invalid or items.count() = 0 then return urls
     shuffled = shuffleArray(items)
     for each it in shuffled
-        url = safeToStr(it.hdPosterUrl)
-        if url = "" then url = safeToStr(it.hdBackdropUrl)
+        url = ""
+        thumbPath = safeToStr(it.thumbPath)
+        if thumbPath <> "" then url = imageUrl(cfg, thumbPath, width, height)
+        if url = "" then url = safeToStr(it.hdPosterUrl)
         if url <> "" then urls.push(url)
         if urls.count() >= maxCount then exit for
     end for
@@ -2144,7 +2212,7 @@ function extractSportsStreams(entry as Object) as Object
             else
                 url = Mid(sig, startAt, pipeAt - startAt)
             end if
-            url = Trim(url)
+            url = url.Trim()
             if url <> "" then
                 streams.push({ title: "Alt " + safeToStr(altIdx), streamUrl: url })
                 altIdx = altIdx + 1
