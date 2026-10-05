@@ -40,7 +40,7 @@ sub onEscapeUp()
 end sub
 
 sub onEscapeBack()
-    ' Back out of the shelves to the hero buttons; Back again leaves the library
+    ' Back out of the shelves to View all; Back again leaves the library
     focusHero()
 end sub
 
