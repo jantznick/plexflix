@@ -251,7 +251,8 @@ sub applyBrowseModeSnap()
 end sub
 
 sub updateHeroContent(item as Object)
-    ' Same plane as DetailScreen: landscape backdrop. Fall back only if art missing.
+    ' Match DetailScreen: landscape backdrop only. Never use a portrait poster here —
+    ' that is what made home look stretched while detail looked fine.
     if m.heroArt <> invalid then
         m.heroArt.loadDisplayMode = "scaleToZoom"
         m.heroArt.loadWidth = 1920
@@ -264,10 +265,8 @@ sub updateHeroContent(item as Object)
     uri = ""
     if item.hdBackdropUrl <> invalid and item.hdBackdropUrl <> "" then
         uri = item.hdBackdropUrl
-    else if item.hdShowPosterUrl <> invalid and item.hdShowPosterUrl <> "" then
-        uri = item.hdShowPosterUrl
-    else if item.hdPosterUrl <> invalid then
-        uri = item.hdPosterUrl
+    else if item.hdBackgroundImageUrl <> invalid and item.hdBackgroundImageUrl <> "" then
+        uri = item.hdBackgroundImageUrl
     end if
     if m.heroArt <> invalid and uri <> "" then m.heroArt.uri = uri
 

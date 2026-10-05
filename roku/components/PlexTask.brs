@@ -229,7 +229,15 @@ function metadataToItem(cfg as Object, meta as Object) as Object
         ' Prefer show art for billboards — episode stills look stretched/weird at 16:9
         if meta.grandparentArt <> invalid and safeToStr(meta.grandparentArt) <> "" then
             art = safeToStr(meta.grandparentArt)
+        else if grandparentRatingKey <> "" then
+            ' Hub payloads often omit grandparentArt — synthesize the show art path
+            art = "/library/metadata/" + grandparentRatingKey + "/art"
         end if
+    end if
+
+    ' Movies/shows with no art field: still request the metadata art endpoint
+    if art = "" and ratingKey <> "" then
+        art = "/library/metadata/" + ratingKey + "/art"
     end if
 
     description = safeToStr(meta.summary)
@@ -339,7 +347,8 @@ function appendRowNodes(root as Object, title as String, items as Object) as Boo
         child.title = item.title
         child.description = item.description
         child.hdPosterUrl = item.hdPosterUrl
-        child.hdBackdropUrl = item.hdBackdropUrl
+        ' Native ContentNode field — used by some SceneGraph widgets
+        child.hdBackgroundImageUrl = item.hdBackdropUrl
         isDiscover = false
         if item.DoesExist("isDiscover") and item.isDiscover = true then isDiscover = true
         child.addFields({
@@ -360,7 +369,9 @@ function appendRowNodes(root as Object, title as String, items as Object) as Boo
             shortTitle: item.shortTitle,
             parentIndex: item.parentIndex,
             isDiscover: isDiscover,
-            hdShowPosterUrl: item.hdShowPosterUrl
+            hdShowPosterUrl: item.hdShowPosterUrl,
+            ' Custom field — must be in addFields or RowList drops it
+            hdBackdropUrl: item.hdBackdropUrl
         })
     end for
     return true
@@ -711,7 +722,7 @@ sub addUniqueRowLoose(root as Object, seenTitles as Object, title as String, ite
         child.title = item.title
         child.description = item.description
         child.hdPosterUrl = item.hdPosterUrl
-        child.hdBackdropUrl = item.hdBackdropUrl
+        child.hdBackgroundImageUrl = item.hdBackdropUrl
         child.addFields({
             year: item.year,
             rating: item.rating,
@@ -730,7 +741,8 @@ sub addUniqueRowLoose(root as Object, seenTitles as Object, title as String, ite
             shortTitle: item.shortTitle,
             parentIndex: item.parentIndex,
             isDiscover: item.isDiscover,
-            hdShowPosterUrl: item.hdShowPosterUrl
+            hdShowPosterUrl: item.hdShowPosterUrl,
+            hdBackdropUrl: item.hdBackdropUrl
         })
     end for
     seenTitles[key] = true
@@ -1026,7 +1038,7 @@ function fetchSectionAll(cfg as Object, item as Object) as Object
         child.title = it.title
         child.description = it.description
         child.hdPosterUrl = it.hdPosterUrl
-        child.hdBackdropUrl = it.hdBackdropUrl
+        child.hdBackgroundImageUrl = it.hdBackdropUrl
         child.addFields({
             year: it.year,
             rating: it.rating,
