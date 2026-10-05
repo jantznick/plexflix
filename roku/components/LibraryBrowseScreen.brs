@@ -1,13 +1,9 @@
 sub init()
     m.titleLabel = m.top.findNode("titleLabel")
-    m.heroHint = m.top.findNode("heroHint")
     m.statusLabel = m.top.findNode("statusLabel")
     m.rowList = m.top.findNode("rowList")
     m.shimmer = m.top.findNode("shimmer")
-    m.viewAllBg = m.top.findNode("viewAllBg")
-    m.viewAllLabel = m.top.findNode("viewAllLabel")
-    m.searchBg = m.top.findNode("searchBg")
-    m.searchLabel = m.top.findNode("searchLabel")
+    m.viewAllBtn = m.top.findNode("viewAllBtn")
     m.mosaic = m.top.findNode("mosaic")
     m.heroTiles = []
 
@@ -15,12 +11,9 @@ sub init()
     m.sectionType = ""
     m.genres = []
     m.focusZone = "hero"
-    m.heroBtn = "viewall"
     m.loaded = false
 
-    ' Prevent shelves from stealing focus until the user presses Down
-    if m.rowList <> invalid then m.rowList.focusable = false
-
+    m.viewAllBtn.observeField("selected", "onViewAllPressed")
     m.rowList.observeField("rowItemSelected", "onRowItemSelected")
     m.rowList.observeField("escapeLeft", "onEscapeLeft")
     m.rowList.observeField("escapeUp", "onEscapeUp")
@@ -32,8 +25,10 @@ sub init()
     m.focusGuard.repeat = false
     m.focusGuard.duration = 0.05
     m.focusGuard.observeField("fire", "onFocusGuard")
+end sub
 
-    paintHeroFocus()
+sub onViewAllPressed()
+    if m.loaded then requestViewAll()
 end sub
 
 sub onEscapeLeft()
@@ -67,19 +62,13 @@ end function
 sub focusHero()
     if isSuspended() then return
     m.focusZone = "hero"
-    if m.rowList <> invalid then m.rowList.focusable = false
-    paintHeroFocus()
-    m.top.setFocus(true)
+    m.viewAllBtn.setFocus(true)
     m.focusGuard.control = "start"
 end sub
 
 sub onFocusGuard()
     if isSuspended() then return
-    if m.focusZone = "hero" then
-        if m.rowList <> invalid then m.rowList.focusable = false
-        m.top.setFocus(true)
-        paintHeroFocus()
-    end if
+    if m.focusZone = "hero" then m.viewAllBtn.setFocus(true)
 end sub
 
 sub onSourceSet()
@@ -89,13 +78,6 @@ sub onSourceSet()
     if title <> "" then m.titleLabel.text = title
     m.sectionType = asString(source.sectionType)
     m.sectionId = asString(source.sectionId)
-    if m.heroHint <> invalid then
-        if m.sectionType = "show" then
-            m.heroHint.text = "Every series in this library — filter, search or sort it however you like."
-        else
-            m.heroHint.text = "Everything in this library — filter, search or sort it however you like."
-        end if
-    end if
     loadBrowse()
 end sub
 
@@ -105,7 +87,6 @@ sub loadBrowse()
     m.top.loadingMessage = "Loading " + m.titleLabel.text + "..."
     if m.shimmer <> invalid then m.shimmer.active = true
     m.rowList.visible = false
-    if m.rowList <> invalid then m.rowList.focusable = false
     m.task = createObject("roSGNode", "PlexTask")
     m.task.config = m.top.config
     m.task.action = "sectionBrowse"
@@ -136,14 +117,11 @@ sub onBrowseLoaded()
 
     buildMosaic(response.heroPosters)
 
+    m.statusLabel.text = ""
     content = response.content
     if content <> invalid and content.getChildCount() > 0 then
-        m.statusLabel.text = "Down for shelves · OK for the full grid"
         m.rowList.content = content
         m.rowList.visible = true
-        m.rowList.focusable = false
-    else
-        m.statusLabel.text = "Use View all to browse this library"
     end if
 
     focusHero()
@@ -204,33 +182,7 @@ sub buildMosaic(urls as Object)
     end for
 end sub
 
-sub paintHeroFocus()
-    if m.viewAllBg = invalid then return
-    heroFocused = (m.focusZone = "hero")
-
-    if heroFocused and m.heroBtn = "viewall" then
-        m.viewAllBg.color = "0xFFFFFF"
-        if m.viewAllLabel <> invalid then m.viewAllLabel.color = "0x111118"
-    else if heroFocused then
-        m.viewAllBg.color = "0x2A2A32"
-        if m.viewAllLabel <> invalid then m.viewAllLabel.color = "0xFFFFFF"
-    else
-        m.viewAllBg.color = "0xE50914"
-        if m.viewAllLabel <> invalid then m.viewAllLabel.color = "0xFFFFFF"
-    end if
-
-    if m.searchBg <> invalid then
-        if heroFocused and m.heroBtn = "search" then
-            m.searchBg.color = "0xFFFFFF"
-            if m.searchLabel <> invalid then m.searchLabel.color = "0x111118"
-        else
-            m.searchBg.color = "0x2A2A32"
-            if m.searchLabel <> invalid then m.searchLabel.color = "0xFFFFFF"
-        end if
-    end if
-end sub
-
-sub requestViewAll(openSearch as Boolean)
+sub requestViewAll()
     src = m.top.source
     if src = invalid then src = {}
     sectionId = m.sectionId
@@ -244,13 +196,13 @@ sub requestViewAll(openSearch as Boolean)
         sectionId: sectionId,
         sectionType: sectionType,
         key: asString(src.key),
-        genres: genres,
-        openSearch: openSearch
+        genres: genres
     }
 end sub
 
 sub onRowItemSelected()
-    if m.focusZone <> "rows" then return
+    ' Only act when the shelves really own the remote, never on a stale repaint
+    if m.focusZone <> "rows" or not m.rowList.hasFocus() then return
     info = m.rowList.rowItemSelected
     if info = invalid or info.count() < 2 then return
     row = m.rowList.content.getChild(info[0])
@@ -298,29 +250,13 @@ function onKeyEvent(key as String, press as Boolean) as Boolean
 
     if m.focusZone = "hero" then
         if key = "left" then
-            if m.heroBtn = "search" then
-                m.heroBtn = "viewall"
-                paintHeroFocus()
-            else
-                m.top.openMenu = true
-            end if
-            return true
-        else if key = "right" then
-            if m.heroBtn = "viewall" then
-                m.heroBtn = "search"
-                paintHeroFocus()
-            end if
+            m.top.openMenu = true
             return true
         else if key = "down" then
             if hasShelves() then
                 m.focusZone = "rows"
-                paintHeroFocus()
-                m.rowList.focusable = true
                 m.rowList.setFocus(true)
             end if
-            return true
-        else if key = "OK" or key = "play" then
-            if m.loaded then requestViewAll(m.heroBtn = "search")
             return true
         else if key = "back" then
             m.top.closed = true

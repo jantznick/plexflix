@@ -35,24 +35,17 @@
             <Label id="titleLabel" translation="[96, 48]" width="860" height="70" text="Library" color="0xFFFFFF" wrap="true" maxLines="2">
                 <Font role="font" uri="pkg:/fonts/Outfit-Bold.ttf" size="52" />
             </Label>
-            <Label id="heroHint" translation="[96, 124]" width="820" height="60" text="Browse everything in this library." color="0xC8C8D0" wrap="true" maxLines="2">
-                <Font role="font" uri="pkg:/fonts/Outfit-Regular.ttf" size="22" />
-            </Label>
+            <FocusButton
+                id="viewAllBtn"
+                translation="[96, 150]"
+                text="View all"
+                buttonWidth="280"
+                buttonHeight="60"
+                fontSize="28"
+                accent="true"
+            />
 
-            <Group id="viewAllBtn" translation="[96, 210]">
-                <Rectangle id="viewAllBg" width="280" height="60" color="0x2A2A32" />
-                <Label id="viewAllLabel" width="280" height="60" horizAlign="center" vertAlign="center" text="View all" color="0xFFFFFF">
-                    <Font role="font" uri="pkg:/fonts/Outfit-SemiBold.ttf" size="28" />
-                </Label>
-            </Group>
-            <Group id="searchBtn" translation="[392, 210]">
-                <Rectangle id="searchBg" width="240" height="60" color="0x2A2A32" />
-                <Label id="searchLabel" width="240" height="60" horizAlign="center" vertAlign="center" text="Search" color="0xFFFFFF">
-                    <Font role="font" uri="pkg:/fonts/Outfit-SemiBold.ttf" size="28" />
-                </Label>
-            </Group>
-
-            <Label id="statusLabel" translation="[96, 292]" width="1000" height="32" text="" color="0x9A9AA4">
+            <Label id="statusLabel" translation="[96, 232]" width="1000" height="32" text="" color="0x9A9AA4">
                 <Font role="font" uri="pkg:/fonts/Outfit-Regular.ttf" size="20" />
             </Label>
         </Group>
