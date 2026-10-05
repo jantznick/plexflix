@@ -90,20 +90,6 @@ sub onContentChange()
     item = m.top.itemContent
     if item = invalid then return
 
-    ' Invisible stagger spacer — takes a tile slot so the row starts offset
-    if item.isSpacer = true then
-        m.top.visible = false
-        m.poster.uri = ""
-        if m.shadow <> invalid then m.shadow.visible = false
-        if m.cardBg <> invalid then m.cardBg.visible = false
-        setFocused(false)
-        return
-    end if
-
-    m.top.visible = true
-    if m.shadow <> invalid then m.shadow.visible = true
-    if m.cardBg <> invalid then m.cardBg.visible = true
-
     if item.hdPosterUrl <> invalid and item.hdPosterUrl <> "" then
         m.poster.uri = item.hdPosterUrl
     else
