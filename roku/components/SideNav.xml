@@ -21,7 +21,7 @@
 
         <Group id="navItems" translation="[20, 130]" />
 
-        <Label id="versionLabel" translation="[36, 1020]" width="228" height="32" text="v0.4.7" color="0x55555A">
+        <Label id="versionLabel" translation="[36, 1020]" width="228" height="32" text="v0.4.8" color="0x55555A">
             <Font role="font" uri="pkg:/fonts/Outfit-Medium.ttf" size="16" />
         </Label>
     </children>
