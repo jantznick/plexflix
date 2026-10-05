@@ -421,10 +421,27 @@ sub onExtrasLoaded()
     ' Enrich header from full metadata (important when opened from Continue Watching episode)
     detail = response.detail
     if detail <> invalid then
-        applyShowHeader(detail)
         if asString(detail.hdPosterUrl) <> "" then m.poster.uri = detail.hdPosterUrl
+        ' Always refresh the cached show synopsis; only paint it if we aren't
+        ' currently previewing a focused episode.
+        prevMode = m.headerMode
+        applyShowHeader(detail)
         if asString(detail.hdBackdropUrl) <> "" then m.backdrop.uri = detail.hdBackdropUrl
         rememberShowHeader()
+        if prevMode = "episode" then
+            ' Re-apply episode copy after the show cache refresh
+            info = invalid
+            if m.seasonRows <> invalid then info = m.seasonRows.rowItemFocused
+            if info <> invalid and info.count() >= 2 and m.seasonRows.content <> invalid then
+                row = m.seasonRows.content.getChild(info[0])
+                if row <> invalid then
+                    ep = row.getChild(info[1])
+                    if ep <> invalid and asString(ep.mediaType) = "episode" then
+                        applyEpisodeHeader(ep)
+                    end if
+                end if
+            end if
+        end if
     end if
 
     castItems = response.cast
