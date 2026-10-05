@@ -8,6 +8,7 @@
         <field id="close" type="boolean" alwaysNotify="true" onChange="onCloseRequested" />
         <field id="loadingMessage" type="string" />
         <field id="openMenu" type="boolean" alwaysNotify="true" />
+        <field id="refocus" type="boolean" alwaysNotify="true" onChange="onRefocus" />
     </interface>
 
     <script type="text/brightscript" uri="LibraryAllScreen.brs" />
@@ -16,65 +17,67 @@
     <children>
         <Rectangle width="1920" height="1080" color="0x07070B" />
 
-        <Group translation="[72, 28]">
-            <Label id="titleLabel" width="900" height="44" text="Library" color="0xFFFFFF">
+        <Group id="header" translation="[96, 24]">
+            <Label id="titleLabel" translation="[0, 2]" width="860" height="44" text="Library" color="0xFFFFFF">
                 <Font role="font" uri="pkg:/fonts/Outfit-Bold.ttf" size="32" />
             </Label>
-            <Label id="metaLabel" translation="[0, 44]" width="1100" height="28" text="" color="0x777780">
+            <Label id="metaLabel" translation="[0, 52]" width="860" height="28" text="" color="0x9A9AA4">
+                <Font role="font" uri="pkg:/fonts/Outfit-Regular.ttf" size="18" />
+            </Label>
+            <Label id="posLabel" translation="[880, 52]" width="680" height="28" text="" horizAlign="right" color="0x777780">
                 <Font role="font" uri="pkg:/fonts/Outfit-Regular.ttf" size="18" />
             </Label>
 
-            <Group id="filterBtn" translation="[1280, 2]">
-                <Rectangle id="filterBg" width="200" height="48" color="0x2A2A32" />
-                <Label id="filterLabel" width="200" height="48" horizAlign="center" vertAlign="center" text="Filter" color="0xFFFFFF">
-                    <Font role="font" uri="pkg:/fonts/Outfit-Medium.ttf" size="22" />
-                </Label>
-            </Group>
-            <Group id="searchBtn" translation="[1500, 2]">
-                <Rectangle id="searchBg" width="200" height="48" color="0x2A2A32" />
-                <Label id="searchLabel" width="200" height="48" horizAlign="center" vertAlign="center" text="Search" color="0xFFFFFF">
-                    <Font role="font" uri="pkg:/fonts/Outfit-Medium.ttf" size="22" />
-                </Label>
-            </Group>
+            <FocusButton id="filterBtn" translation="[916, 0]" text="Filter" buttonWidth="160" />
+            <FocusButton id="searchBtn" translation="[1088, 0]" text="Search" buttonWidth="160" />
+            <FocusButton id="sortBtn" translation="[1260, 0]" text="Order by: Title A–Z" buttonWidth="300" fontSize="20" />
         </Group>
+
+        <!-- 7 across × 5 visible rows; posters sized to fit FHD under the toolbar -->
+        <MarkupGrid
+            id="grid"
+            translation="[96, 100]"
+            itemComponentName="PosterItem"
+            itemSize="[124, 186]"
+            itemSpacing="[18, 8]"
+            numColumns="7"
+            numRows="5"
+            vertFocusAnimationStyle="floatingFocus"
+            drawFocusFeedback="false"
+        />
+
+        <AlphaRail id="alphaRail" translation="[1700, 96]" visible="false" />
+
+        <Label id="emptyLabel" translation="[96, 420]" width="1580" height="120" text="" horizAlign="center" wrap="true" maxLines="3" color="0xC8C8D0" visible="false">
+            <Font role="font" uri="pkg:/fonts/Outfit-Medium.ttf" size="28" />
+        </Label>
 
         <BusySpinner id="spinner" translation="[920, 520]" uri="pkg:/images/spinner.png" visible="false" />
 
-        <!-- Dense Plex-like grid: 11 columns, tight spacing, 4 rows visible -->
-        <MarkupGrid
-            id="grid"
-            translation="[72, 100]"
-            itemComponentName="PosterItem"
-            itemSize="[148, 222]"
-            itemSpacing="[14, 18]"
-            numColumns="11"
-            numRows="4"
-            drawFocusFeedback="false"
-            visible="false"
-        />
-
         <Group id="filterPanel" visible="false">
-            <Rectangle width="1920" height="1080" color="0x000000" opacity="0.65" />
-            <Rectangle translation="[480, 100]" width="960" height="820" color="0x16161E" />
-            <Label translation="[520, 128]" width="600" height="48" text="Filter &amp; Sort" color="0xFFFFFF">
+            <Rectangle width="1920" height="1080" color="0x000000" opacity="0.72" />
+            <Rectangle translation="[560, 110]" width="800" height="800" color="0x14141C" />
+            <Rectangle translation="[560, 110]" width="800" height="4" color="0xE50914" />
+            <Label id="panelTitle" translation="[600, 142]" width="720" height="46" text="Filter" color="0xFFFFFF">
                 <Font role="font" uri="pkg:/fonts/Outfit-Bold.ttf" size="34" />
             </Label>
-            <Label translation="[520, 190]" width="400" height="32" text="Options" color="0xA8A8B0">
-                <Font role="font" uri="pkg:/fonts/Outfit-Medium.ttf" size="20" />
+            <Label id="panelHint" translation="[600, 196]" width="720" height="32" text="" color="0x9A9AA4">
+                <Font role="font" uri="pkg:/fonts/Outfit-Regular.ttf" size="20" />
             </Label>
             <LabelList
                 id="filterList"
-                translation="[520, 230]"
-                itemSize="[880, 48]"
-                itemSpacing="[0, 2]"
+                translation="[600, 244]"
+                itemSize="[720, 52]"
+                itemSpacing="[0, 4]"
                 numRows="11"
+                vertFocusAnimationStyle="floatingFocus"
                 color="0xCCCCCC"
-                focusedColor="0xFFFFFF"
+                focusedColor="0x111118"
                 drawFocusFeedback="true"
-            />
-            <Label translation="[520, 860]" width="880" height="40" text="OK apply · Back closes" color="0x666670">
-                <Font role="font" uri="pkg:/fonts/Outfit-Regular.ttf" size="18" />
-            </Label>
+            >
+                <Font role="font" uri="pkg:/fonts/Outfit-Regular.ttf" size="24" />
+                <Font role="focusedFont" uri="pkg:/fonts/Outfit-SemiBold.ttf" size="24" />
+            </LabelList>
         </Group>
     </children>
 </component>

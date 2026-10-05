@@ -19,7 +19,7 @@
         </Group>
 
         <Group id="frame" translation="[0, 0]" visible="false" clippingRect="[0, 0, 1920, 1080]">
-            <!-- Same landscape plane + soft washes as DetailScreen (no left panel) -->
+            <!-- Landscape billboard matching DetailScreen (soft washes, no left panel) -->
             <Group id="billboard" translation="[0, 0]">
                 <Poster
                     id="heroArt"
@@ -47,12 +47,6 @@
                 </Group>
             </Group>
 
-            <!-- Peek strip: previous shelf, clipped; same left edge as active rows -->
-            <Group id="peekStrip" translation="[96, 0]" visible="false" clippingRect="[0, 0, 1824, 140]">
-                <Group id="peekPosters" translation="[0, -100]" />
-            </Group>
-
-            <!-- Clip TOP of the RowList so fixedFocus can't show an aligned previous shelf -->
             <Group id="rowsClip" translation="[0, 560]" clippingRect="[0, 0, 1920, 960]">
                 <ShelfRowList
                     id="rowList"
@@ -66,6 +60,7 @@
                     showRowLabel="[true]"
                     rowLabelOffset="[[0, 4]]"
                     rowFocusAnimationStyle="fixedFocus"
+                    vertFocusAnimationStyle="floatingFocus"
                     focusXOffset="[0]"
                     drawFocusFeedback="false"
                 />

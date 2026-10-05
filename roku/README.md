@@ -10,7 +10,7 @@ This is intentionally a **design/UX shell** on top of existing Plex data. Creden
 - **Collapsible sidebar** (Left to open): Home, your **Libraries**, **Live TV**, Live Sports
 - Selecting a library in the sidebar opens that library’s shelves
 - **Live TV**: Guide layout always visible (columns + placeholder rows while syncing); program info top-left, preview top-right
-- **Libraries**: Mosaic hero + **View all** / **Search**; full grid with genre filter
+- **Libraries**: mosaic hero + **View all** / **Search**; full grid with filter, search and order-by
 - **Continue Watching**, **Recently Added**, Plex hubs, library shelves, **genre rows**, and **Discover** trending (Netflix/Disney+/etc.)
 - Home shelves require **15–30** items (except Continue Watching) and **loop** horizontally
 - Continue Watching episodes open the parent show with that episode focused
@@ -67,11 +67,42 @@ Optional CLI (if `ROKU_IP` / `ROKU_PASSWORD` are set):
 ./roku/package.sh --deploy
 ```
 
+## Library pages
+
+Picking a library in the sidebar opens its **hub**: a mosaic hero with a single
+**View all** button, plus Continue Watching / Recently Added / Plex hub shelves
+below. Down drops into the shelves, Up comes back to the button.
+
+**View all** opens the full library grid:
+
+- one scrolling 6-wide poster grid, Up from the top row reaches the toolbar
+- **Filter** — genre, decade, unwatched only, clear all (the `*` key opens it too)
+- **Search** — on-screen keyboard, matches titles inside the library
+- **Order by** — title A–Z / Z–A, recently added, year, rating, recently watched
+- an **A–Z rail** down the right edge (Right from the last column) jumps straight
+  to a letter; letters the library has nothing under are dimmed
+- the header shows the active filters on the left and `1,234 of 8,900` on the right
+
+The rail only appears for the default title A–Z order with no filters applied,
+because its offsets come from Plex's `firstCharacter` counts for that exact order.
+
+Paging is a sliding window: titles load 60 at a time, four rows ahead of the
+focus, and rows that fall far behind are released again. At most ~900 titles are
+held in memory no matter how big the library is, so memory stays flat on older
+sticks. The window is kept much larger than the screen on purpose — re-anchoring
+the grid after a trim is the one moment scrolling can jolt, so it should happen
+once every hundred-odd rows rather than every few pages.
+
 ## Remote / focus
 
 - **Left** opens the sidebar from Home, Libraries, Live Sports (and sports detail via Back first); **Right** or **Back** hides it
 - Libraries appear as flat items in the sidebar (no wrapping cycle at the ends)
 - Arrow keys move across poster rows
+- Every list, grid and shelf uses `vertFocusAnimationStyle="floatingFocus"`: Up and
+  Down move the highlight between the rows already on screen and only scroll once
+  it would leave them. Omitting the field gives a pinned highlight that scrolls the
+  content on every press, which makes the lower rows unreachable as a highlight
+  position and is very jarring.
 - Focused title updates the hero billboard
 - OK opens the detail screen (episodes open the show with that episode selected)
 - Play / OK starts playback
@@ -110,7 +141,7 @@ Outfit (Google Fonts / OFL) ships under `roku/fonts/`. Swap TTFs there and updat
 ## Out of scope for this MVP
 
 - Account login / PIN pairing UI
-- Search, profiles, downloads
+- Global (cross-library) search, profiles, downloads
 - Direct Play codec negotiation beyond HLS transcode
 - Settings screen (edit `PlexConfig.brs` and republish)
 

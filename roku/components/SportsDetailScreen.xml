@@ -51,6 +51,7 @@
                 itemSize="[1728, 52]"
                 itemSpacing="[0, 8]"
                 numRows="10"
+                vertFocusAnimationStyle="floatingFocus"
                 drawFocusFeedback="false"
             />
         </Group>

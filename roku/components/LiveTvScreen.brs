@@ -132,7 +132,7 @@ sub onGuideLoaded()
     end for
     m.guideList.content = root
     m.guideLoaded = true
-    m.statusLabel.text = StrI(m.channels.count()).Trim() + " channels · OK to watch"
+    m.statusLabel.text = StrI(m.channels.count()).Trim() + " channels"
     m.guideList.jumpToItem = 0
     m.guideList.setFocus(true)
     updateInfo(0)
@@ -268,10 +268,10 @@ end sub
 sub onPreviewReady()
     response = m.previewTask.response
     if response = invalid or response.ok <> true or response.url = invalid or response.url = "" then
-        m.statusLabel.text = StrI(m.channels.count()).Trim() + " channels · OK to watch"
+        m.statusLabel.text = StrI(m.channels.count()).Trim() + " channels"
         return
     end if
-    m.statusLabel.text = StrI(m.channels.count()).Trim() + " channels · OK to watch"
+    m.statusLabel.text = StrI(m.channels.count()).Trim() + " channels"
     contentNode = createObject("roSGNode", "ContentNode")
     contentNode.url = response.url
     contentNode.streamFormat = "hls"

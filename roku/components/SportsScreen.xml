@@ -69,6 +69,7 @@
             itemSize="[1776, 40]"
             itemSpacing="[0, 2]"
             numRows="15"
+            vertFocusAnimationStyle="floatingFocus"
             drawFocusFeedback="false"
         />
     </children>

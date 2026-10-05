@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!-- Vertical A-Z jump strip, like the one down the side of Plex's library grid -->
+<component name="AlphaRail" extends="Group">
+    <interface>
+        <!-- assocarray per letter: { letter: "A", enabled: true } -->
+        <field id="letters" type="array" onChange="onLettersChange" />
+        <field id="letterSelected" type="string" alwaysNotify="true" />
+        <field id="escapeLeft" type="boolean" alwaysNotify="true" />
+    </interface>
+
+    <script type="text/brightscript" uri="AlphaRail.brs" />
+    <script type="text/brightscript" uri="pkg:/source/Fonts.brs" />
+
+    <children>
+        <Rectangle id="rail" width="56" height="960" color="0x101018" opacity="0.72" />
+        <Group id="rows" translation="[0, 6]" />
+    </children>
+</component>

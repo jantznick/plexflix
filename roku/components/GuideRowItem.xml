@@ -5,6 +5,9 @@
         <field id="focusPercent" type="float" onChange="onFocusPercentChange" />
         <field id="width" type="float" onChange="onSizeChange" />
         <field id="height" type="float" onChange="onSizeChange" />
+        <!-- Set by the owning list; without it the row stays highlighted even
+             once the sidebar or another control has taken the remote -->
+        <field id="listHasFocus" type="boolean" value="true" onChange="onOwnerFocusChange" />
     </interface>
 
     <script type="text/brightscript" uri="GuideRowItem.brs" />
