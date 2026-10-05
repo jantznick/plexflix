@@ -116,7 +116,7 @@ sub onFeedLoaded()
         m.statusLabel.text = "No live sports — check sportsFeedUrl"
         m.eventTitle.text = "No events"
     else
-        m.statusLabel.text = StrI(m.events.count()).Trim() + " events · OK to open"
+        m.statusLabel.text = StrI(m.events.count()).Trim() + " events"
         m.guideList.jumpToItem = 0
         m.guideList.setFocus(true)
         updateInfo(0)

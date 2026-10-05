@@ -69,21 +69,29 @@ Optional CLI (if `ROKU_IP` / `ROKU_PASSWORD` are set):
 
 ## Library pages
 
-Picking a library in the sidebar opens its **hub**: a mosaic hero with **View all**
-and **Search**, plus Continue Watching / Recently Added / Plex hub shelves below.
+Picking a library in the sidebar opens its **hub**: a mosaic hero with a single
+**View all** button, plus Continue Watching / Recently Added / Plex hub shelves
+below. Down drops into the shelves, Up comes back to the button.
 
-**View all** (or Search) opens the full library grid:
+**View all** opens the full library grid:
 
-- one scrolling 11-wide poster grid, Up from the top row reaches the toolbar
+- one scrolling 6-wide poster grid, Up from the top row reaches the toolbar
 - **Filter** — genre, decade, unwatched only, clear all (the `*` key opens it too)
 - **Search** — on-screen keyboard, matches titles inside the library
 - **Order by** — title A–Z / Z–A, recently added, year, rating, recently watched
+- an **A–Z rail** down the right edge (Right from the last column) jumps straight
+  to a letter; letters the library has nothing under are dimmed
 - the header shows the active filters on the left and `1,234 of 8,900` on the right
 
-Paging is a sliding window: titles load 66 at a time, two rows ahead of the
-focus, and rows that fall far behind are released again. At most ~330 titles are
+The rail only appears for the default title A–Z order with no filters applied,
+because its offsets come from Plex's `firstCharacter` counts for that exact order.
+
+Paging is a sliding window: titles load 60 at a time, four rows ahead of the
+focus, and rows that fall far behind are released again. At most ~900 titles are
 held in memory no matter how big the library is, so memory stays flat on older
-sticks.
+sticks. The window is kept much larger than the screen on purpose — re-anchoring
+the grid after a trim is the one moment scrolling can jolt, so it should happen
+once every hundred-odd rows rather than every few pages.
 
 ## Remote / focus
 
