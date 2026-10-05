@@ -150,9 +150,13 @@ sub applyGuideLine(node as Object, ch as Object)
     if program = "" then program = "On now"
     if Len(program) > 42 then program = Mid(program, 1, 42)
 
+    timeCol = asString(ch.timeRange)
+    if timeCol = "" then timeCol = "Live"
+    if Len(timeCol) > 18 then timeCol = Mid(timeCol, 1, 18)
+
     nextShow = asString(ch.nextTitle)
     if nextShow = "" then nextShow = "—"
-    if Len(nextShow) > 36 then nextShow = Mid(nextShow, 1, 36)
+    if Len(nextShow) > 44 then nextShow = Mid(nextShow, 1, 44)
 
     channelCol = ""
     if num <> "" and callSign <> "" then
@@ -167,9 +171,7 @@ sub applyGuideLine(node as Object, ch as Object)
     if Len(channelCol) > 28 then channelCol = Mid(channelCol, 1, 28)
     if LCase(channelCol) = LCase(program) then channelCol = "Ch"
 
-    statusCol = asString(ch.timeRange)
-    if statusCol = "" then statusCol = "LIVE"
-    setGuideCols(node, channelCol, program, nextShow, statusCol)
+    setGuideCols(node, channelCol, program, timeCol, nextShow)
 end sub
 
 sub onGuideFocused()

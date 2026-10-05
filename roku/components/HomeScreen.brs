@@ -15,16 +15,15 @@ sub init()
     m.billboardFade = m.top.findNode("billboardFade")
     m.rowsMove = m.top.findNode("rowsMove")
 
-    ' Expanded: hero + first shelf fully visible; next shelf clips at bottom.
-    ' Collapsed: shelves fill screen; previous shelf peeks clipped above active.
-    m.expandedRowY = 560
-    m.collapsedRowY = 36
-    m.collapsedPeekY = -96
+    ' Expanded: hero + first shelf fully on screen; next shelf peeks at bottom.
+    ' Collapsed: floatingFocus keeps the ACTIVE shelf fully visible; older shelves
+    ' naturally peek clipped above — never shift the list so the active row clips.
+    m.expandedRowY = 520
+    m.collapsedRowY = 48
     m.rowsX = 96
-    m.heroHideY = -600
+    m.heroHideY = -520
     m.isCollapsed = false
     m.currentRow = -1
-    m.peekActive = false
 
     m.shimmer = m.top.findNode("shimmer")
     if m.shimmer <> invalid then m.shimmer.active = true
@@ -40,7 +39,6 @@ sub init()
     m.rowList.observeField("escapeLeft", "onEscapeLeft")
     m.rowList.observeField("escapeUp", "onEscapeUp")
 
-    ' brs-desktop sometimes misses rowItemFocused; poll as a backup
     m.focusPoll = createObject("roSGNode", "Timer")
     m.focusPoll.repeat = true
     m.focusPoll.duration = 0.15
@@ -93,7 +91,7 @@ sub onHomeLoaded()
     end if
 
     rowCount = content.getChildCount()
-    m.buildLabel.text = "v0.4.4 · " + safeToStr(rowCount) + " rows"
+    m.buildLabel.text = "v0.4.5 · " + safeToStr(rowCount) + " rows"
 
     if m.loadingPanel <> invalid then m.loadingPanel.visible = false
     if m.frame <> invalid then m.frame.visible = true
@@ -131,19 +129,7 @@ sub applyFocusedRow(force as Boolean)
 
     m.currentRow = rowIndex
     setBrowseMode(rowIndex > 0)
-    applyRowPeek(rowIndex)
     updateHeroContent(item)
-end sub
-
-sub applyRowPeek(rowIndex as Integer)
-    if not m.isCollapsed then return
-    ' Peek previous shelf above once you're past the first collapsed row
-    wantPeek = rowIndex > 1
-    targetY = m.collapsedRowY
-    if wantPeek then targetY = m.collapsedPeekY
-    if m.peekActive = wantPeek and m.rowList.translation[1] = targetY then return
-    m.peekActive = wantPeek
-    m.rowList.translation = [m.rowsX, targetY]
 end sub
 
 sub setBrowseMode(collapsed as Boolean)
@@ -160,21 +146,18 @@ sub setBrowseMode(collapsed as Boolean)
         toOpacity = 0.0
         m.heroCopy.visible = false
         m.billboard.visible = true
-        m.peekActive = false
     else
         toHero = [0, 0]
         toRows = [m.rowsX, m.expandedRowY]
         toOpacity = 1.0
         m.billboard.visible = true
         m.heroCopy.visible = true
-        m.peekActive = false
     end if
 
     m.isCollapsed = collapsed
     m.pendingHero = toHero
     m.pendingRows = toRows
     m.pendingOpacity = toOpacity
-    m.pendingVisible = not collapsed
 
     if m.homeAnim <> invalid and m.billboardMove <> invalid then
         m.billboardMove.keyValue = [fromHero, toHero]
@@ -207,11 +190,16 @@ sub applyBrowseModeSnap()
 end sub
 
 sub updateHeroContent(item as Object)
+    ' Prefer backdrop; never stretch a portrait poster into the billboard
+    uri = ""
     if item.hdBackdropUrl <> invalid and item.hdBackdropUrl <> "" then
-        m.heroArt.uri = item.hdBackdropUrl
+        uri = item.hdBackdropUrl
+    else if item.hdShowPosterUrl <> invalid and item.hdShowPosterUrl <> "" then
+        uri = item.hdShowPosterUrl
     else if item.hdPosterUrl <> invalid then
-        m.heroArt.uri = item.hdPosterUrl
+        uri = item.hdPosterUrl
     end if
+    if uri <> "" then m.heroArt.uri = uri
 
     m.heroTitle.text = asString(item.title)
 

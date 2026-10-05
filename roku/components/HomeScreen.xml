@@ -24,60 +24,60 @@
         </Group>
 
         <Group id="frame" translation="[0, 0]" visible="false">
-            <Group id="billboard" translation="[0, 0]">
-                <!-- Full-bleed billboard; loadWidth/Height keep art sharp -->
+            <!-- Billboard clipped to its own height so washes never cover shelves -->
+            <Group id="billboard" translation="[0, 0]" clippingRect="[0, 0, 1920, 500]">
                 <Poster
                     id="heroArt"
                     width="1920"
-                    height="560"
+                    height="500"
                     loadDisplayMode="scaleToZoom"
                     loadWidth="1920"
-                    loadHeight="1080"
+                    loadHeight="800"
                     uri=""
                 />
-                <!-- Soft left/bottom fades for copy — no hard midline bar -->
-                <Rectangle width="900" height="560" color="0x07070B" opacity="0.45" />
-                <Rectangle width="1920" height="200" translation="[0, 360]" color="0x07070B" opacity="0.55" />
-                <Rectangle width="1920" height="80" translation="[0, 480]" color="0x07070B" opacity="0.7" />
+                <!-- Bottom fade only — no left panel (that caused the vertical seam) -->
+                <Rectangle width="1920" height="160" translation="[0, 340]" color="0x07070B" opacity="0.35" />
+                <Rectangle width="1920" height="100" translation="[0, 400]" color="0x07070B" opacity="0.55" />
+                <Rectangle width="1920" height="50" translation="[0, 450]" color="0x07070B" opacity="0.75" />
 
-                <Group id="heroCopy" translation="[96, 250]">
-                    <Label id="heroTitle" width="1100" height="100" text="" color="0xFFFFFF" wrap="true" maxLines="2" lineSpacing="2">
-                        <Font role="font" uri="pkg:/fonts/Outfit-Bold.ttf" size="50" />
+                <Group id="heroCopy" translation="[96, 280]">
+                    <Label id="heroTitle" width="1100" height="90" text="" color="0xFFFFFF" wrap="true" maxLines="2" lineSpacing="2">
+                        <Font role="font" uri="pkg:/fonts/Outfit-Bold.ttf" size="46" />
                     </Label>
-                    <Label id="heroMeta" translation="[0, 100]" width="1000" height="30" text="" color="0xB8B8C0">
-                        <Font role="font" uri="pkg:/fonts/Outfit-Medium.ttf" size="20" />
+                    <Label id="heroMeta" translation="[0, 88]" width="1000" height="28" text="" color="0xB8B8C0">
+                        <Font role="font" uri="pkg:/fonts/Outfit-Medium.ttf" size="18" />
                     </Label>
-                    <Label id="heroSummary" translation="[0, 136]" width="980" height="70" text="" color="0xD0D0D6" wrap="true" maxLines="2" lineSpacing="4">
-                        <Font role="font" uri="pkg:/fonts/Outfit-Regular.ttf" size="20" />
+                    <Label id="heroSummary" translation="[0, 120]" width="980" height="60" text="" color="0xD0D0D6" wrap="true" maxLines="2" lineSpacing="3">
+                        <Font role="font" uri="pkg:/fonts/Outfit-Regular.ttf" size="18" />
                     </Label>
                 </Group>
             </Group>
 
-            <Label id="buildLabel" translation="[1520, 36]" width="340" height="36" horizAlign="right" text="v0.4.4" color="0x55555A">
+            <Label id="buildLabel" translation="[1520, 36]" width="340" height="36" horizAlign="right" text="v0.4.5" color="0x55555A">
                 <Font role="font" uri="pkg:/fonts/Outfit-Medium.ttf" size="16" />
             </Label>
 
-            <!-- First shelf fully below hero; next shelf peeks at bottom -->
+            <!-- Fully below hero; floatingFocus keeps active shelf on-screen; previous peeks above -->
             <ShelfRowList
                 id="rowList"
-                translation="[96, 560]"
+                translation="[96, 520]"
                 itemComponentName="PosterItem"
-                numRows="4"
+                numRows="3"
                 rowItemSize="[[150, 225]]"
                 rowItemSpacing="[[22, 0]]"
                 itemSize="[1728, 280]"
                 itemSpacing="[0, 14]"
                 showRowLabel="[true]"
                 rowLabelOffset="[[0, 4]]"
-                rowFocusAnimationStyle="fixedFocus"
+                rowFocusAnimationStyle="floatingFocus"
                 focusXOffset="[0]"
                 drawFocusFeedback="false"
             />
 
-            <Animation id="homeAnim" duration="0.22" easeFunction="outCubic" optional="true" repeat="false">
+            <Animation id="homeAnim" duration="0.2" easeFunction="outCubic" optional="true" repeat="false">
                 <Vector2DFieldInterpolator id="billboardMove" key="[0.0, 1.0]" keyValue="[[0, 0], [0, 0]]" fieldToInterp="billboard.translation" />
                 <FloatFieldInterpolator id="billboardFade" key="[0.0, 1.0]" keyValue="[1.0, 1.0]" fieldToInterp="billboard.opacity" />
-                <Vector2DFieldInterpolator id="rowsMove" key="[0.0, 1.0]" keyValue="[[96, 560], [96, 560]]" fieldToInterp="rowList.translation" />
+                <Vector2DFieldInterpolator id="rowsMove" key="[0.0, 1.0]" keyValue="[[96, 520], [96, 520]]" fieldToInterp="rowList.translation" />
             </Animation>
         </Group>
     </children>

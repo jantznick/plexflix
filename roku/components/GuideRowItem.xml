@@ -18,11 +18,11 @@
         <Label id="col1" translation="[320, 4]" width="560" height="32" color="0xE8EEF8" wrap="false">
             <Font role="font" uri="pkg:/fonts/Outfit-Medium.ttf" size="16" />
         </Label>
-        <Label id="col2" translation="[900, 4]" width="460" height="32" color="0x8FA0B8" wrap="false">
+        <Label id="col2" translation="[900, 4]" width="220" height="32" color="0x8FA0B8" wrap="false">
             <Font role="font" uri="pkg:/fonts/Outfit-Regular.ttf" size="16" />
         </Label>
-        <Label id="col3" translation="[1380, 4]" width="360" height="32" color="0xC5CCD8" wrap="false">
-            <Font role="font" uri="pkg:/fonts/Outfit-SemiBold.ttf" size="15" />
+        <Label id="col3" translation="[1140, 4]" width="600" height="32" color="0xC5CCD8" wrap="false">
+            <Font role="font" uri="pkg:/fonts/Outfit-Regular.ttf" size="16" />
         </Label>
     </children>
 </component>

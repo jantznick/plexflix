@@ -6,8 +6,15 @@ sub runKeyboard()
     m.top.cancelled = true
     m.top.result = ""
 
-    port = CreateObject("roMessagePort")
+    ' roKeyboardScreen is legacy / missing in brs-desktop — fail soft
     keyboard = CreateObject("roKeyboardScreen")
+    if keyboard = invalid then
+        m.top.cancelled = true
+        m.top.result = ""
+        return
+    end if
+
+    port = CreateObject("roMessagePort")
     keyboard.SetMessagePort(port)
     title = "Search library"
     if m.top.prompt <> invalid and m.top.prompt <> "" then title = m.top.prompt

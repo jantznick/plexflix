@@ -217,7 +217,10 @@ function metadataToItem(cfg as Object, meta as Object) as Object
         end if
         if meta.grandparentThumb <> invalid then showThumb = safeToStr(meta.grandparentThumb)
         if showThumb <> "" and thumb = "" then thumb = showThumb
-        if meta.grandparentArt <> invalid and art = "" then art = safeToStr(meta.grandparentArt)
+        ' Prefer show art for billboards — episode stills look stretched/weird at 16:9
+        if meta.grandparentArt <> invalid and safeToStr(meta.grandparentArt) <> "" then
+            art = safeToStr(meta.grandparentArt)
+        end if
     end if
 
     description = safeToStr(meta.summary)
@@ -1478,21 +1481,58 @@ function fetchLiveTvGuide(cfg as Object) as Object
         channels = onNow
     end if
 
+    ' Index all guide airings by channel for now + up-next
+    airingsByChannel = {}
+    for each g in guideAirings
+        gid = safeToStr(g.channelId)
+        if gid = "" then gid = safeToStr(g.callSign)
+        if gid <> "" then
+            if not airingsByChannel.DoesExist(gid) then airingsByChannel[gid] = []
+            airingsByChannel[gid].push(g)
+        end if
+    end for
+    for each g in onNow
+        gid = safeToStr(g.channelId)
+        if gid = "" then gid = safeToStr(g.callSign)
+        if gid <> "" then
+            if not airingsByChannel.DoesExist(gid) then airingsByChannel[gid] = []
+            airingsByChannel[gid].push(g)
+        end if
+    end for
+
+    nowSec = CreateObject("roDateTime").AsSeconds()
+
     enriched = []
     for each ch in channels
         cid = safeToStr(ch.channelId)
-        air = invalid
-        if cid <> "" and onNowByChannel.DoesExist(cid) then
-            air = onNowByChannel[cid]
+        airList = []
+        if cid <> "" and airingsByChannel.DoesExist(cid) then
+            airList = airingsByChannel[cid]
         end if
-        if air = invalid then
-            ' match guide by channel number in title
-            for each g in guideAirings
-                if safeToStr(g.channelId) = cid and cid <> "" then
-                    air = g
+        if airList.count() = 0 and ch.DoesExist("callSign") then
+            cs = asStringSafe(ch.callSign)
+            if cs <> "" and airingsByChannel.DoesExist(cs) then airList = airingsByChannel[cs]
+        end if
+
+        air = invalid
+        nextAir = invalid
+        if airList.count() > 0 then
+            ' Pick current airing (now inside window), else first, and next after it
+            bestIdx = -1
+            for ai = 0 to airList.count() - 1
+                a = airList[ai]
+                b = 0
+                e = 0
+                if a.DoesExist("beginsAt") then b = a.beginsAt
+                if a.DoesExist("endsAt") then e = a.endsAt
+                if b > 0 and e > b and nowSec >= b and nowSec < e then
+                    bestIdx = ai
                     exit for
                 end if
             end for
+            if bestIdx < 0 then bestIdx = 0
+            air = airList[bestIdx]
+            if bestIdx + 1 < airList.count() then nextAir = airList[bestIdx + 1]
         end if
 
         programTitle = asStringSafe(ch.title)
@@ -1500,10 +1540,10 @@ function fetchLiveTvGuide(cfg as Object) as Object
         poster = asStringSafe(ch.hdPosterUrl)
         backdrop = asStringSafe(ch.hdBackdropUrl)
         timeRange = ""
+        nextTitle = ""
         callSign = ""
         if ch.DoesExist("callSign") then callSign = asStringSafe(ch.callSign)
         if callSign = "" then
-            ' Fallback: short channel title, never a long program summary
             candidate = asStringSafe(ch.description)
             if Len(candidate) > 0 and Len(candidate) <= 32 and Instr(1, candidate, " · ") = 0 then
                 callSign = candidate
@@ -1521,7 +1561,22 @@ function fetchLiveTvGuide(cfg as Object) as Object
             if asStringSafe(air.hdPosterUrl) <> "" then poster = asStringSafe(air.hdPosterUrl)
             if asStringSafe(air.hdBackdropUrl) <> "" then backdrop = asStringSafe(air.hdBackdropUrl)
             if asStringSafe(air.callSign) <> "" and callSign = "" then callSign = asStringSafe(air.callSign)
+            if air.DoesExist("timeRange") then timeRange = asStringSafe(air.timeRange)
         end if
+        if nextAir <> invalid then
+            nextTitle = asStringSafe(nextAir.title)
+            if nextTitle = "" then nextTitle = "—"
+            if timeRange = "" and nextAir.DoesExist("timeRange") then
+                ' keep empty
+            end if
+            nextStart = ""
+            if nextAir.DoesExist("beginsAt") and nextAir.beginsAt > 0 then
+                nextStart = formatClock(nextAir.beginsAt)
+            end if
+            if nextStart <> "" then nextTitle = nextStart + "  " + nextTitle
+        end if
+        if nextTitle = "" then nextTitle = "—"
+        if timeRange = "" then timeRange = "Live"
 
         channelNumber = ""
         if ch.DoesExist("channelNumber") then channelNumber = asStringSafe(ch.channelNumber)
@@ -1534,6 +1589,7 @@ function fetchLiveTvGuide(cfg as Object) as Object
             callSign: callSign,
             channelNumber: channelNumber,
             timeRange: timeRange,
+            nextTitle: nextTitle,
             mediaType: "livetv",
             ratingKey: asStringSafe(ch.ratingKey),
             key: asStringSafe(ch.key),
@@ -1720,7 +1776,7 @@ function mapLiveTvGuide(cfg as Object, json as Object, dvrId as String) as Objec
         else
             items.push(guideAiringToItem(cfg, entry, dvrId, ""))
         end if
-        if items.count() >= 40 then exit for
+        if items.count() >= 200 then exit for
     end for
     return items
 end function
@@ -1733,12 +1789,7 @@ function guideAiringToItem(cfg as Object, air as Object, dvrId as String, channe
     channelLabel = firstString(air, ["channelTitle", "callSign", "channelIdentifier"])
     if channelLabel = "" then channelLabel = channelHint
     summary = firstString(air, ["summary", "description", "tagline"])
-    desc = channelLabel
-    if summary <> "" and desc <> "" then
-        desc = channelLabel + " · " + summary
-    else if summary <> "" then
-        desc = summary
-    end if
+    desc = summary
 
     thumb = ""
     if air.thumb <> invalid then thumb = safeToStr(air.thumb)
@@ -1747,8 +1798,19 @@ function guideAiringToItem(cfg as Object, air as Object, dvrId as String, channe
 
     mediaType = safeToStr(air.type)
     if mediaType = "" then mediaType = "livetv"
-    ' Airings without a plex library key still tune by channel
     if mediaType <> "recording" then mediaType = "livetv"
+
+    beginsAt = 0
+    endsAt = 0
+    if air.beginsAt <> invalid then beginsAt = air.beginsAt
+    if air.endsAt <> invalid then endsAt = air.endsAt
+    if beginsAt = 0 and air.beginTime <> invalid then beginsAt = air.beginTime
+    if endsAt = 0 and air.endTime <> invalid then endsAt = air.endTime
+    ' Some payloads use milliseconds
+    if beginsAt > 100000000000 then beginsAt = Int(beginsAt / 1000)
+    if endsAt > 100000000000 then endsAt = Int(endsAt / 1000)
+
+    timeLabel = formatTimeRange(beginsAt, endsAt)
 
     return {
         title: title,
@@ -1766,8 +1828,32 @@ function guideAiringToItem(cfg as Object, air as Object, dvrId as String, channe
         viewOffset: 0,
         year: "",
         rating: "",
-        contentRating: ""
+        contentRating: "",
+        beginsAt: beginsAt,
+        endsAt: endsAt,
+        timeRange: timeLabel
     }
+end function
+
+function formatTimeRange(beginsAt as Integer, endsAt as Integer) as String
+    if beginsAt <= 0 then return ""
+    startLabel = formatClock(beginsAt)
+    if endsAt > beginsAt then return startLabel + "–" + formatClock(endsAt)
+    return startLabel
+end function
+
+function formatClock(epochSec as Integer) as String
+    if epochSec <= 0 then return ""
+    dt = CreateObject("roDateTime")
+    dt.FromSeconds(epochSec)
+    dt.ToLocalTime()
+    h = dt.GetHours()
+    mi = dt.GetMinutes()
+    h12 = h mod 12
+    if h12 = 0 then h12 = 12
+    minStr = StrI(mi).Trim()
+    if Len(minStr) = 1 then minStr = "0" + minStr
+    return StrI(h12).Trim() + ":" + minStr
 end function
 
 function tuneLiveChannel(cfg as Object, item as Object) as Object
@@ -1963,6 +2049,7 @@ function mapSportsEntries(list as Object) as Object
                     key: primary,
                     streamUrl: primary,
                     streams: streams,
+                    streamCount: streams.count(),
                     hdPosterUrl: thumb,
                     hdBackdropUrl: thumb,
                     ratingKey: "",

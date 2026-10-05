@@ -48,16 +48,13 @@
         </Group>
 
         <Rectangle translation="[0, 350]" width="1920" height="36" color="0x1A2438" />
-        <Label translation="[120, 356]" width="280" height="28" text="LEAGUE" color="0x8FA0B8">
+        <Label translation="[120, 356]" width="320" height="28" text="LEAGUE" color="0x8FA0B8">
             <Font role="font" uri="pkg:/fonts/Outfit-SemiBold.ttf" size="14" />
         </Label>
-        <Label translation="[416, 356]" width="560" height="28" text="EVENT" color="0xE8EEF8">
+        <Label translation="[392, 356]" width="780" height="28" text="EVENT" color="0xE8EEF8">
             <Font role="font" uri="pkg:/fonts/Outfit-SemiBold.ttf" size="14" />
         </Label>
-        <Label translation="[996, 356]" width="400" height="28" text="INFO" color="0x8FA0B8">
-            <Font role="font" uri="pkg:/fonts/Outfit-SemiBold.ttf" size="14" />
-        </Label>
-        <Label translation="[1476, 356]" width="240" height="28" text="STATUS" color="0x8FA0B8">
+        <Label translation="[1212, 356]" width="400" height="28" text="STREAMS" color="0x8FA0B8">
             <Font role="font" uri="pkg:/fonts/Outfit-SemiBold.ttf" size="14" />
         </Label>
 

@@ -22,7 +22,7 @@ sub onSizeChange()
     if m.col0 <> invalid then m.col0.translation = [24, cy]
     if m.col1 <> invalid then m.col1.translation = [320, cy]
     if m.col2 <> invalid then m.col2.translation = [900, cy]
-    if m.col3 <> invalid then m.col3.translation = [1380, cy]
+    if m.col3 <> invalid then m.col3.translation = [1140, cy]
 end sub
 
 sub onContentChange()

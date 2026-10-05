@@ -121,11 +121,14 @@ sub applySportsLine(node as Object, item as Object, league as String)
     lg = league
     if Len(lg) > 26 then lg = Mid(lg, 1, 26)
     title = asString(item.title)
-    if Len(title) > 42 then title = Mid(title, 1, 42)
-    info = asString(item.description)
-    if Len(info) > 34 then info = Mid(info, 1, 34)
-    if info = "" then info = "—"
-    setGuideCols(node, lg, title, info, "LIVE")
+    if Len(title) > 52 then title = Mid(title, 1, 52)
+    n = 0
+    if item.DoesExist("streamCount") then n = item.streamCount
+    if n = 0 and item.DoesExist("streams") and item.streams <> invalid then n = item.streams.count()
+    if n = 0 and asString(item.streamUrl) <> "" then n = 1
+    streamsCol = StrI(n).Trim() + " streams"
+    if n = 1 then streamsCol = "1 stream"
+    setGuideCols(node, lg, title, "", streamsCol)
 end sub
 
 sub onGuideFocused()
@@ -140,9 +143,20 @@ sub updateInfo(idx as Integer)
     if item = invalid then return
     m.eventTitle.text = asString(item.title)
     meta = asString(item.league)
+    if meta = "" then meta = asString(item.description)
     if meta = "" then meta = "Live sports"
     m.eventMeta.text = meta
-    m.eventSummary.text = asString(item.description)
+    n = 0
+    if item.DoesExist("streamCount") then n = item.streamCount
+    if n = 0 and item.DoesExist("streams") and item.streams <> invalid then n = item.streams.count()
+    if n = 0 and asString(item.streamUrl) <> "" then n = 1
+    if n = 1 then
+        m.eventSummary.text = "1 stream available"
+    else if n > 1 then
+        m.eventSummary.text = StrI(n).Trim() + " streams available"
+    else
+        m.eventSummary.text = ""
+    end if
     if asString(item.hdPosterUrl) <> "" then
         m.previewArt.uri = item.hdPosterUrl
         m.previewArt.opacity = 1.0
