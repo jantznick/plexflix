@@ -28,7 +28,15 @@ sub init()
     m.sideNav.expanded = false
     m.sideNav.observeField("selected", "onNavSelected")
     m.sideNav.observeField("selectedLibrary", "onLibrarySelected")
+    ' The nav can collapse itself (Back); keep the scrim and focus in sync when it does
+    m.sideNav.observeField("expanded", "onNavExpandedChanged")
     showHome()
+end sub
+
+sub onNavExpandedChanged(event as Object)
+    expanded = (event.getData() = true)
+    if expanded = m.navExpanded then return
+    setNavExpanded(expanded)
 end sub
 
 sub setNavExpanded(expanded as Boolean)
@@ -50,6 +58,8 @@ sub setLoading(isLoading as Boolean, message = "" as String)
 end sub
 
 sub clearScreens()
+    ' Stop the library hub's focus guard before its node leaves the tree
+    if m.libraryBrowseScreen <> invalid then m.libraryBrowseScreen.suspended = true
     while m.screens.getChildCount() > 0
         m.screens.removeChildIndex(0)
     end while
@@ -82,11 +92,20 @@ sub onNavSelected()
     end if
 end sub
 
-sub onLibrarySelected()
-    lib = m.sideNav.selectedLibrary
+sub onLibrarySelected(event as Object)
+    lib = event.getData()
     if lib = invalid then return
+    sectionId = asString(lib.sectionId)
+
+    ' Re-picking the library you are already in shouldn't refetch the whole hub
+    if sectionId <> "" and sectionId = m.activeLibraryId and m.libraryBrowseScreen <> invalid then
+        setNavExpanded(false)
+        if m.libraryAllScreen <> invalid then onLibraryAllClosed()
+        return
+    end if
+
     m.section = "library"
-    m.activeLibraryId = asString(lib.sectionId)
+    m.activeLibraryId = sectionId
     setNavExpanded(false)
     showLibraryBrowse(lib)
 end sub
@@ -105,6 +124,7 @@ end sub
 
 sub onOpenMenu()
     if m.videoScreen <> invalid or m.detailScreen <> invalid then return
+    if m.top.dialog <> invalid then return
     setNavExpanded(true)
     m.sideNav.setFocus(true)
 end sub
@@ -124,8 +144,8 @@ sub showLibraryBrowse(source as Object)
     m.libraryBrowseScreen.setFocus(true)
 end sub
 
-sub onLibraryViewAll()
-    payload = m.libraryBrowseScreen.viewAllRequested
+sub onLibraryViewAll(event as Object)
+    payload = event.getData()
     if payload = invalid then return
     showLibraryAll(payload)
 end sub
@@ -134,6 +154,11 @@ sub showLibraryAll(source as Object)
     if m.libraryAllScreen <> invalid then
         m.screens.removeChild(m.libraryAllScreen)
         m.libraryAllScreen = invalid
+    end if
+    ' Park the library hub: its mosaic/shelves keep rendering (and stealing focus) otherwise
+    if m.libraryBrowseScreen <> invalid then
+        m.libraryBrowseScreen.suspended = true
+        m.libraryBrowseScreen.visible = false
     end if
     m.libraryAllScreen = createObject("roSGNode", "LibraryAllScreen")
     m.libraryAllScreen.config = m.config
@@ -152,6 +177,8 @@ sub onLibraryAllClosed()
         m.libraryAllScreen = invalid
     end if
     if m.libraryBrowseScreen <> invalid then
+        m.libraryBrowseScreen.visible = true
+        m.libraryBrowseScreen.suspended = false
         m.libraryBrowseScreen.refocus = true
         m.libraryBrowseScreen.setFocus(true)
     else if m.libraryHubSource <> invalid then
@@ -203,18 +230,25 @@ end sub
 
 sub onSoftLoading()
     msg = ""
-    if m.homeScreen <> invalid then msg = m.homeScreen.loadingMessage
-    if m.libraryBrowseScreen <> invalid and (msg = invalid or msg = "") then msg = m.libraryBrowseScreen.loadingMessage
-    if m.liveTvScreen <> invalid and (msg = invalid or msg = "") then msg = m.liveTvScreen.loadingMessage
-    if m.sportsScreen <> invalid and (msg = invalid or msg = "") then msg = m.sportsScreen.loadingMessage
+    ' The top-most screen wins so a parked screen can't keep the banner alive
+    if m.libraryAllScreen <> invalid then
+        msg = m.libraryAllScreen.loadingMessage
+    else if m.libraryBrowseScreen <> invalid then
+        msg = m.libraryBrowseScreen.loadingMessage
+    else if m.liveTvScreen <> invalid then
+        msg = m.liveTvScreen.loadingMessage
+    else if m.sportsScreen <> invalid then
+        msg = m.sportsScreen.loadingMessage
+    else if m.homeScreen <> invalid then
+        msg = m.homeScreen.loadingMessage
+    end if
     if msg = invalid then msg = ""
     setLoading(msg <> "", msg)
 end sub
 
-sub onBrowseSelected()
-    item = invalid
-    if m.homeScreen <> invalid then item = m.homeScreen.selectedItem
-    if item = invalid and m.libraryBrowseScreen <> invalid then item = m.libraryBrowseScreen.selectedItem
+sub onBrowseSelected(event as Object)
+    ' Read the payload off the event: home, library hub and library grid all share this handler
+    item = event.getData()
     if item = invalid then return
     showDetail(item)
 end sub
@@ -357,11 +391,24 @@ sub onEpisodeShowResolved()
     })
 end sub
 
+sub parkLibrarySurfaces(parked as Boolean)
+    ' Poster grids / mosaics keep costing GPU time behind a full screen overlay
+    if m.libraryAllScreen <> invalid then
+        m.libraryAllScreen.visible = not parked
+        return
+    end if
+    if m.libraryBrowseScreen <> invalid then
+        m.libraryBrowseScreen.suspended = parked
+        m.libraryBrowseScreen.visible = not parked
+    end if
+end sub
+
 sub openDetailScreen(item as Object)
     if m.detailScreen <> invalid then
         m.screens.removeChild(m.detailScreen)
         m.detailScreen = invalid
     end if
+    parkLibrarySurfaces(true)
 
     m.detailScreen = createObject("roSGNode", "DetailScreen")
     m.detailScreen.config = m.config
@@ -378,6 +425,7 @@ sub onDetailClosed()
         m.screens.removeChild(m.detailScreen)
         m.detailScreen = invalid
     end if
+    parkLibrarySurfaces(false)
     ' Explicitly restore focus so the remote never goes dead after Back
     restoreSectionFocus()
 end sub
@@ -425,6 +473,7 @@ end sub
 
 sub restoreSectionFocus()
     if m.section = "library" and m.libraryAllScreen <> invalid then
+        m.libraryAllScreen.refocus = true
         m.libraryAllScreen.setFocus(true)
     else if m.section = "library" and m.libraryBrowseScreen <> invalid then
         m.libraryBrowseScreen.refocus = true
@@ -445,6 +494,9 @@ end sub
 
 function onKeyEvent(key as String, press as Boolean) as Boolean
     if not press then return false
+
+    ' A dialog (search keyboard) owns the remote while it is up
+    if m.top.dialog <> invalid then return false
 
     if key = "back"
         if m.videoScreen <> invalid then
