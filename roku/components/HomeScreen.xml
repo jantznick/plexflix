@@ -23,21 +23,24 @@
             <ShimmerRow id="shimmer" translation="[96, 700]" />
         </Group>
 
-        <!-- Clip the whole home frame so shelves hard-cut at screen edges -->
         <Group id="frame" translation="[0, 0]" visible="false" clippingRect="[0, 0, 1920, 1080]">
-            <Group id="billboard" translation="[0, 0]" clippingRect="[0, 0, 1920, 480]">
-                <Rectangle width="1920" height="480" color="0x0A0A10" />
+            <!--
+              Poster is 16:9 (1920x1080). Even if the sim ignores scaleToZoom and
+              stretch-fills, landscape backdrops look correct. We clip to 520px.
+            -->
+            <Group id="billboard" translation="[0, 0]" clippingRect="[0, 0, 1920, 520]">
+                <Rectangle width="1920" height="520" color="0x0A0A10" />
                 <Poster
                     id="heroArt"
                     width="1920"
-                    height="480"
+                    height="1080"
+                    translation="[0, -220]"
                     loadDisplayMode="scaleToZoom"
                     uri=""
                 />
-                <!-- Tiny bottom fade only — title sits on it, no fat midline band -->
-                <Rectangle width="1920" height="140" translation="[0, 340]" color="0x07070B" opacity="0.5" />
+                <Rectangle width="1920" height="160" translation="[0, 360]" color="0x07070B" opacity="0.55" />
 
-                <Group id="heroCopy" translation="[96, 300]">
+                <Group id="heroCopy" translation="[96, 330]">
                     <Label id="heroTitle" width="1200" height="70" text="" color="0xFFFFFF" wrap="true" maxLines="2" lineSpacing="1">
                         <Font role="font" uri="pkg:/fonts/Outfit-Bold.ttf" size="40" />
                     </Label>
@@ -50,16 +53,23 @@
                 </Group>
             </Group>
 
+            <!-- Previous shelf peek (clipped). Only visible when scrolled; NEVER focused. -->
+            <Group id="peekStrip" translation="[96, 0]" visible="false" clippingRect="[0, 0, 1728, 140]">
+                <Label id="peekLabel" translation="[0, 8]" width="800" height="28" text="" color="0x777780">
+                    <Font role="font" uri="pkg:/fonts/Outfit-Medium.ttf" size="18" />
+                </Label>
+                <Group id="peekPosters" translation="[0, -100]" />
+            </Group>
+
             <!--
-              Row geometry is intentional:
-              expanded Y=500, rowH=300 → only ~1.9 shelves fit → bottom shelf is cut off.
-              collapsed Y=-80 with fixedFocus → previous shelf peeks clipped above; active sits fully on-screen.
+              Expanded: Y=540 → one full shelf + next cut off at bottom.
+              Collapsed: Y=150 → active shelf fully on-screen; peekStrip shows previous above.
             -->
             <ShelfRowList
                 id="rowList"
-                translation="[96, 500]"
+                translation="[96, 540]"
                 itemComponentName="PosterItem"
-                numRows="4"
+                numRows="3"
                 rowItemSize="[[150, 225]]"
                 rowItemSpacing="[[22, 0]]"
                 itemSize="[1728, 300]"
@@ -71,10 +81,10 @@
                 drawFocusFeedback="false"
             />
 
-            <Animation id="homeAnim" duration="0.18" easeFunction="outCubic" optional="true" repeat="false">
+            <Animation id="homeAnim" duration="0.16" easeFunction="outCubic" optional="true" repeat="false">
                 <Vector2DFieldInterpolator id="billboardMove" key="[0.0, 1.0]" keyValue="[[0, 0], [0, 0]]" fieldToInterp="billboard.translation" />
                 <FloatFieldInterpolator id="billboardFade" key="[0.0, 1.0]" keyValue="[1.0, 1.0]" fieldToInterp="billboard.opacity" />
-                <Vector2DFieldInterpolator id="rowsMove" key="[0.0, 1.0]" keyValue="[[96, 500], [96, 500]]" fieldToInterp="rowList.translation" />
+                <Vector2DFieldInterpolator id="rowsMove" key="[0.0, 1.0]" keyValue="[[96, 540], [96, 540]]" fieldToInterp="rowList.translation" />
             </Animation>
         </Group>
     </children>
