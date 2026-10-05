@@ -1,7 +1,7 @@
 ' Full-library grid: one scrolling MarkupGrid over a sliding window of Plex pages.
 '
 ' Only MAXWINDOWPAGES * PAGESIZE content nodes are ever live, so a 40,000 title
-' library costs the same memory as a 900 title one. Paging is driven by the
+' library costs the same memory as a ~1,000 title one. Paging is driven by the
 ' focused index: cross into the last rows and the next Plex page is appended,
 ' scroll back toward the top and the previous page is prepended again.
 '
