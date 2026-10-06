@@ -136,7 +136,7 @@ end sub
 sub refreshFocusVisual()
     fp = m.top.focusPercent
     if fp = invalid then fp = 0
-    setFocused(fp > 0.5 and m.top.rowListHasFocus <> false)
+    setFocused(fp > 0.5 and m.top.rowListHasFocus <> false and m.top.rowHasFocus <> false)
 end sub
 
 sub setFocused(focused as Boolean)

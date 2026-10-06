@@ -11,6 +11,9 @@
              selected poster even when the toolbar or sidebar holds focus -->
         <field id="gridHasFocus" type="boolean" value="true" onChange="onOwnerFocusChange" />
         <field id="rowListHasFocus" type="boolean" value="true" onChange="onOwnerFocusChange" />
+        <!-- RowList keeps focusPercent=1 on every row's remembered item, so
+             only the row that actually holds focus may light its ring -->
+        <field id="rowHasFocus" type="boolean" value="true" onChange="onOwnerFocusChange" />
     </interface>
 
     <script type="text/brightscript" uri="PosterItem.brs" />

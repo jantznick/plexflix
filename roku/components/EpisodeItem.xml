@@ -8,6 +8,9 @@
         <!-- Set by the owning RowList; without it the ring stays lit on the
              selected episode even when Play or the sidebar holds focus -->
         <field id="rowListHasFocus" type="boolean" value="true" onChange="onOwnerFocusChange" />
+        <!-- RowList keeps focusPercent=1 on every row's remembered item, so
+             only the row that actually holds focus may light its ring -->
+        <field id="rowHasFocus" type="boolean" value="true" onChange="onOwnerFocusChange" />
     </interface>
 
     <script type="text/brightscript" uri="EpisodeItem.brs" />

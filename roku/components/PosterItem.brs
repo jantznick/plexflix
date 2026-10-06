@@ -236,6 +236,7 @@ function ownerHasFocus() as Boolean
     ' moved on to a toolbar or the sidebar, so the ring has to follow the owner
     if m.top.gridHasFocus = false then return false
     if m.top.rowListHasFocus = false then return false
+    if m.top.rowHasFocus = false then return false
     return true
 end function
 
