@@ -15,6 +15,7 @@ sub init()
     m.posLabel = m.top.findNode("posLabel")
     m.grid = m.top.findNode("grid")
     m.spinner = m.top.findNode("spinner")
+    PinSpinner(m.spinner)
     m.emptyLabel = m.top.findNode("emptyLabel")
     m.alphaRail = m.top.findNode("alphaRail")
 
@@ -501,6 +502,7 @@ sub setSpinner(on as Boolean)
     if on then
         m.spinner.visible = true
         m.spinner.control = "start"
+        CenterSpinner(m.spinner, 960)
     else
         m.spinner.control = "stop"
         m.spinner.visible = false

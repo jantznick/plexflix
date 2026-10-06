@@ -2,6 +2,7 @@ sub init()
     m.video = m.top.findNode("video")
     m.statusLabel = m.top.findNode("statusLabel")
     m.spinner = m.top.findNode("spinner")
+    PinSpinner(m.spinner)
 
     m.controls = m.top.findNode("controls")
     m.scrim = m.top.findNode("scrim")
@@ -32,6 +33,7 @@ sub init()
     m.castModalBio = m.top.findNode("castModalBio")
     m.castModalKnownFor = m.top.findNode("castModalKnownFor")
     m.castModalSpinner = m.top.findNode("castModalSpinner")
+    PinSpinner(m.castModalSpinner)
 
     m.picker = m.top.findNode("picker")
     m.pickerTitle = m.top.findNode("pickerTitle")
@@ -750,6 +752,8 @@ sub openCastModal()
     m.castModal.visible = true
     m.castModalSpinner.visible = true
     m.castModalSpinner.control = "start"
+    ' 960 is the modal panel's own centre as well as the screen's
+    CenterSpinner(m.castModalSpinner, 960)
 
     m.personTask = createObject("roSGNode", "PlexTask")
     m.personTask.config = m.top.config
@@ -1455,6 +1459,8 @@ sub setStatus(message as String)
     m.statusLabel.text = message
     m.spinner.visible = true
     m.spinner.control = "start"
+    ' Re-centred now it is on screen and has a measurable size
+    CenterSpinner(m.spinner, 960)
 end sub
 
 sub clearStatus()
