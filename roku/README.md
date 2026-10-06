@@ -198,30 +198,43 @@ exit instead of being left running.
 ## Multiview
 
 A Roku decodes one video at a time, so the tiling happens on the home server:
-`multiview/` (repo root) runs ffmpeg to combine 2–4 sports feeds into a
-single 1080p HLS stream, and the channel plays that stream. Each game keeps its
-own audio track, and the channel draws the focus ring, labels and status on top
-using the tile rectangles the server reports.
+`multiview/` (repo root) combines 2–4 sports feeds into a single 1080p HLS
+stream, and the channel plays that stream. Each game keeps its own audio
+track, and the channel draws the focus ring, labels and status on top using
+the tile rectangles the server reports.
+
+On the server, every feed is decoded by its own ffmpeg into raw 720p frames,
+and a GStreamer pipeline tiles whatever frames it has, encodes, and writes
+the HLS output. The feeds are fetched the way roku-feed's proxy fetches them
+(same referer, cookies and headers, straight from the CDN, PNG-wrapped GOAT
+segments unwrapped), not through it: the proxy is only asked for manifests
+that need its Chromium session (`d=0` payloads) and for anything a direct
+fetch fails on. `GET /healthz` counts how fetches went, so you can see how
+much still lands on the proxy.
 
 ### Server (home server, Docker Compose)
 
 ```bash
 cd multiview
-# pick ENCODER (libx264 / h264_qsv / h264_vaapi / h264_nvenc) and uncomment
-# the matching GPU block in docker-compose.yml first
+# pick ENCODER (x264 / va / qsv / nvenc) and uncomment the matching GPU block
+# in docker-compose.yml first
 docker compose up -d --build
 docker compose logs -f
+curl http://localhost:8095/healthz
 ```
 
 Then set `multiviewUrl` in `PlexConfig.brs` to `http://<server-ip>:8095` and
 republish. Leaving it empty hides multiview entirely.
 
-`libx264` works anywhere but is heavy at 1080p; an Intel iGPU (`h264_qsv` or
-`h264_vaapi` with `/dev/dri` passed through) or NVIDIA (`h264_nvenc`) is the
-comfortable option. Small tiles pull a lower rendition of each feed when its
-master playlist offers one, which keeps decoding cheap too.
+`x264` works anywhere but costs about a core at 1080p30; with an Intel or AMD
+GPU (`va`, or `qsv` on Intel, with `/dev/dri` passed through) or NVIDIA
+(`nvenc`) encoding is nearly free. A hardware encoder that isn't usable falls
+back to x264, and the log says so at startup. Each feed pulls the rendition
+closest to 720p from its master playlist (`VARIANT_HEIGHT`), and nothing else.
 
-Tests run without Docker or network (they need `ffmpeg` on the path):
+Tests run without Docker or network (they need `ffmpeg`, GStreamer and
+`python3-gi`; on Ubuntu `apt install ffmpeg python3-gi gir1.2-gstreamer-1.0
+gstreamer1.0-plugins-{base,good,bad,ugly}`):
 
 ```bash
 cd multiview && python3 -m unittest discover -s tests
@@ -243,18 +256,18 @@ cd multiview && python3 -m unittest discover -s tests
 
 ### When a feed hiccups
 
-The server checks every feed separately from ffmpeg (does its playlist load,
-and is it still advancing?). When ffmpeg dies or stops producing, the feeds
-that fail that check are replaced by a "Reconnecting…" slate and ffmpeg is
-restarted with the rest. Feeds that are down keep being checked, and come
-back after staying healthy for 20 seconds.
+Only that game's tile notices. Its last frame stays up for 3 seconds, then it
+shows a "Reconnecting…" slate; after 6 seconds without a picture its ffmpeg
+is replaced, retrying after 1, 2, 4, 8 and then every 15 seconds, and the
+picture comes back as soon as frames do. The other tiles, the audio and the
+output stream carry on throughout.
 
-Each restart is written into the same playlists as a discontinuity, so the
-Roku rebuffers for a few seconds instead of erroring out. The cost of running
-one ffmpeg is that a restart (a feed dropping, recovering, or a layout change)
-briefly stalls every tile, not just the one that changed. Layout changes
-take around 10 seconds to appear, because they also have to pass through the
-player's live buffer; the overlay waits for them.
+Layout and order changes are applied to the running mosaic on its next frame.
+They still take around 6–8 seconds to show on the TV, since they pass
+through the player's live buffer; the overlay waits for them. The pipeline
+itself is only restarted if it fails, and that restart is written into the
+same playlists as a discontinuity, so the Roku rebuffers briefly instead of
+erroring out.
 
 ## Remote / focus
 

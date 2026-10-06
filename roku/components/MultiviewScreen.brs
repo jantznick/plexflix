@@ -333,10 +333,10 @@ sub onUpdated()
     hideOverlay()
     m.tileLayer.visible = false
     setStatus(m.switchMessage)
-    ' The server restarts in a few seconds, then the new arrangement still has
-    ' to travel through the player's live buffer before it is on screen
+    ' The server applies it on its next frame, but the new arrangement still
+    ' has to travel through the player's live buffer before it is on screen
     m.settleTimer.control = "stop"
-    m.settleTimer.duration = 12
+    m.settleTimer.duration = 7
     m.settleTimer.control = "start"
 end sub
 
