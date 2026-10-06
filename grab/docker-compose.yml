@@ -1,0 +1,41 @@
+services:
+  grab:
+    build:
+      context: ..
+      dockerfile: grab/Dockerfile
+    container_name: plexflix-grab
+    restart: unless-stopped
+    ports:
+      - "8096:8096"
+    environment:
+      PORT: "8096"
+      # Optional shared secret; set the same value as grabToken in PlexConfig.brs later
+      GRAB_TOKEN: ""
+
+      # NZBFinder (Newznab). API key from your NZBFinder account.
+      NZBFINDER_URL: "https://nzbfinder.ws"
+      NZBFINDER_API_KEY: ""
+
+      # NZBGet JSON-RPC as reachable FROM this container.
+      # In a shared docker network that is often http://nzbget:6789
+      NZBGET_URL: "http://nzbget:6789"
+      NZBGET_USERNAME: ""
+      NZBGET_PASSWORD: ""
+      # Force priority (900) jumps the queue and downloads even if NZBGet is paused.
+      NZBGET_PRIORITY: "900"
+      NZBGET_CATEGORY_MOVIE: "plexflix-movie"
+      NZBGET_CATEGORY_TV: "plexflix-tv"
+
+      # Release filters for the fast path
+      MAX_SIZE_BYTES: "5368709120"   # 5 GiB
+      PREFER_RESOLUTION: "1080p"
+
+      # Plex, as reachable FROM this container
+      PLEX_URL: "http://plex:32400"
+      PLEX_TOKEN: ""
+      PLEX_MOVIE_SECTION_ID: ""
+      PLEX_TV_SECTION_ID: ""
+
+      # Sonarr (used later for "queue next N episodes"; unused for movie MVP)
+      SONARR_URL: "http://sonarr:8989"
+      SONARR_API_KEY: ""
