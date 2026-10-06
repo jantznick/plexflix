@@ -1,0 +1,36 @@
+services:
+  multiview:
+    build:
+      context: ..
+      dockerfile: multiview/Dockerfile
+    container_name: plexflix-multiview
+    restart: unless-stopped
+    ports:
+      - "8095:8095"
+    environment:
+      # x264 works anywhere but is CPU-heavy at 1080p. With an Intel or AMD GPU
+      # use va (or qsv on Intel) and the devices block below; with NVIDIA,
+      # nvenc and the deploy block below. Unusable hardware falls back to x264.
+      ENCODER: x264
+      VIDEO_BITRATE: 6M
+      FPS: "30"
+      # Which rendition each feed is decoded from (closest at or above this)
+      VARIANT_HEIGHT: "720"
+      MAX_SESSIONS: "2"
+      IDLE_TIMEOUT: "90"
+      # Optional shared secret; set the same value as multiviewToken in PlexConfig.brs
+      MULTIVIEW_TOKEN: ""
+    # Segments churn constantly, so keep them in RAM rather than on disk
+    tmpfs:
+      - /data:size=1g
+    # Intel / AMD hardware encoding:
+    # devices:
+    #   - /dev/dri:/dev/dri
+    # NVIDIA (needs nvidia-container-toolkit on the host):
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: 1
+    #           capabilities: [gpu, video]

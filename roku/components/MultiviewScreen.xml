@@ -1,0 +1,82 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!-- Several live games at once. The tiling happens on the home server (the
+     Roku can only decode one stream), so this plays a single HLS stream and
+     draws focus, labels and status over the tile rectangles the server
+     reports. Each tile has its own audio rendition; sound follows focus. -->
+<component name="MultiviewScreen" extends="Group">
+    <interface>
+        <field id="config" type="assocarray" />
+        <!-- { streams: [{ url, title, league, streamFormat, hdPosterUrl }], layout } -->
+        <field id="content" type="assocarray" onChange="onContentSet" />
+        <field id="closed" type="boolean" alwaysNotify="true" />
+        <field id="close" type="boolean" alwaysNotify="true" onChange="onCloseRequested" />
+        <!-- One game full screen, through the regular player; this screen
+             stays underneath with its session alive -->
+        <field id="playRequested" type="assocarray" />
+        <field id="resume" type="boolean" alwaysNotify="true" onChange="onResume" />
+        <field id="notice" type="string" alwaysNotify="true" onChange="onNotice" />
+        <!-- Read by MainScene on close, so the teardown request outlives us -->
+        <field id="sessionId" type="string" />
+    </interface>
+
+    <script type="text/brightscript" uri="MultiviewScreen.brs" />
+    <script type="text/brightscript" uri="pkg:/source/Fonts.brs" />
+    <script type="text/brightscript" uri="pkg:/source/Spinner.brs" />
+
+    <children>
+        <Timer id="pollTimer" duration="2" repeat="true" />
+        <Timer id="hideTimer" duration="5" repeat="false" />
+        <Timer id="settleTimer" duration="8" repeat="false" />
+        <Timer id="retryTimer" duration="4" repeat="false" />
+        <Timer id="stallTimer" duration="30" repeat="false" />
+
+        <Rectangle width="1920" height="1080" color="0x000000" />
+
+        <!-- Same reasons as the player: our overlay owns the remote -->
+        <Video
+            id="video"
+            width="1920"
+            height="1080"
+            enableUI="false"
+            focusable="false"
+            notificationInterval="1"
+        />
+
+        <Group id="tileLayer" />
+
+        <Group id="hintBar" visible="false">
+            <Rectangle width="1920" height="64" color="0x000000" opacity="0.72" />
+            <Rectangle width="1920" height="3" translation="[0, 61]" color="0xE50914" />
+            <Label id="layoutLabel" translation="[48, 0]" width="420" height="64" vertAlign="center" color="0xFFFFFF">
+                <Font role="font" uri="pkg:/fonts/Outfit-Bold.ttf" size="28" />
+            </Label>
+            <Label
+                id="hintLabel"
+                translation="[420, 0]"
+                width="1452"
+                height="64"
+                horizAlign="right"
+                vertAlign="center"
+                color="0xC8C8D0"
+                text="Arrows: pick game (sound follows)   ·   OK: full screen   ·   *: layout   ·   FF: make main   ·   Back: exit"
+            >
+                <Font role="font" uri="pkg:/fonts/Outfit-Medium.ttf" size="22" />
+            </Label>
+        </Group>
+
+        <Label
+            id="statusLabel"
+            width="1920"
+            height="200"
+            translation="[0, 640]"
+            horizAlign="center"
+            wrap="true"
+            maxLines="5"
+            color="0xFFFFFF"
+            visible="false"
+        >
+            <Font role="font" uri="pkg:/fonts/Outfit-Medium.ttf" size="30" />
+        </Label>
+        <BusySpinner id="spinner" translation="[912, 520]" uri="pkg:/images/spinner.png" visible="false" />
+    </children>
+</component>

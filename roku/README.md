@@ -46,6 +46,8 @@ This is intentionally a **design/UX shell** on top of existing Plex data. Creden
 - **Progress is written back to Plex**, so resume points and Continue Watching
   stay in sync with every other Plex client
 - Live sports from a configurable JSON feed URL (event detail + stream picker)
+- **Multiview**: 2–4 live games at once in Grid, Spotlight or Picture in picture,
+  tiled on your home server (see [Multiview](#multiview))
 - Optional **TMDB** enrichment for cast pages and Discover titles missing from your library (`tmdbApiKey` in config)
 - Discover titles not in Plex open a **Not in your library** detail view (no Play) with synopsis, similar local picks, and Watchlist actions
 
@@ -58,6 +60,7 @@ baseUrl: "http://192.168.x.x:32400"
 token: "YOUR_PLEX_TOKEN"
 sportsFeedUrl: "https://roku-hockey.s3.us-west-004.backblazeb2.com/secretfeedfilename.json"
 tmdbApiKey: "YOUR_TMDB_API_KEY"
+multiviewUrl: "http://192.168.x.x:8095"   ' optional, see Multiview
 ```
 
 Optional keys:
@@ -220,6 +223,94 @@ going away can be collected before it finishes.
 
 Each playback names its own transcode session so the server side is torn down on
 exit instead of being left running.
+
+## Multiview
+
+A Roku decodes one video at a time, so the tiling happens on the home server:
+`multiview/` (repo root) combines 2–4 sports feeds into a single 1080p HLS
+stream, and the channel plays that stream. Each game keeps its own audio
+track, and the channel draws the focus ring, labels and status on top using
+the tile rectangles the server reports.
+
+On the server, every feed is decoded by its own ffmpeg into raw 720p frames,
+and a GStreamer pipeline tiles whatever frames it has, encodes, and writes
+the HLS output. The feeds are fetched the way roku-feed's proxy fetches them
+(same referer, cookies and headers, straight from the CDN, PNG-wrapped GOAT
+segments unwrapped), not through it: the proxy is only asked for manifests
+that need its Chromium session (`d=0` payloads) and for anything a direct
+fetch fails on. `GET /healthz` counts how fetches went, so you can see how
+much still lands on the proxy.
+
+### Server (home server, Docker Compose)
+
+```bash
+cd multiview
+# pick ENCODER (x264 / va / qsv / nvenc) and uncomment the matching GPU block
+# in docker-compose.yml first
+docker compose up -d --build
+docker compose logs -f
+curl http://localhost:8095/healthz
+```
+
+Then set `multiviewUrl` in `PlexConfig.brs` to `http://<server-ip>:8095` and
+republish. Leaving it empty hides multiview entirely.
+
+`x264` works anywhere but costs about a core at 1080p30; with an Intel or AMD
+GPU (`va`, or `qsv` on Intel, with `/dev/dri` passed through) or NVIDIA
+(`nvenc`) encoding is nearly free. A hardware encoder that isn't usable falls
+back to x264, and the log says so at startup. Each feed pulls the rendition
+closest to 720p from its master playlist (`VARIANT_HEIGHT`), and nothing else.
+
+To try it on a Mac first, without Docker:
+
+```bash
+brew install ffmpeg gstreamer pygobject3
+cd multiview
+ENCODER=vt "$(brew --prefix)/bin/python3" -m multiview.server
+```
+
+`vt` is the Mac's built-in hardware encoder (VideoToolbox). Use Homebrew's
+`python3`, since that's the one `pygobject3` is installed for. Segments go to
+the system temp directory. Point `multiviewUrl` at the Mac's IP
+(`ipconfig getifaddr en0`), or play
+`http://localhost:8095/sessions/<id>/master.m3u8` in Safari.
+
+Tests run without Docker or network (they need `ffmpeg`, GStreamer and
+`python3-gi`; on Ubuntu `apt install ffmpeg python3-gi gir1.2-gstreamer-1.0
+gstreamer1.0-plugins-{base,good,bad,ugly}`):
+
+```bash
+cd multiview && python3 -m unittest discover -s tests
+```
+
+### Using it
+
+- On the **Live Sports guide**, **\*** adds or removes the highlighted game
+  (its first stream); the panel top right lists the picks, and a picked row
+  says **Multiview** in its streams column
+- On a **game page**, **\*** adds the highlighted stream, for when an alternate
+  is the one that works
+- **Play** (guide or game page) starts multiview once 2–4 games are picked
+- In multiview: **arrows** move between games and **the sound follows the
+  highlight** (red bar under the tile); **OK** opens that game full screen in
+  the normal player, and Back returns to the mosaic; **\*** cycles
+  Grid → Spotlight → Picture in picture; **Fast forward** (or Rewind) moves
+  the highlighted game into the main spot; **Back** exits
+
+### When a feed hiccups
+
+Only that game's tile notices. Its last frame stays up for 3 seconds, then it
+shows a "Reconnecting…" slate; after 6 seconds without a picture its ffmpeg
+is replaced, retrying after 1, 2, 4, 8 and then every 15 seconds, and the
+picture comes back as soon as frames do. The other tiles, the audio and the
+output stream carry on throughout.
+
+Layout and order changes are applied to the running mosaic on its next frame.
+They still take around 6–8 seconds to show on the TV, since they pass
+through the player's live buffer; the overlay waits for them. The pipeline
+itself is only restarted if it fails, and that restart is written into the
+same playlists as a discontinuity, so the Roku rebuffers briefly instead of
+erroring out.
 
 ## Remote / focus
 

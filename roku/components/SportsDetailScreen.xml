@@ -9,6 +9,11 @@
              the stream list without focus, so no row is lit and OK does nothing -->
         <field id="refocus" type="boolean" alwaysNotify="true" onChange="onRefocus" />
         <field id="streamError" type="string" alwaysNotify="true" onChange="onStreamError" />
+        <!-- Multiview picks belong to the guide; these hand them over via MainScene -->
+        <field id="multiviewEnabled" type="boolean" onChange="onMultiviewEnabled" />
+        <field id="multiviewToggle" type="assocarray" alwaysNotify="true" />
+        <field id="multiviewLaunch" type="boolean" alwaysNotify="true" />
+        <field id="multiviewNote" type="string" alwaysNotify="true" onChange="onMultiviewNote" />
     </interface>
 
     <script type="text/brightscript" uri="SportsDetailScreen.brs" />
