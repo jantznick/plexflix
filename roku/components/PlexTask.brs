@@ -3668,12 +3668,12 @@ function fetchRecordOptions(cfg as Object, item as Object) as Object
     for each tpl in nodeList(mc.SubscriptionTemplate)
         for each subNode in nodeList(tpl.MediaSubscription)
             subType = intOrZero(subNode.type)
-            prefs = ""
+            prefsMap = {}
             for each setting in nodeList(subNode.Setting)
                 prefId = safeToStr(setting.id)
                 value = safeToStr(setting.value)
                 if value = "" then value = safeToStr(setting.default)
-                if prefId <> "" then prefs = prefs + "&prefs%5B" + prefId + "%5D=" + requestEncode(value)
+                if prefId <> "" then prefsMap[prefId] = value
             end for
             options.push({
                 label: recordOptionLabel(subType, kind),
@@ -3681,7 +3681,8 @@ function fetchRecordOptions(cfg as Object, item as Object) as Object
                 parameters: bracketEncode(safeToStr(subNode.parameters)),
                 librarySectionId: safeToStr(subNode.targetLibrarySectionID),
                 locationId: safeToStr(subNode.targetSectionLocationID),
-                prefs: prefs
+                prefsMap: prefsMap,
+                settings: ruleSettings(subNode)
             })
         end for
     end for
@@ -3708,7 +3709,13 @@ function createRecording(cfg as Object, item as Object) as Object
     query = query + "type=" + safeToStr(item.type)
     if safeToStr(item.librarySectionId) <> "" then query = query + "&targetLibrarySectionID=" + safeToStr(item.librarySectionId)
     if safeToStr(item.locationId) <> "" then query = query + "&targetSectionLocationID=" + safeToStr(item.locationId)
-    query = query + "&includeGrabs=1" + safeToStr(item.prefs)
+    query = query + "&includeGrabs=1"
+    prefs = {}
+    if item.prefsMap <> invalid then prefs.Append(item.prefsMap)
+    if item.overrides <> invalid then prefs.Append(item.overrides)
+    for each prefId in prefs
+        query = query + "&prefs%5B" + prefId + "%5D=" + requestEncode(safeToStr(prefs[prefId]))
+    end for
     print "[plexflix:dvr] create subscription "; query
     return plexPost(cfg, "/media/subscriptions?" + query, "")
 end function

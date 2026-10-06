@@ -1171,7 +1171,7 @@ sub openRuleEditor(rule as Object)
     end for
     subParts = [rule.typeLabel]
     if valueOr(rule.library, "") <> "" then subParts.push("Saves to " + rule.library)
-    m.ruleEdit = { rule: rule, values: values, loading: false, picking: -1, title: rule.title, subText: joinStrings(subParts, "  ·  ") }
+    m.ruleEdit = { mode: "edit", rule: rule, values: values, loading: false, picking: -1, title: rule.title, subText: joinStrings(subParts, "  ·  ") }
     if nodeListOf(rule.settings).count() = 0 and valueOr(rule.guid, "") <> "" then
         m.ruleEdit.loading = true
         m.ruleTask = createObject("roSGNode", "PlexTask")
@@ -1182,6 +1182,18 @@ sub openRuleEditor(rule as Object)
         m.ruleTask.control = "RUN"
     end if
     openActionMenu(rule.title, joinStrings(subParts, "  ·  "), ruleActions())
+end sub
+
+' Recording a show starts from the template's defaults so the full rule
+' options can be set before Plex creates it
+sub openRecordEditor(option as Object, title as String)
+    rule = { id: "", title: title, type: option.type, typeLabel: option.label, settings: nodeListOf(option.settings), guid: "" }
+    values = {}
+    for each setting in rule.settings
+        values[setting.id] = setting.value
+    end for
+    m.ruleEdit = { mode: "create", option: option, rule: rule, values: values, loading: false, picking: -1, title: title, subText: option.label }
+    openActionMenu(title, option.label, ruleActions())
 end sub
 
 sub onRuleSettings()
@@ -1230,6 +1242,11 @@ function ruleActions() as Object
         actions.push({ label: setting.label + ":   " + choice.label + "   ›", act: "pickSetting", data: i })
     end for
     if m.ruleEdit.loading = true then actions.push({ label: "Loading settings…", act: "none" })
+    if m.ruleEdit.mode = "create" then
+        actions.push({ label: "Record", act: "createRule" })
+        actions.push({ label: "Cancel", act: "close" })
+        return actions
+    end if
     if settings.count() > 0 then actions.push({ label: "Save changes", act: "saveRule" })
     actions.push({ label: "Delete rule", act: "confirmDelete", data: { subscriptionId: m.ruleEdit.rule.id, title: m.ruleEdit.rule.title, done: "Rule deleted" } })
     actions.push({ label: "Close", act: "close" })
@@ -1561,8 +1578,15 @@ sub onMenuSelected()
         closeActionMenu()
         watchChannel(focusedChannel(), focusedProgram())
     else if action.act = "record" then
+        title = m.menuTitle.text
         closeActionMenu()
-        runDvrCommand("recordCreate", action.data, "Recording scheduled")
+        openRecordEditor(action.data, title)
+    else if action.act = "createRule" then
+        payload = {}
+        payload.Append(m.ruleEdit.option)
+        payload.overrides = m.ruleEdit.values
+        closeActionMenu()
+        runDvrCommand("recordCreate", payload, "Recording scheduled")
     else if action.act = "cancel" then
         closeActionMenu()
         runDvrCommand("recordCancel", action.data, valueOr(action.data.done, "Done"))
