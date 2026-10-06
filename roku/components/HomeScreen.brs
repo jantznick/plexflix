@@ -54,10 +54,10 @@ sub init()
     m.focusPoll.observeField("fire", "onFocusPoll")
     m.focusPoll.control = "start"
 
-    ' Infinite scroll: near the last visible rows, fetch another Discover shelf
+    ' Infinite scroll: start fetching well before the end — Discover is slow
     m.loadingMore = false
     m.moreTask = invalid
-    m.loadMoreThreshold = 3
+    m.loadMoreThreshold = 5
 
     m.top.observeField("config", "onConfigReady")
     m.top.setFocus(true)
@@ -178,9 +178,9 @@ sub maybeLoadMore(rowIndex as Integer)
     total = content.getChildCount()
     if total <= 0 then return
 
-    ' Load when focus is within the last few rows (matches numRows viewport)
+    ' Load when focus is within the last N rows (Discover latency needs headroom)
     threshold = m.loadMoreThreshold
-    if threshold < 1 then threshold = 3
+    if threshold < 1 then threshold = 5
     if rowIndex < total - threshold then return
 
     titles = []
