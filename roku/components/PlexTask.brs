@@ -2913,9 +2913,9 @@ function liveSessionFromTune(cfg as Object, result as Object) as Dynamic
     if mediaUuid = "" and Instr(1, body, "MediaGrabOperation") > 0 then mediaUuid = scrapeAttr(body, "uuid")
     if mediaUuid = "" then return invalid
     print "[plexflix:livetv] tuned session "; mediaUuid; " subscription "; subId
-    ' Plex keys a live transcode by the live session uuid whatever session=
-    ' says, so naming it anything else leaves the master pointing nowhere
-    transcodeSession = mediaUuid
+    ' session= must not be the uuid (400), yet Plex runs the live transcode
+    ' under the uuid, so the master's media playlist path is rewritten to it
+    transcodeSession = "plexflix-live-" + mediaUuid
     masterUrl = buildStreamUrl(cfg, { key: "/livetv/sessions/" + mediaUuid, session: transcodeSession }).url
     ' start.m3u8 starts the transcode; the player gets the media playlist it
     ' points at, since asking for start.m3u8 again restarts the session
@@ -2923,7 +2923,7 @@ function liveSessionFromTune(cfg as Object, result as Object) as Dynamic
         probe = probePlaylist(cfg, masterUrl)
         print "[plexflix:livetv] probe "; attemptNo; " HTTP "; probe.code; " "; Left(masterUrl, 140)
         if probe.ok then
-            playUrl = transcodeVariant(cfg, masterUrl, probe.body)
+            playUrl = transcodeVariant(cfg, masterUrl, probe.body, transcodeSession, mediaUuid)
             if playUrl <> "" then
                 return { ok: true, url: playUrl, session: transcodeSession, subscriptionId: subId, liveSession: mediaUuid }
             end if
@@ -2966,26 +2966,30 @@ end function
 
 ' Media playlist behind a transcoder master, once it lists segments; empty
 ' when the transcode session never comes up
-function transcodeVariant(cfg as Object, masterUrl as String, body as String) as String
+function transcodeVariant(cfg as Object, masterUrl as String, body as String, sessionName as String, liveUuid as String) as String
     variant = playlistVariantUrl(cfg, masterUrl, body)
     if variant = "" then
         if Instr(1, body, "#EXTINF") > 0 then return masterUrl
         return ""
     end if
-    print "[plexflix:livetv] variant "; Left(variant, 160)
+    variants = [variant]
+    if sessionName <> liveUuid and Instr(1, variant, "/session/" + sessionName + "/") > 0 then
+        variants.unshift(variant.Replace("/session/" + sessionName + "/", "/session/" + liveUuid + "/"))
+    end if
     vprobe = { ok: false, code: 0, body: "" }
     tries = 0
     while tries < 12
         tries = tries + 1
-        vprobe = probePlaylist(cfg, variant)
-        if vprobe.ok and Instr(1, vprobe.body, "#EXTINF") > 0 then
-            logFirstSegment(cfg, variant, vprobe.body)
-            return variant
-        end if
-        if vprobe.code = 404 and tries >= 4 then exit while
+        for each candidate in variants
+            vprobe = probePlaylist(cfg, candidate)
+            print "[plexflix:livetv] variant try "; tries; " HTTP "; vprobe.code; " "; Left(candidate, 150)
+            if vprobe.ok and Instr(1, vprobe.body, "#EXTINF") > 0 then
+                logFirstSegment(cfg, candidate, vprobe.body)
+                return candidate
+            end if
+        end for
         sleep(300)
     end while
-    print "[plexflix:livetv] variant HTTP "; vprobe.code; " after "; tries; " tries"
     return ""
 end function
 
