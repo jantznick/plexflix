@@ -49,6 +49,8 @@ sub exec()
         m.top.response = fetchRuleSettings(cfg, m.top.item)
     else if action = "ruleUpdate" then
         m.top.response = updateRecordingRule(cfg, m.top.item)
+    else if action = "releaseLive" then
+        m.top.response = releaseLiveSession(cfg, m.top.item)
     else if action = "tuneLiveChannel" then
         m.top.response = tuneLiveChannel(cfg, m.top.item)
     else if action = "sportsFeed" then
@@ -2872,6 +2874,7 @@ function tuneLiveChannel(cfg as Object, item as Object) as Object
     end if
     if dvrId = "" then return { ok: false, error: "No DVR available to tune" }
     if channelId = "" then return { ok: false, error: "Missing channel id" }
+    if item.releaseFirst <> invalid then releaseLiveSession(cfg, item.releaseFirst)
 
     ' Which id /tune accepts depends on the tuner (guide number, EPG channel
     ' key, lineup id or the device's own id), so try each until one tunes
@@ -2883,7 +2886,6 @@ function tuneLiveChannel(cfg as Object, item as Object) as Object
     end if
     candidates.push(safeToStr(item.tuneAlt))
     tried = {}
-    result = invalid
     lastError = "Could not tune channel"
     for each candidate in candidates
         if candidate <> "" and not tried.DoesExist(candidate) then
@@ -2891,55 +2893,65 @@ function tuneLiveChannel(cfg as Object, item as Object) as Object
             attempt = plexPost(cfg, "/livetv/dvrs/" + dvrId + "/channels/" + requestEncode(candidate) + "/tune", "")
             failure = tuneFailure(attempt)
             if failure = "" then
-                result = attempt
-                channelId = candidate
-                exit for
+                print "[plexflix:livetv] tune "; candidate; " response: "; Left(safeToStr(attempt.body), 600)
+                live = liveSessionFromTune(cfg, attempt)
+                if live <> invalid then
+                    live.tunedAs = candidate
+                    return live
+                end if
+                ' A subscription with no grab means no free tuner; don't leave it holding one
+                releaseLiveSession(cfg, { subscriptionId: tunedSubscriptionId(attempt.json) })
+                failure = "No free tuner — another preview or recording is using it"
             end if
             print "[plexflix:livetv] tune "; candidate; " failed: "; failure
             lastError = failure
         end if
     end for
-    if result = invalid then return { ok: false, error: lastError }
+    return { ok: false, error: lastError }
+end function
 
+function tunedSubscriptionId(json as Dynamic) as String
+    if json = invalid or json.MediaContainer = invalid then return ""
+    for each subNode in nodeList(json.MediaContainer.MediaSubscription)
+        id = subscriptionId(subNode)
+        if id <> "" then return id
+    end for
+    return ""
+end function
+
+' The session is the tuned airing's Media uuid (MediaSubscription >
+' MediaGrabOperation > Metadata/Video > Media); Plex plays it through the
+' universal transcoder at /livetv/sessions/<uuid>
+function liveSessionFromTune(cfg as Object, result as Object) as Dynamic
     body = safeToStr(result.body)
-    print "[plexflix:livetv] tune "; channelId; " response: "; Left(body, 1500)
-
-    ' The session is the tuned airing's Media uuid, usually at
-    ' MediaSubscription > MediaGrabOperation > Video > Media; Plex plays it via
-    ' the universal transcoder at /livetv/sessions/<uuid>
+    subId = tunedSubscriptionId(result.json)
     mediaUuid = deepFindMediaUuid(result.json, 0)
-    if mediaUuid = "" then mediaUuid = scrapeAttr(body, "uuid")
-    if mediaUuid <> "" then
-        print "[plexflix:livetv] tuned session "; mediaUuid
-        return buildStreamUrl(cfg, { key: "/livetv/sessions/" + mediaUuid, session: "plexflix-live-" + mediaUuid })
+    if mediaUuid = "" then
+        sessionPath = deepFindString(result.json, "/livetv/sessions/", 0)
+        if sessionPath <> "" then mediaUuid = extractLiveSessionId(invalid, Mid(sessionPath, Instr(1, sessionPath, "/livetv/sessions/")))
     end if
+    if mediaUuid = "" and Instr(1, body, "MediaGrabOperation") > 0 then mediaUuid = scrapeAttr(body, "uuid")
+    if mediaUuid = "" then return invalid
+    print "[plexflix:livetv] tuned session "; mediaUuid; " subscription "; subId
+    transcodeSession = "plexflix-live-" + mediaUuid
+    stream = buildStreamUrl(cfg, { key: "/livetv/sessions/" + mediaUuid, session: transcodeSession })
+    stream.subscriptionId = subId
+    stream.liveSession = mediaUuid
+    return stream
+end function
 
-    sessionPath = deepFindString(result.json, "/livetv/sessions/", 0)
-    if sessionPath <> "" then
-        cut = Instr(1, sessionPath, "/livetv/sessions/")
-        sessionPath = Mid(sessionPath, cut)
-        if Instr(1, sessionPath, ".m3u8") > 0 then
-            sep = "?"
-            if Instr(1, sessionPath, "?") > 0 then sep = "&"
-            return { ok: true, url: cfg.baseUrl + sessionPath + sep + "X-Plex-Token=" + cfg.token }
-        end if
+' Ends a live preview/watch: stops its transcode and drops the temporary
+' "This Episode" subscription so the tuner is freed right away
+function releaseLiveSession(cfg as Object, item as Object) as Object
+    if item = invalid then return { ok: true }
+    session = safeToStr(item.session)
+    if session <> "" then stopTranscode(cfg, { session: session })
+    subId = safeToStr(item.subscriptionId)
+    if subId <> "" then
+        print "[plexflix:livetv] release subscription "; subId
+        plexCommand(cfg, "/media/subscriptions/" + requestEncode(subId), "DELETE")
     end if
-
-    sessionId = extractLiveSessionId(result.json, body)
-    if sessionId = "" and sessionPath <> "" then sessionId = extractLiveSessionId(invalid, sessionPath)
-    if sessionId = "" then
-        metaKey = deepFindMetadataKey(result.json, 0)
-        if metaKey <> "" then
-            print "[plexflix:livetv] no session path; transcoding "; metaKey
-            return buildStreamUrl(cfg, { key: metaKey, session: "plexflix-live-" + safeToStr(CreateObject("roDateTime").AsSeconds()) })
-        end if
-        return { ok: false, error: "Tuned, but no Live TV session id was returned" }
-    end if
-
-    consumerId = safeToStr(cfg.clientId)
-    if consumerId = "" then consumerId = "plexflix-roku"
-    url = cfg.baseUrl + "/livetv/sessions/" + sessionId + "/" + requestEncode(consumerId) + "/index.m3u8?X-Plex-Token=" + cfg.token
-    return { ok: true, url: url, sessionId: sessionId }
+    return { ok: true }
 end function
 
 ' /tune answers 200 with status -1 and a message when the tuner refuses
@@ -3408,11 +3420,11 @@ function fetchLiveTvGrid(cfg as Object, params as Dynamic) as Object
         if ck <> "" then
             if not byKey.DoesExist(ck) then
                 number = air.channelVcn
-                tuneIds = [number, air.channelId]
+                tuneIds = [air.channelId, number]
                 if air.channelId <> "" and lineupMap.DoesExist(air.channelId) then tuneIds.push(lineupMap[air.channelId])
                 if air.channelId <> "" and tuneMap.DoesExist(air.channelId) then tuneIds.push(tuneMap[air.channelId])
-                tuneId = number
-                if tuneId = "" then tuneId = air.channelId
+                tuneId = air.channelId
+                if tuneId = "" then tuneId = number
                 name = air.channelTitle
                 ' channelTitle is usually "2.1 WCBS"; drop the repeated number
                 if number <> "" and Left(name, Len(number) + 1) = number + " " then name = Mid(name, Len(number) + 2)
@@ -3525,6 +3537,16 @@ function fetchLiveTvGrid(cfg as Object, params as Dynamic) as Object
     }
 end function
 
+' Tuning live TV creates a temporary "This Episode" subscription with a
+' rolling grab; it isn't a recording the user asked for
+function isLiveTuneSubscription(subNode as Object) as Boolean
+    if safeToStr(subNode.channelIdentifier) <> "" then return true
+    for each grab in nodeList(subNode.MediaGrabOperation)
+        if truthy(grab.rolling) then return true
+    end for
+    return false
+end function
+
 function subscriptionId(subNode as Object) as String
     id = firstString(subNode, ["key", "id", "ratingKey"])
     marker = "/media/subscriptions/"
@@ -3569,6 +3591,7 @@ function fetchDvrSchedule(cfg as Object) as Object
     res = plexGet(cfg, "/media/subscriptions?includeGrabs=1&X-Plex-Container-Size=500")
     if res.ok = true and res.json <> invalid and res.json.MediaContainer <> invalid then
         for each subNode in nodeList(res.json.MediaContainer.MediaSubscription)
+          if not isLiveTuneSubscription(subNode) then
             id = subscriptionId(subNode)
             subType = intOrZero(subNode.type)
             target = invalid
@@ -3606,6 +3629,7 @@ function fetchDvrSchedule(cfg as Object) as Object
                 item = grabToUpcoming(cfg, grab, id, subType)
                 if item <> invalid then upcoming.push(item)
             end for
+          end if
         end for
     else if res.error <> invalid then
         errors.push(safeToStr(res.error))
@@ -3615,7 +3639,8 @@ function fetchDvrSchedule(cfg as Object) as Object
         scheduled = plexGet(cfg, "/media/subscriptions/scheduled")
         if scheduled.ok = true and scheduled.json <> invalid and scheduled.json.MediaContainer <> invalid then
             for each grab in nodeList(scheduled.json.MediaContainer.MediaGrabOperation)
-                item = grabToUpcoming(cfg, grab, "", 0)
+                item = invalid
+                if not truthy(grab.rolling) then item = grabToUpcoming(cfg, grab, "", 0)
                 if item <> invalid then upcoming.push(item)
             end for
         end if

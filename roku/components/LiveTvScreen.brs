@@ -86,6 +86,7 @@ sub init()
     m.previewUrl = ""
     m.watching = invalid
     m.pendingWatch = invalid
+    m.ownedLive = invalid
 
     buildTabs()
     buildSlotHeader()
@@ -100,7 +101,7 @@ sub init()
 
     m.tuneTimer = createObject("roSGNode", "Timer")
     m.tuneTimer.repeat = false
-    m.tuneTimer.duration = 0.85
+    m.tuneTimer.duration = 1.2
     m.tuneTimer.observeField("fire", "onTunePreview")
 
     m.clockTimer = createObject("roSGNode", "Timer")
@@ -972,7 +973,7 @@ sub onTunePreview()
     m.previewTask = createObject("roSGNode", "PlexTask")
     m.previewTask.config = m.top.config
     m.previewTask.action = "tuneLiveChannel"
-    m.previewTask.item = { dvrId: m.ctx.dvrId, channelId: ch.tuneId, tuneAlt: ch.tuneAlt, tuneIds: ch.tuneIds }
+    m.previewTask.item = { dvrId: m.ctx.dvrId, channelId: ch.tuneId, tuneAlt: ch.tuneAlt, tuneIds: ch.tuneIds, releaseFirst: takeOwnedLive(ch.key) }
     m.previewTask.observeField("response", "onPreviewReady")
     m.previewTask.control = "RUN"
 end sub
@@ -980,14 +981,52 @@ end sub
 sub onPreviewReady()
     response = m.previewTask.response
     ch = focusedChannel()
-    if ch = invalid or ch.key <> m.previewKey or m.tab <> 0 or m.zone = "menu" then return
+    if ch = invalid or ch.key <> m.previewKey or m.tab <> 0 or m.zone = "menu" then
+        if response <> invalid and response.ok = true then releaseLive({ subscriptionId: valueOr(response.subscriptionId, ""), session: valueOr(response.session, "") })
+        return
+    end if
     if response = invalid or response.ok <> true or response.url = invalid or response.url = "" then
         m.previewHint.text = "Preview unavailable"
         m.previewHint.visible = true
         m.previewKey = ""
         return
     end if
+    adoptLive(ch.key, response)
     playPreview(ch, response.url)
+end sub
+
+' Each tune holds a tuner until its temporary subscription is dropped, so the
+' guide owns at most one live session at a time
+sub adoptLive(key as String, response as Object)
+    incoming = { key: key, subscriptionId: valueOr(response.subscriptionId, ""), session: valueOr(response.session, "") }
+    if m.ownedLive <> invalid and m.ownedLive.subscriptionId <> incoming.subscriptionId then releaseLive(m.ownedLive)
+    m.ownedLive = incoming
+end sub
+
+' Hands back the owned session for a tune task to release before tuning
+' another channel; keeps it when re-tuning the same channel
+function takeOwnedLive(key as String) as Dynamic
+    if m.ownedLive = invalid or m.ownedLive.key = key then return invalid
+    owned = m.ownedLive
+    m.ownedLive = invalid
+    return owned
+end function
+
+sub releaseLive(owned as Dynamic)
+    if owned = invalid or m.top.config = invalid then return
+    if valueOr(owned.subscriptionId, "") = "" and valueOr(owned.session, "") = "" then return
+    task = createObject("roSGNode", "PlexTask")
+    task.config = m.top.config
+    task.action = "releaseLive"
+    task.item = owned
+    task.control = "RUN"
+    m.releaseTask = task
+end sub
+
+sub releaseOwnedLive()
+    if m.ownedLive = invalid then return
+    releaseLive(m.ownedLive)
+    m.ownedLive = invalid
 end sub
 
 sub playPreview(ch as Object, url as String)
@@ -1023,6 +1062,7 @@ sub applyTab(index as Integer)
         schedulePreviewTune()
     else
         stopPreview()
+        releaseOwnedLive()
         m.guideView.visible = false
         m.dvrView.visible = true
         fillDvrList(false)
@@ -1333,6 +1373,7 @@ end sub
 
 sub leaveToMenu()
     stopPreview()
+    releaseOwnedLive()
     m.top.openMenu = true
 end sub
 
@@ -1387,7 +1428,7 @@ sub watchChannel(ch as Object, p as Dynamic)
         m.watchTask = createObject("roSGNode", "PlexTask")
         m.watchTask.config = m.top.config
         m.watchTask.action = "tuneLiveChannel"
-        m.watchTask.item = { dvrId: m.ctx.dvrId, channelId: ch.tuneId, tuneAlt: ch.tuneAlt, tuneIds: ch.tuneIds }
+        m.watchTask.item = { dvrId: m.ctx.dvrId, channelId: ch.tuneId, tuneAlt: ch.tuneAlt, tuneIds: ch.tuneIds, releaseFirst: takeOwnedLive(ch.key) }
         m.watchTask.observeField("response", "onWatchTuned")
         m.watchTask.control = "RUN"
         return
@@ -1407,6 +1448,7 @@ sub onWatchTuned()
         return
     end if
     onToastDone()
+    adoptLive(pending.key, response)
     launchWatch(m.byKey[pending.key], pending.program, response.url)
 end sub
 
