@@ -8,12 +8,14 @@ services:
     ports:
       - "8095:8095"
     environment:
-      # libx264 works anywhere but is CPU-heavy at 1080p. With an Intel iGPU use
-      # h264_qsv or h264_vaapi (and the devices block below); with NVIDIA,
-      # h264_nvenc (and the deploy block below).
-      ENCODER: libx264
+      # x264 works anywhere but is CPU-heavy at 1080p. With an Intel or AMD GPU
+      # use va (or qsv on Intel) and the devices block below; with NVIDIA,
+      # nvenc and the deploy block below. Unusable hardware falls back to x264.
+      ENCODER: x264
       VIDEO_BITRATE: 6M
       FPS: "30"
+      # Which rendition each feed is decoded from (closest at or above this)
+      VARIANT_HEIGHT: "720"
       MAX_SESSIONS: "2"
       IDLE_TIMEOUT: "90"
       # Optional shared secret; set the same value as multiviewToken in PlexConfig.brs

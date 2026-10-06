@@ -1,7 +1,5 @@
-"""Supervisor behaviour against a real ffmpeg, with no network.
-
-Feeds are local HLS files and their health is faked, so a feed can be made to
-drop out and come back on cue.
+"""A real session, with real ffmpeg ingests and a real GStreamer compositor,
+fed from local HLS files so no network is involved.
 """
 
 import os
@@ -11,30 +9,11 @@ import tempfile
 import time
 import unittest
 
-from multiview import session as session_module
+from multiview import compositor as compositor_module
+from multiview import ingest as ingest_module
 from multiview.session import Session
 
-HAVE_FFMPEG = shutil.which("ffmpeg") is not None
-
-
-class FakeProbe:
-    def __init__(self, url, headers=None, tile_height=540):
-        self.url = url
-        self.tile_height = tile_height
-        self.variant = None
-        self.has_audio = True
-        self.error = ""
-        self.healthy = True
-
-    def check(self):
-        self.error = "" if self.healthy else "simulated outage"
-        return self.healthy
-
-    def input_target(self):
-        return self.url, None
-
-    def detect_audio(self, ffprobe="ffprobe", timeout=25):
-        return self.has_audio
+HAVE_TOOLS = shutil.which("ffmpeg") is not None and compositor_module.available()
 
 
 def wait_for(predicate, timeout, step=0.25):
@@ -46,47 +25,56 @@ def wait_for(predicate, timeout, step=0.25):
     return False
 
 
-@unittest.skipUnless(HAVE_FFMPEG, "ffmpeg not installed")
+def make_feed(path, audio=True, seconds=120):
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    cmd = ["ffmpeg", "-hide_banner", "-loglevel", "error",
+           "-f", "lavfi", "-i", "testsrc2=s=640x360:r=30"]
+    if audio:
+        cmd += ["-f", "lavfi", "-i", "sine=f=330:r=48000", "-c:a", "aac"]
+    cmd += ["-t", str(seconds), "-c:v", "libx264", "-preset", "ultrafast", "-g", "60",
+            "-f", "hls", "-hls_time", "2", "-hls_list_size", "0", path]
+    subprocess.run(cmd, check=True)
+
+
+@unittest.skipUnless(HAVE_TOOLS, "needs ffmpeg and GStreamer (python3-gi)")
 class SessionTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.tmp = tempfile.mkdtemp(prefix="multiview-test-")
         cls.feed = os.path.join(cls.tmp, "feed", "index.m3u8")
-        os.makedirs(os.path.dirname(cls.feed))
-        subprocess.run([
-            "ffmpeg", "-hide_banner", "-loglevel", "error",
-            "-f", "lavfi", "-i", "testsrc2=s=640x360:r=30",
-            "-f", "lavfi", "-i", "sine=f=330:r=48000",
-            "-t", "120", "-c:v", "libx264", "-preset", "ultrafast", "-g", "60", "-c:a", "aac",
-            "-f", "hls", "-hls_time", "2", "-hls_list_size", "0", cls.feed,
-        ], check=True)
+        cls.silent = os.path.join(cls.tmp, "silent", "index.m3u8")
+        make_feed(cls.feed)
+        make_feed(cls.silent, audio=False)
 
     @classmethod
     def tearDownClass(cls):
         shutil.rmtree(cls.tmp, ignore_errors=True)
 
     def setUp(self):
-        self.saved = {name: getattr(session_module, name)
-                      for name in ("PROBE_INTERVAL", "RECOVER_SECONDS", "STALL_TIMEOUT")}
-        session_module.PROBE_INTERVAL = 1
-        session_module.RECOVER_SECONDS = 2
-        # Local files are read faster than real time, then repeat their last
-        # frame; generous so that never reads as a stall
-        session_module.STALL_TIMEOUT = 20
+        self.saved = {name: getattr(ingest_module, name) for name in ("FREEZE_SECONDS", "RESTART_AFTER")}
+        ingest_module.FREEZE_SECONDS = 1.5
+        ingest_module.RESTART_AFTER = 3
         self.root = tempfile.mkdtemp(prefix="sessions-", dir=self.tmp)
-        self.settings = {
-            "ffmpeg": "ffmpeg", "ffprobe": "ffprobe", "encoder": "libx264", "fps": 30,
-            "video_bitrate": "2M", "font_file": "", "allow_local_inputs": True,
-        }
+        self.settings = {"ffmpeg": "ffmpeg", "encoder": "libx264", "fps": 30, "video_bitrate": "2M",
+                         "font_file": "", "allow_local_inputs": True}
+        self.sessions = []
 
     def tearDown(self):
+        for session in self.sessions:
+            session.stop()
         for name, value in self.saved.items():
-            setattr(session_module, name, value)
+            setattr(ingest_module, name, value)
 
-    def make_session(self, count=2, layout="grid", settings=None):
-        streams = [{"url": self.feed, "title": f"Game {i + 1}"} for i in range(count)]
-        return Session("0" * 8 + "-0000-0000-0000-" + "0" * 12, streams, layout, self.root,
-                       settings or self.settings, probe_factory=FakeProbe)
+    def make_session(self, urls, layout="grid"):
+        streams = [{"url": url, "title": f"Game {i + 1}"} for i, url in enumerate(urls)]
+        session = Session("0" * 8 + "-0000-0000-0000-" + "0" * 12, streams, layout, self.root, self.settings)
+        self.sessions.append(session)
+        return session
+
+    def copy_feed(self, name):
+        target = os.path.join(self.tmp, name)
+        shutil.copytree(os.path.dirname(self.feed), target)
+        return os.path.join(target, "index.m3u8")
 
     def read(self, session, name):
         try:
@@ -95,60 +83,84 @@ class SessionTests(unittest.TestCase):
         except FileNotFoundError:
             return ""
 
-    def test_feed_outage_swaps_in_a_slate_and_recovers_without_breaking_the_playlist(self):
-        session = self.make_session()
+    def statuses(self, session):
+        return [t["status"] for t in session.snapshot()["tiles"]]
+
+    def segment_count(self, session):
+        return self.read(session, "v.m3u8").count("#EXTINF")
+
+    def last_sequence(self, session):
+        for line in self.read(session, "v.m3u8").splitlines():
+            if line.startswith("#EXT-X-MEDIA-SEQUENCE:"):
+                return int(line.split(":")[1]) + self.segment_count(session)
+        return 0
+
+    def test_one_feed_dying_leaves_the_others_and_the_output_alone(self):
+        broken = self.copy_feed("broken")
+        session = self.make_session([self.feed, broken])
         session.start()
-        try:
-            self.assertTrue(wait_for(lambda: session.state == "running", 40), session.snapshot())
-            self.assertIn('URI="a1.m3u8"', self.read(session, "master.m3u8"))
-            self.assertEqual([t["status"] for t in session.snapshot()["tiles"]], ["live", "live"])
+        self.assertTrue(wait_for(lambda: session.state == "running", 40), session.snapshot())
+        self.assertTrue(wait_for(lambda: self.statuses(session) == ["live", "live"], 20), session.snapshot())
+        self.assertIn('URI="a1.m3u8"', self.read(session, "master.m3u8"))
 
-            session.feeds[1].probe.healthy = False
-            self.assertTrue(wait_for(lambda: session.snapshot()["tiles"][1]["status"] == "reconnecting", 15))
-            self.assertTrue(wait_for(lambda: "gen-2/" in self.read(session, "v.m3u8"), 30))
-            video = self.read(session, "v.m3u8")
-            self.assertIn("#EXT-X-DISCONTINUITY", video)
-            self.assertIn("gen-2/", self.read(session, "a1.m3u8"))
-            self.assertEqual(session.snapshot()["tiles"][0]["status"], "live")
+        os.rename(os.path.dirname(broken), os.path.dirname(broken) + ".off")
+        session.feeds[1].ingest._kill()
+        self.assertTrue(wait_for(lambda: self.statuses(session) == ["live", "reconnecting"], 15),
+                        session.snapshot())
+        before = self.last_sequence(session)
+        time.sleep(6)
+        self.assertGreater(self.last_sequence(session), before, "output stopped while a feed was down")
+        self.assertEqual(session.generation, 1)
+        self.assertEqual(session.snapshot()["tiles"][0]["status"], "live")
+        self.assertEqual(session.state, "running")
 
-            session.feeds[1].probe.healthy = True
-            self.assertTrue(wait_for(lambda: session.generation >= 3, 30), session.snapshot())
-            self.assertTrue(wait_for(lambda: session.snapshot()["tiles"][1]["status"] == "live", 30))
+        os.rename(os.path.dirname(broken) + ".off", os.path.dirname(broken))
+        self.assertTrue(wait_for(lambda: self.statuses(session) == ["live", "live"], 30), session.snapshot())
+        self.assertEqual(session.generation, 1)
+        self.assertNotIn("#EXT-X-DISCONTINUITY\n", self.read(session, "v.m3u8"))
 
-            # Media sequence only ever moves forward across all of that
-            sequences = [int(line.split(":")[1]) for line in self.read(session, "v.m3u8").splitlines()
-                         if line.startswith("#EXT-X-MEDIA-SEQUENCE")]
-            self.assertTrue(sequences)
-        finally:
-            session.stop()
+    def test_layout_and_order_changes_apply_without_a_restart(self):
+        session = self.make_session([self.feed, self.feed, self.feed])
+        session.start()
+        self.assertTrue(wait_for(lambda: session.state == "running", 40), session.snapshot())
+        session.reconfigure(layout="spotlight", order=[2, 0, 1])
+        snap = session.snapshot()
+        self.assertEqual([t["stream"] for t in snap["tiles"]], [2, 0, 1])
+        self.assertEqual((snap["tiles"][0]["w"], snap["tiles"][0]["h"]), (1440, 810))
+        self.assertEqual(session._compositor.pad_rect(2), {"x": 0, "y": 135, "w": 1440, "h": 810})
+        before = self.last_sequence(session)
+        self.assertTrue(wait_for(lambda: self.last_sequence(session) > before + 1, 15))
+        self.assertEqual(session.generation, 1)
+        self.assertEqual(session.state, "running")
+
+    def test_feed_without_audio_still_plays(self):
+        session = self.make_session([self.feed, self.silent])
+        session.start()
+        self.assertTrue(wait_for(lambda: self.statuses(session) == ["live", "live"], 40), session.snapshot())
+        self.assertFalse(session.feeds[1].ingest.has_audio)
+        self.assertTrue(wait_for(lambda: self.read(session, "a1.m3u8").count("#EXTINF") >= 2, 20))
+
+    def test_failed_pipeline_is_rebuilt_as_a_discontinuity(self):
+        session = self.make_session([self.feed, self.feed])
+        session.start()
+        self.assertTrue(wait_for(lambda: session.state == "running", 40), session.snapshot())
+        session._pump_error = "simulated pipeline failure"
+        self.assertTrue(wait_for(lambda: session.generation == 2, 10))
+        self.assertTrue(wait_for(lambda: "gen-2/" in self.read(session, "v.m3u8"), 20))
+        self.assertIn("#EXT-X-DISCONTINUITY\n", self.read(session, "v.m3u8"))
+        self.assertIn("gen-2/", self.read(session, "a1.m3u8"))
+        self.assertTrue(wait_for(lambda: session.state == "running", 20))
+        self.assertEqual(self.statuses(session), ["live", "live"])
+
+    def test_stop_cleans_up(self):
+        session = self.make_session([self.feed, self.feed])
+        session.start()
+        self.assertTrue(wait_for(lambda: session.state == "running", 40))
+        procs = [f.ingest._proc for f in session.feeds]
+        session.stop()
+        self.sessions.remove(session)
         self.assertFalse(os.path.exists(session.dir))
-
-    def test_reorder_and_layout_change_restart_with_new_tiles(self):
-        session = self.make_session(count=3, layout="grid")
-        session.start()
-        try:
-            self.assertTrue(wait_for(lambda: session.state == "running", 40))
-            session.reconfigure(layout="spotlight", order=[2, 0, 1])
-            self.assertTrue(wait_for(lambda: session.generation >= 2, 15))
-            snap = session.snapshot()
-            self.assertEqual(snap["layout"], "spotlight")
-            self.assertEqual([t["stream"] for t in snap["tiles"]], [2, 0, 1])
-            self.assertEqual((snap["tiles"][0]["w"], snap["tiles"][0]["h"]), (1440, 810))
-            self.assertTrue(wait_for(lambda: session.state == "running", 40))
-        finally:
-            session.stop()
-
-    def test_ffmpeg_that_keeps_dying_backs_off_instead_of_spinning(self):
-        session = self.make_session(settings=dict(self.settings, ffmpeg="false"))
-        session.start()
-        try:
-            time.sleep(6)
-            # Immediate retries would be dozens by now; backoff keeps it to a few
-            self.assertGreaterEqual(session.restarts, 2)
-            self.assertLessEqual(session.restarts, 5)
-            self.assertNotEqual(session.state, "running")
-        finally:
-            session.stop()
+        self.assertTrue(all(p is None or p.poll() is not None for p in procs))
 
 
 if __name__ == "__main__":

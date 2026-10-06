@@ -2,10 +2,10 @@
 
     POST   /sessions            {"streams": [{"url", "title", "headers"?}], "layout"?}
     GET    /sessions/<id>       status, tile rectangles; doubles as a heartbeat
-    PUT    /sessions/<id>       {"layout"?, "order"?}  restarts the mosaic
+    PUT    /sessions/<id>       {"layout"?, "order"?}  applied live
     DELETE /sessions/<id>
     GET    /sessions/<id>/master.m3u8 (and the playlists/segments under it)
-    GET    /healthz
+    GET    /healthz             also counts how relay fetches went (direct vs proxy)
 """
 
 import json
@@ -17,6 +17,8 @@ import uuid
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
+from . import compositor
+from .relay import Relay
 from .session import Session
 
 SESSION_PATH = re.compile(r"^/sessions/([0-9a-f-]{36})(?:/(.*))?$")
@@ -26,12 +28,11 @@ FILE_NAME = re.compile(r"^(?:gen-\d+/)?[A-Za-z0-9_.-]+\.(?:m3u8|ts)$")
 def settings_from_env(env=os.environ):
     return {
         "ffmpeg": env.get("FFMPEG", "ffmpeg"),
-        "ffprobe": env.get("FFPROBE", "ffprobe"),
         "encoder": env.get("ENCODER", "libx264"),
         "fps": int(env.get("FPS", "30")),
         "video_bitrate": env.get("VIDEO_BITRATE", "6M"),
         "font_file": env.get("FONT_FILE", "/app/fonts/Outfit-SemiBold.ttf"),
-        "vaapi_device": env.get("VAAPI_DEVICE", "/dev/dri/renderD128"),
+        "variant_height": int(env.get("VARIANT_HEIGHT", "720")),
         "data_dir": env.get("DATA_DIR", "/data/sessions"),
         "idle_timeout": int(env.get("IDLE_TIMEOUT", "90")),
         "max_sessions": int(env.get("MAX_SESSIONS", "2")),
@@ -42,8 +43,9 @@ def settings_from_env(env=os.environ):
 
 
 class SessionManager:
-    def __init__(self, settings, session_factory=Session, clock=time.monotonic):
+    def __init__(self, settings, session_factory=Session, clock=time.monotonic, relay=None):
         self.settings = settings
+        self.relay = relay
         self._factory = session_factory
         self._clock = clock
         self._sessions = {}
@@ -52,7 +54,8 @@ class SessionManager:
 
     def create(self, streams, layout):
         session_id = str(uuid.uuid4())
-        session = self._factory(session_id, streams, layout, self.settings["data_dir"], self.settings)
+        extra = {"relay": self.relay} if self.relay is not None else {}
+        session = self._factory(session_id, streams, layout, self.settings["data_dir"], self.settings, **extra)
         evicted = []
         with self._lock:
             # A Roku that crashed or lost power never says goodbye; making room
@@ -109,7 +112,8 @@ def make_handler(manager):
 
         def do_GET(self):
             if self.path == "/healthz":
-                return self._json(HTTPStatus.OK, {"ok": True})
+                relay = manager.relay.snapshot() if manager.relay is not None else {}
+                return self._json(HTTPStatus.OK, {"ok": True, "relay": relay})
             match = SESSION_PATH.match(self.path.split("?", 1)[0])
             if not match:
                 return self._json(HTTPStatus.NOT_FOUND, {"error": "not found"})
@@ -226,7 +230,9 @@ def make_handler(manager):
 
 def main():
     settings = settings_from_env()
-    manager = SessionManager(settings)
+    _, encoder = compositor.encoder_description(settings)
+    relay = Relay(variant_height=settings["variant_height"]).serve()
+    manager = SessionManager(settings, relay=relay)
     server = ThreadingHTTPServer(("0.0.0.0", settings["port"]), make_handler(manager))
     server.daemon_threads = True
 
@@ -236,13 +242,14 @@ def main():
             manager.reap()
 
     threading.Thread(target=reaper, daemon=True).start()
-    print(f"[manager] multiview listening on :{settings['port']} (encoder {settings['encoder']})", flush=True)
+    print(f"[manager] multiview listening on :{settings['port']} (encoder: {encoder})", flush=True)
     try:
         server.serve_forever()
     except KeyboardInterrupt:
         pass
     finally:
         manager.stop_all()
+        relay.close()
 
 
 if __name__ == "__main__":
