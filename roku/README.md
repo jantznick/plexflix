@@ -7,16 +7,31 @@ This is intentionally a **design/UX shell** on top of existing Plex data. Creden
 ## What you get
 
 - Dark Netflix-like home: billboard hero + horizontal shelves
-- **Collapsible sidebar** (Left to open): Home, your **Libraries**, **Live TV**, Live Sports.
+- **Collapsible sidebar** (Left to open): Home, **Search**, your **Libraries**,
+  **Live TV**, Live Sports.
   Collapsed, a 72px icon rail stays on browse screens with the current section
   lit; it is hidden on detail pages, in the player and over the launch splash
+- **Search**: Plex Discover catalog search for any movie/show (not just what’s
+  already in your libraries), with Movies / TV filters; open a result and
+  **Add to Watchlist** / **Remove** from the detail page
 - **Home stays loaded**: switching sections parks it instead of discarding it,
   so returning is instant and the hubs refresh in the background (also after
   playback), updating only the rows whose items changed
 - Selecting a library in the sidebar opens that library’s shelves
-- **Live TV**: Guide layout always visible (columns + placeholder rows while syncing); program info top-left, preview top-right
+- **Live TV**: a real grid guide built from your Plex EPG (`/<epg provider>/grid`): channel logo, number and call sign
+  down the left, half-hour time slots across the top, program blocks sized by duration, a red now-line, and a live
+  preview of the focused channel. Up/Down change channel, Left/Right move through programs (time pages in 30-minute
+  steps and later hours load as you go), `<<`/`>>` page channels. OK on something airing now watches it; OK on a future
+  show (or `*` on anything) opens **Record this episode / Record series / Cancel recording**. Back from a channel
+  you were watching returns to the guide with that channel still playing in the preview
+- **DVR**: Upcoming lists scheduled recordings (OK cancels one). Rules lists each show with a rule; OK opens an editor for
+  its Plex recording settings (quality, replace lower quality, padding, commercial detection, episodes to keep, …;
+  OK on a setting opens its choices to pick from), plus Save and Delete. "Edit series rule" is also on the guide and Upcoming menus.
+  Programs that will record are tagged **REC** (or **SERIES**) in the grid. Finished recordings land in the Plex
+  library the rule targets, like any other episode or movie
 - **Libraries**: mosaic hero + **View all**; full grid with filter, search, order-by and an A–Z rail
 - **Continue Watching**, **Recently Added**, Plex hubs, library shelves, **genre rows**, and **Discover** trending (Netflix/Disney+/etc.)
+- Home **infinite-scrolls** like the web app: as you move down, it appends more random Discover shelves (popular genres per service + trending / exclusives / recently released / popular / watchlist)
 - Home shelves require **15–30** items (except Continue Watching) and **loop** horizontally
 - Continue Watching episodes open the parent show with that episode focused
 - Title detail screen (Cast + More Like This) with larger hero art
@@ -34,7 +49,7 @@ This is intentionally a **design/UX shell** on top of existing Plex data. Creden
 - **Multiview**: 2–4 live games at once in Grid, Spotlight or Picture in picture,
   tiled on your home server (see [Multiview](#multiview))
 - Optional **TMDB** enrichment for cast pages and Discover titles missing from your library (`tmdbApiKey` in config)
-- Discover titles not in Plex open a **Not in your library** detail view (no Play) with synopsis + similar local picks
+- Discover titles not in Plex open a **Not in your library** detail view (no Play) with synopsis, similar local picks, and Watchlist actions
 
 ## Configure before sideload
 
@@ -83,6 +98,20 @@ Optional CLI (if `ROKU_IP` / `ROKU_PASSWORD` are set):
 ```bash
 ./roku/package.sh --deploy
 ```
+
+## Discover Search & Watchlist
+
+Sidebar **Search** hits Plex Discover (`discover.provider.plex.tv/library/search`),
+so results include titles that are not in your local libraries. Pick a result to
+open the detail page.
+
+On any Discover title that is not in your library, the detail page offers
+**Add to Watchlist** / **Remove Watchlist** (`/actions/addToWatchlist` and
+`removeFromWatchlist`) — the same personal Watchlist as the official Plex apps.
+If the same `plex://` GUID is already on your server, detail promotes to a
+normal Play page instead.
+
+Uses the same `token` from `PlexConfig.brs` as the rest of Discover.
 
 ## Library pages
 
@@ -286,7 +315,7 @@ erroring out.
 ## Remote / focus
 
 - **Left** opens the sidebar from Home, Libraries, Live Sports (and sports detail via Back first); **Right** hides it
-- **Back** on a section's main screen (Home, a library, Live TV, Live Sports) opens the sidebar; from deep in Home's shelves or a library's shelves it returns to the top first
+- **Back** in the Live TV guide first jumps to the top channel at the current time; **Back** on a section's main screen (Home, a library, Live TV, Live Sports) opens the sidebar; from deep in Home's shelves or a library's shelves it returns to the top first
 - **Back** with the sidebar open exits the channel
 - Libraries appear as flat items in the sidebar (no wrapping cycle at the ends)
 - Arrow keys move across poster rows
@@ -333,7 +362,7 @@ Outfit (Google Fonts / OFL) ships under `roku/fonts/`. Swap TTFs there and updat
 ## Out of scope for this MVP
 
 - Account login / PIN pairing UI
-- Global (cross-library) search, profiles, downloads
+- Profiles, downloads
 - Direct Play codec negotiation beyond HLS transcode
 - Settings screen (edit `PlexConfig.brs` and republish)
 

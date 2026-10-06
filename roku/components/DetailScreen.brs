@@ -9,6 +9,9 @@ sub init()
     m.playBtn = m.top.findNode("playBtn")
     m.backBtn = m.top.findNode("backBtn")
     m.randomBtn = m.top.findNode("randomBtn")
+    m.watchlistBtn = m.top.findNode("watchlistBtn")
+    m.watchlistBg = m.top.findNode("watchlistBg")
+    m.watchlistLabel = m.top.findNode("watchlistLabel")
     m.playBg = m.top.findNode("playBg")
     m.backBg = m.top.findNode("backBg")
     m.randomBg = m.top.findNode("randomBg")
@@ -33,6 +36,8 @@ sub init()
     m.focusIndex = 0
     m.isShow = false
     m.isUnavailable = false
+    m.onWatchlist = false
+    m.watchlistBusy = false
     m.seasons = []
     m.seasonQueue = 0
     m.seasonContent = invalid
@@ -54,6 +59,9 @@ sub onContentSet()
     m.focusSeasonKey = asString(item.focusSeasonKey)
 
     m.isUnavailable = false
+    m.onWatchlist = false
+    m.watchlistBusy = false
+    if item.DoesExist("onWatchlist") and item.onWatchlist = true then m.onWatchlist = true
     if item.DoesExist("isDiscover") and item.isDiscover = true then m.isUnavailable = true
     if item.DoesExist("unavailable") and item.unavailable = true then m.isUnavailable = true
 
@@ -220,6 +228,7 @@ sub showTvMode()
     m.isUnavailable = false
     m.movieActions.visible = true
     if m.unavailablePanel <> invalid then m.unavailablePanel.visible = false
+    if m.watchlistBtn <> invalid then m.watchlistBtn.visible = false
     if m.playBtn <> invalid then m.playBtn.visible = true
     if m.backBtn <> invalid then m.backBtn.translation = [248, 0]
     if m.randomBtn <> invalid then m.randomBtn.visible = true
@@ -244,6 +253,7 @@ sub showMovieMode()
     m.isUnavailable = false
     m.movieActions.visible = true
     if m.unavailablePanel <> invalid then m.unavailablePanel.visible = false
+    if m.watchlistBtn <> invalid then m.watchlistBtn.visible = false
     if m.playBtn <> invalid then m.playBtn.visible = true
     if m.backBtn <> invalid then m.backBtn.translation = [248, 0]
     if m.randomBtn <> invalid then m.randomBtn.visible = false
@@ -275,7 +285,8 @@ sub showUnavailableMode(item as Object)
     m.movieActions.visible = true
     if m.playBtn <> invalid then m.playBtn.visible = false
     if m.randomBtn <> invalid then m.randomBtn.visible = false
-    if m.backBtn <> invalid then m.backBtn.translation = [0, 0]
+    if m.watchlistBtn <> invalid then m.watchlistBtn.visible = true
+    if m.backBtn <> invalid then m.backBtn.translation = [340, 0]
     m.movieActions.translation = [248, 348]
     if m.softStatus <> invalid then m.softStatus.translation = [248, 412]
     if m.relatedPanel <> invalid then m.relatedPanel.translation = [0, 440]
@@ -283,12 +294,22 @@ sub showUnavailableMode(item as Object)
 
     if m.unavailableBody <> invalid then m.unavailableBody.text = unavailableMessage(item)
     if m.softStatus <> invalid then m.softStatus.text = "Looking up details & similar titles…"
+    paintWatchlistLabel()
 
     m.relatedContent = createObject("roSGNode", "ContentNode")
     m.relatedRows.content = m.relatedContent
-    m.focusIndex = 1
+    m.focusIndex = 0
     updateMovieButtonFocus()
     m.top.setFocus(true)
+end sub
+
+sub paintWatchlistLabel()
+    if m.watchlistLabel = invalid then return
+    if m.onWatchlist = true then
+        m.watchlistLabel.text = "Remove Watchlist"
+    else
+        m.watchlistLabel.text = "Add to Watchlist"
+    end if
 end sub
 
 function unavailableMessage(item as Object) as String
@@ -320,6 +341,17 @@ sub onUnavailableLoaded()
         return
     end if
 
+    ' Same plex:// guid already in the local library — promote to a normal Play page
+    if response.localItem <> invalid then
+        localItem = response.localItem
+        if response.onWatchlist = true then localItem.onWatchlist = true
+        m.top.content = localItem
+        return
+    end if
+
+    if response.DoesExist("onWatchlist") then m.onWatchlist = (response.onWatchlist = true)
+    paintWatchlistLabel()
+
     detail = response.detail
     if detail <> invalid then
         applyShowHeader(detail)
@@ -327,6 +359,25 @@ sub onUnavailableLoaded()
         if asString(detail.hdBackdropUrl) <> "" then m.backdrop.uri = detail.hdBackdropUrl
         rememberShowHeader()
         if m.unavailableBody <> invalid then m.unavailableBody.text = unavailableMessage(detail)
+
+        ' Stamp Discover identity onto the live content object without retriggering onContentSet
+        content = m.top.content
+        if content <> invalid then
+            if asString(detail.description) <> "" then content.description = detail.description
+            if asString(detail.hdPosterUrl) <> "" then content.hdPosterUrl = detail.hdPosterUrl
+            if asString(detail.hdBackdropUrl) <> "" then content.hdBackdropUrl = detail.hdBackdropUrl
+            if asString(detail.year) <> "" then content.year = detail.year
+            if asString(detail.rating) <> "" then content.rating = detail.rating
+            if asString(detail.contentRating) <> "" then content.contentRating = detail.contentRating
+            if asString(detail.mediaType) <> "" then content.mediaType = detail.mediaType
+            if asString(detail.discoverRatingKey) <> "" then content.discoverRatingKey = detail.discoverRatingKey
+            if asString(detail.guid) <> "" then content.guid = detail.guid
+            if asString(response.discoverRatingKey) <> "" then content.discoverRatingKey = response.discoverRatingKey
+            if asString(response.guid) <> "" then content.guid = response.guid
+            content.onWatchlist = m.onWatchlist
+            content.isDiscover = true
+            content.unavailable = true
+        end if
     end if
 
     castItems = response.cast
@@ -361,7 +412,7 @@ sub onUnavailableLoaded()
         m.softStatus.text = "No close matches in your library yet"
     end if
 
-    m.focusIndex = 1
+    m.focusIndex = 0
     updateMovieButtonFocus()
     m.top.setFocus(true)
 end sub
@@ -783,23 +834,35 @@ end sub
 
 sub updateMovieButtonFocus()
     if m.isUnavailable = true then
-        ' Only Back is actionable
-        m.focusIndex = 1
-        m.playBg.color = "0x2A2A32"
-        m.backBg.color = "0xE50914"
+        ' Watchlist (0) + Back (1)
+        if m.playBg <> invalid then m.playBg.color = "0x2A2A32"
+        if m.watchlistBg <> invalid then m.watchlistBg.color = "0x2A2A32"
+        m.backBg.color = "0x2A2A32"
         if m.randomBg <> invalid then m.randomBg.color = "0x2A2A32"
         if m.top.findNode("playShadow") <> invalid then m.top.findNode("playShadow").opacity = 0.0
-        if m.top.findNode("backShadow") <> invalid then m.top.findNode("backShadow").opacity = 0.5
+        if m.top.findNode("watchlistShadow") <> invalid then m.top.findNode("watchlistShadow").opacity = 0.0
+        if m.top.findNode("backShadow") <> invalid then m.top.findNode("backShadow").opacity = 0.0
         if m.top.findNode("randomShadow") <> invalid then m.top.findNode("randomShadow").opacity = 0.0
+
+        if m.focusIndex = 0 then
+            if m.watchlistBg <> invalid then m.watchlistBg.color = "0xE50914"
+            if m.top.findNode("watchlistShadow") <> invalid then m.top.findNode("watchlistShadow").opacity = 0.5
+        else
+            m.focusIndex = 1
+            m.backBg.color = "0xE50914"
+            if m.top.findNode("backShadow") <> invalid then m.top.findNode("backShadow").opacity = 0.5
+        end if
         return
     end if
 
     m.playBg.color = "0x2A2A32"
     m.backBg.color = "0x2A2A32"
+    if m.watchlistBg <> invalid then m.watchlistBg.color = "0x2A2A32"
     if m.randomBg <> invalid then m.randomBg.color = "0x2A2A32"
     if m.top.findNode("playShadow") <> invalid then m.top.findNode("playShadow").opacity = 0.0
     if m.top.findNode("backShadow") <> invalid then m.top.findNode("backShadow").opacity = 0.0
     if m.top.findNode("randomShadow") <> invalid then m.top.findNode("randomShadow").opacity = 0.0
+    if m.top.findNode("watchlistShadow") <> invalid then m.top.findNode("watchlistShadow").opacity = 0.0
 
     if m.focusIndex = 0 then
         m.playBg.color = "0xE50914"
@@ -818,6 +881,56 @@ function actionButtonCount() as Integer
     if m.isShow = true and m.randomBtn <> invalid and m.randomBtn.visible = true then return 3
     return 2
 end function
+
+sub toggleWatchlist()
+    if m.watchlistBusy = true then return
+    item = m.top.content
+    if item = invalid then return
+
+    m.watchlistBusy = true
+    adding = not m.onWatchlist
+    if m.softStatus <> invalid then
+        if adding then
+            m.softStatus.text = "Adding to Watchlist…"
+        else
+            m.softStatus.text = "Removing from Watchlist…"
+        end if
+    end if
+
+    m.watchlistTask = createObject("roSGNode", "PlexTask")
+    m.watchlistTask.config = m.top.config
+    if adding then
+        m.watchlistTask.action = "addToWatchlist"
+    else
+        m.watchlistTask.action = "removeFromWatchlist"
+    end if
+    m.watchlistTask.item = item
+    m.watchlistTask.observeField("response", "onWatchlistMutated")
+    m.watchlistTask.control = "RUN"
+end sub
+
+sub onWatchlistMutated()
+    m.watchlistBusy = false
+    response = m.watchlistTask.response
+    if response = invalid or response.ok <> true then
+        err = "Watchlist update failed"
+        if response <> invalid and response.error <> invalid then err = asString(response.error)
+        if m.softStatus <> invalid then m.softStatus.text = err
+        return
+    end if
+
+    m.onWatchlist = (response.onWatchlist = true)
+    content = m.top.content
+    if content <> invalid then content.onWatchlist = m.onWatchlist
+    paintWatchlistLabel()
+    if m.softStatus <> invalid then
+        if m.onWatchlist then
+            m.softStatus.text = "Saved to your Plex Watchlist"
+        else
+            m.softStatus.text = "Removed from Watchlist"
+        end if
+    end if
+end sub
 
 sub focusActionButtons()
     m.focusIndex = 0
@@ -911,7 +1024,6 @@ function onKeyEvent(key as String, press as Boolean) as Boolean
     end if
 
     if key = "left" or key = "right"
-        if m.isUnavailable = true then return true
         count = actionButtonCount()
         if key = "right" then
             m.focusIndex = m.focusIndex + 1
@@ -934,7 +1046,11 @@ function onKeyEvent(key as String, press as Boolean) as Boolean
         return true
     else if key = "OK"
         if m.isUnavailable = true then
-            m.top.closed = true
+            if m.focusIndex = 0 then
+                toggleWatchlist()
+            else
+                m.top.closed = true
+            end if
             return true
         end if
         if m.focusIndex = 0 then

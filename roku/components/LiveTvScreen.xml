@@ -11,73 +11,135 @@
     <script type="text/brightscript" uri="LiveTvScreen.brs" />
     <script type="text/brightscript" uri="pkg:/source/Fonts.brs" />
 
+    <!-- Grid geometry is mirrored in LiveTvScreen.brs (m.gridTop, m.progX, ...) -->
     <children>
-        <Rectangle width="1920" height="1080" color="0x0A0E18" />
+        <Rectangle width="1920" height="1080" color="0x080B12" />
 
-        <Rectangle width="1920" height="96" color="0x121A2A" />
-        <Label translation="[96, 20]" width="900" height="56" vertAlign="center" text="LIVE TV GUIDE" color="0xE50914">
-            <Font role="font" uri="pkg:/fonts/Outfit-Bold.ttf" size="44" />
-        </Label>
-        <Label id="clockLabel" translation="[1224, 20]" width="600" height="56" horizAlign="right" vertAlign="center" text="" color="0xA8B0C0">
-            <Font role="font" uri="pkg:/fonts/Outfit-Medium.ttf" size="36" />
-        </Label>
+        <!-- Program art, cropped to the hero band and melted into the page -->
+        <Poster id="heroArt" translation="[880, 0]" width="1040" height="384" loadDisplayMode="scaleToZoom" loadWidth="1280" loadHeight="720" opacity="0.55" />
+        <Poster translation="[880, 0]" width="520" height="384" uri="pkg:/images/guide_fade_h.png" />
+        <Poster translation="[880, 184]" width="1040" height="200" uri="pkg:/images/guide_fade_v.png" />
 
-        <Group translation="[96, 120]">
-            <Label id="programTitle" width="900" height="60" color="0xFFFFFF" wrap="true" maxLines="1" text="Select a channel">
-                <Font role="font" uri="pkg:/fonts/Outfit-Bold.ttf" size="48" />
-            </Label>
-            <Label id="channelMeta" translation="[0, 66]" width="900" height="40" color="0x8FA0B8" text="">
-                <Font role="font" uri="pkg:/fonts/Outfit-Medium.ttf" size="30" />
-            </Label>
-            <Label id="programSummary" translation="[0, 112]" width="900" height="76" color="0xC5CCD8" wrap="true" maxLines="2" lineSpacing="2" text="">
-                <Font role="font" uri="pkg:/fonts/Outfit-Regular.ttf" size="28" />
-            </Label>
-            <Label id="statusLabel" translation="[0, 196]" width="900" height="36" text="" color="0x778099">
-                <Font role="font" uri="pkg:/fonts/Outfit-Regular.ttf" size="26" />
-            </Label>
-
-            <!-- height=250, width=250*(16/9)=444 — scale by height, keep 16:9 -->
-            <Rectangle id="previewBg" translation="[1020, 0]" width="444" height="250" color="0x111820" />
-            <Poster
-                id="previewArt"
-                translation="[1020, 0]"
-                width="444"
-                height="250"
-                loadDisplayMode="scaleToZoom"
-                loadWidth="1280"
-                loadHeight="720"
-                uri="pkg:/images/poster_placeholder.png"
-                opacity="0.35"
-            />
-            <Video id="previewVideo" translation="[1020, 0]" width="444" height="250" visible="false" />
-            <Label id="previewHint" translation="[1020, 109]" width="444" height="32" horizAlign="center" text="PREVIEW" color="0x556070">
-                <Font role="font" uri="pkg:/fonts/Outfit-Medium.ttf" size="28" />
+        <Group id="tabRow" translation="[120, 36]">
+            <Label width="200" height="48" vertAlign="center" text="LIVE TV" color="0xE50914">
+                <Font role="font" uri="pkg:/fonts/Outfit-Bold.ttf" size="36" />
             </Label>
         </Group>
 
-        <Rectangle translation="[0, 392]" width="1920" height="56" color="0x1A2438" />
-        <Label translation="[96, 400]" width="300" height="40" vertAlign="center" text="CHANNEL" color="0x8FA0B8">
-            <Font role="font" uri="pkg:/fonts/Outfit-SemiBold.ttf" size="32" />
-        </Label>
-        <Label translation="[412, 400]" width="620" height="40" vertAlign="center" text="ON NOW" color="0xE8EEF8">
-            <Font role="font" uri="pkg:/fonts/Outfit-SemiBold.ttf" size="32" />
-        </Label>
-        <Label translation="[1052, 400]" width="260" height="40" vertAlign="center" text="TIME" color="0x8FA0B8">
-            <Font role="font" uri="pkg:/fonts/Outfit-SemiBold.ttf" size="32" />
-        </Label>
-        <Label translation="[1332, 400]" width="500" height="40" vertAlign="center" text="UP NEXT" color="0x8FA0B8">
-            <Font role="font" uri="pkg:/fonts/Outfit-SemiBold.ttf" size="32" />
-        </Label>
+        <Group translation="[120, 36]">
+            <Label id="programTitle" translation="[0, 68]" width="1240" height="68" color="0xFFFFFF" wrap="false" text="">
+                <Font role="font" uri="pkg:/fonts/Outfit-Bold.ttf" size="56" />
+            </Label>
+            <Label id="programSub" translation="[0, 138]" width="1240" height="40" color="0xD5DBE6" wrap="false" text="">
+                <Font role="font" uri="pkg:/fonts/Outfit-Medium.ttf" size="32" />
+            </Label>
+            <Group id="badgeRow" translation="[0, 186]" />
+            <Label id="programMeta" translation="[0, 186]" width="1240" height="36" vertAlign="center" color="0x8FA0B8" wrap="false" text="">
+                <Font role="font" uri="pkg:/fonts/Outfit-Medium.ttf" size="28" />
+            </Label>
+            <Group id="progressGroup" translation="[0, 236]" visible="false">
+                <Rectangle width="360" height="6" color="0x2A3348" />
+                <Rectangle id="progressFill" width="0" height="6" color="0xE50914" />
+                <Label id="progressLabel" translation="[380, -14]" width="400" height="34" vertAlign="center" color="0x8FA0B8" text="">
+                    <Font role="font" uri="pkg:/fonts/Outfit-Medium.ttf" size="24" />
+                </Label>
+            </Group>
+            <Label id="programSummary" translation="[0, 256]" width="1180" height="72" color="0xB8C0CE" wrap="true" maxLines="2" lineSpacing="2" text="">
+                <Font role="font" uri="pkg:/fonts/Outfit-Regular.ttf" size="26" />
+            </Label>
+        </Group>
 
-        <EscapeMarkupList
-            id="guideList"
-            translation="[72, 456]"
-            itemComponentName="GuideRowItem"
-            itemSize="[1776, 84]"
-            itemSpacing="[0, 4]"
-            numRows="7"
-            vertFocusAnimationStyle="floatingFocus"
-            drawFocusFeedback="false"
-        />
+        <!-- Live preview of the focused channel -->
+        <Group id="previewGroup" translation="[1392, 36]">
+            <Rectangle translation="[-2, -2]" width="484" height="274" color="0x2A3348" />
+            <Rectangle width="480" height="270" color="0x0E131D" />
+            <Poster id="previewArt" width="480" height="270" loadDisplayMode="scaleToZoom" loadWidth="960" loadHeight="540" />
+            <Video id="previewVideo" width="480" height="270" visible="false" enableUI="false" />
+            <Rectangle id="previewTag" translation="[12, 222]" width="0" height="36" color="0xE50914" visible="false" />
+            <Label id="previewTagLabel" translation="[12, 222]" width="456" height="36" vertAlign="center" color="0xFFFFFF" text="" visible="false">
+                <Font role="font" uri="pkg:/fonts/Outfit-SemiBold.ttf" size="22" />
+            </Label>
+            <Label id="previewHint" translation="[0, 117]" width="480" height="36" horizAlign="center" vertAlign="center" text="" color="0x5E6880">
+                <Font role="font" uri="pkg:/fonts/Outfit-Medium.ttf" size="24" />
+            </Label>
+        </Group>
+
+        <Group id="guideView">
+            <Rectangle translation="[96, 392]" width="1776" height="44" color="0x0E131D" />
+            <Label id="clockLabel" translation="[112, 392]" width="232" height="44" vertAlign="center" color="0xFFFFFF" text="">
+                <Font role="font" uri="pkg:/fonts/Outfit-SemiBold.ttf" size="28" />
+            </Label>
+            <Group id="slotHeader" />
+            <Group id="gridRows" />
+            <Rectangle id="pastShade" translation="[360, 436]" width="0" height="610" color="0x080B12" opacity="0.35" />
+            <Rectangle id="nowLine" translation="[360, 392]" width="3" height="654" color="0xE50914" visible="false" />
+            <Label id="guideStatus" translation="[360, 600]" width="1512" height="60" horizAlign="center" vertAlign="center" color="0x8FA0B8" text="" visible="false">
+                <Font role="font" uri="pkg:/fonts/Outfit-Medium.ttf" size="32" />
+            </Label>
+        </Group>
+
+        <Group id="dvrView" visible="false">
+            <Rectangle translation="[96, 392]" width="1776" height="44" color="0x0E131D" />
+            <Label id="dvrHead0" translation="[96, 392]" width="300" height="44" vertAlign="center" color="0x8FA0B8" text="">
+                <Font role="font" uri="pkg:/fonts/Outfit-SemiBold.ttf" size="26" />
+            </Label>
+            <Label id="dvrHead1" translation="[412, 392]" width="620" height="44" vertAlign="center" color="0x8FA0B8" text="">
+                <Font role="font" uri="pkg:/fonts/Outfit-SemiBold.ttf" size="26" />
+            </Label>
+            <Label id="dvrHead2" translation="[1052, 392]" width="260" height="44" vertAlign="center" color="0x8FA0B8" text="">
+                <Font role="font" uri="pkg:/fonts/Outfit-SemiBold.ttf" size="26" />
+            </Label>
+            <Label id="dvrHead3" translation="[1332, 392]" width="500" height="44" vertAlign="center" color="0x8FA0B8" text="">
+                <Font role="font" uri="pkg:/fonts/Outfit-SemiBold.ttf" size="26" />
+            </Label>
+            <EscapeMarkupList
+                id="dvrList"
+                translation="[72, 444]"
+                itemComponentName="GuideRowItem"
+                itemSize="[1776, 80]"
+                itemSpacing="[0, 6]"
+                numRows="7"
+                vertFocusAnimationStyle="floatingFocus"
+                drawFocusFeedback="false"
+            />
+            <Label id="dvrEmpty" translation="[96, 560]" width="1776" height="120" horizAlign="center" vertAlign="center" wrap="true" maxLines="2" color="0x8FA0B8" text="" visible="false">
+                <Font role="font" uri="pkg:/fonts/Outfit-Medium.ttf" size="34" />
+            </Label>
+        </Group>
+
+        <!-- Program / recording actions -->
+        <Group id="menu" visible="false">
+            <Rectangle width="1920" height="1080" color="0x000000" opacity="0.65" />
+            <Rectangle id="menuPanel" translation="[560, 260]" width="800" height="520" color="0x141A27" />
+            <Rectangle id="menuAccent" translation="[560, 260]" width="800" height="6" color="0xE50914" />
+            <Label id="menuTitle" translation="[608, 296]" width="704" height="52" color="0xFFFFFF" wrap="false" text="">
+                <Font role="font" uri="pkg:/fonts/Outfit-Bold.ttf" size="40" />
+            </Label>
+            <Label id="menuSub" translation="[608, 352]" width="704" height="36" color="0x8FA0B8" wrap="false" text="">
+                <Font role="font" uri="pkg:/fonts/Outfit-Medium.ttf" size="26" />
+            </Label>
+            <LabelList
+                id="menuList"
+                translation="[592, 412]"
+                itemSize="[736, 64]"
+                itemSpacing="[0, 8]"
+                numRows="9"
+                vertFocusAnimationStyle="floatingFocus"
+                focusBitmapUri="pkg:/images/menu_focus.9.png"
+                color="0xC5CCD8"
+                focusedColor="0x0A0E18"
+            >
+                <Font role="font" uri="pkg:/fonts/Outfit-SemiBold.ttf" size="30" />
+                <Font role="focusedFont" uri="pkg:/fonts/Outfit-SemiBold.ttf" size="30" />
+            </LabelList>
+        </Group>
+
+        <Group id="toast" translation="[1352, 980]" visible="false">
+            <Rectangle id="toastBg" width="520" height="60" color="0x1E2738" />
+            <Rectangle width="6" height="60" color="0xE50914" />
+            <Label id="toastLabel" translation="[24, 0]" width="480" height="60" vertAlign="center" color="0xFFFFFF" wrap="false" text="">
+                <Font role="font" uri="pkg:/fonts/Outfit-SemiBold.ttf" size="26" />
+            </Label>
+        </Group>
     </children>
 </component>
