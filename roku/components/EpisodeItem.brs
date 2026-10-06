@@ -65,9 +65,9 @@ sub onSizeChange()
         m.ringR.translation = [m.itemWidth - thick, 0]
     end if
     if m.focusAccent <> invalid then
-        m.focusAccent.width = m.itemWidth
+        m.focusAccent.width = m.itemWidth - thick * 2
         m.focusAccent.height = thick
-        m.focusAccent.translation = [0, m.itemHeight - thick * 2]
+        m.focusAccent.translation = [thick, m.itemHeight - thick * 2]
     end if
 
     barHeight = 8

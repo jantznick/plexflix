@@ -126,12 +126,13 @@
             </Label>
 
             <!-- One visibility toggle so all four sides appear together -->
+            <!-- Accent first so the white sides always draw over it -->
             <Group id="focusChrome" visible="false">
+                <Rectangle id="focusAccent" width="160" height="4" translation="[4, 244]" color="0xE50914" />
                 <Rectangle id="ringT" width="168" height="4" translation="[0, 0]" color="0xFFFFFF" />
                 <Rectangle id="ringB" width="168" height="4" translation="[0, 248]" color="0xFFFFFF" />
                 <Rectangle id="ringL" width="4" height="252" translation="[0, 0]" color="0xFFFFFF" />
                 <Rectangle id="ringR" width="4" height="252" translation="[164, 0]" color="0xFFFFFF" />
-                <Rectangle id="focusAccent" width="168" height="4" translation="[0, 244]" color="0xE50914" />
             </Group>
         </Group>
     </children>
