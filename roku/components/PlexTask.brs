@@ -2876,10 +2876,13 @@ function tuneLiveChannel(cfg as Object, item as Object) as Object
     if channelId = "" then return { ok: false, error: "Missing channel id" }
     if item.releaseFirst <> invalid then releaseLiveSession(cfg, item.releaseFirst)
 
-    attempt = plexPost(cfg, "/livetv/dvrs/" + dvrId + "/channels/" + requestEncode(channelId) + "/tune", "")
+    ' Plex binds the live session to the tune's X-Plex-Session-Identifier and
+    ' kills transcodes of it requested under any other identifier
+    playbackId = LCase(CreateObject("roDeviceInfo").GetRandomUUID())
+    attempt = plexPost(cfg, "/livetv/dvrs/" + dvrId + "/channels/" + requestEncode(channelId) + "/tune?X-Plex-Session-Identifier=" + playbackId, "")
     failure = tuneFailure(attempt)
     if failure = "" then
-        live = liveSessionFromTune(cfg, attempt)
+        live = liveSessionFromTune(cfg, attempt, playbackId)
         if live <> invalid then return live
         ' A subscription with no grab means no free tuner; don't leave it holding one
         print "[plexflix:livetv] tune "; channelId; " response: "; Left(safeToStr(attempt.body), 600)
@@ -2902,7 +2905,7 @@ end function
 ' The session is the tuned airing's Media uuid (MediaSubscription >
 ' MediaGrabOperation > Metadata/Video > Media); Plex plays it through the
 ' universal transcoder at /livetv/sessions/<uuid>
-function liveSessionFromTune(cfg as Object, result as Object) as Dynamic
+function liveSessionFromTune(cfg as Object, result as Object, playbackId as String) as Dynamic
     body = safeToStr(result.body)
     subId = tunedSubscriptionId(result.json)
     mediaUuid = deepFindMediaUuid(result.json, 0)
@@ -2913,26 +2916,28 @@ function liveSessionFromTune(cfg as Object, result as Object) as Dynamic
     if mediaUuid = "" and Instr(1, body, "MediaGrabOperation") > 0 then mediaUuid = scrapeAttr(body, "uuid")
     if mediaUuid = "" then return invalid
     print "[plexflix:livetv] tuned session "; mediaUuid; " subscription "; subId
-    ' The grabber's own transcode (keyed by the uuid) must have buffered some
-    ' of the stream first; a playback transcode started earlier dies at once
-    waitForGrabber(cfg, mediaUuid)
     transcodeSession = ""
     ' start.m3u8 starts the transcode; the player gets the media playlist it
-    ' points at, since asking for start.m3u8 again restarts the session
-    ' Broadcast MPEG-2 converted to H.264 dies on some servers, so first ask
-    ' Plex to pass through any codec this Roku decodes
+    ' points at, since asking for start.m3u8 again restarts the session.
+    ' Passing broadcast MPEG-2/AC3 through is cheapest; the full H.264/AAC
+    ' conversion matches what Plex Web asks for
     strategies = [
-        { name: "copy", extra: ["X-Plex-Client-Profile-Extra=" + requestEncode(liveCopyProfile())] },
-        { name: "720p", extra: ["videoResolution=1280x720", "maxVideoBitrate=4000", "videoQuality=75"] }
+        { name: "copy", directStream: true, videoCodecs: liveVideoCodecs(), audioCodecs: liveAudioCodecs() },
+        { name: "convert", directStream: false, videoCodecs: "h264", audioCodecs: "aac" }
     ]
     for startNo = 1 to strategies.count()
         strategy = strategies[startNo - 1]
-        transcodeSession = "plexflix-live-" + mediaUuid
-        if startNo > 1 then transcodeSession = transcodeSession + "-r" + startNo.ToStr()
-        masterUrl = buildStreamUrl(cfg, { key: "/livetv/sessions/" + mediaUuid, session: transcodeSession, extraQuery: strategy.extra }).url
+        transcodeSession = LCase(CreateObject("roDeviceInfo").GetRandomUUID())
+        extra = [
+            "copyts=0",
+            "mediaBufferSize=102400",
+            "X-Plex-Incomplete-Segments=1",
+            "X-Plex-Client-Profile-Extra=" + requestEncode(liveProfileExtra(strategy.videoCodecs, strategy.audioCodecs))
+        ]
+        masterUrl = buildStreamUrl(cfg, { key: "/livetv/sessions/" + mediaUuid, session: transcodeSession, sessionIdentifier: playbackId, directStream: strategy.directStream, extraQuery: extra }).url
         logDecision(cfg, masterUrl)
         probe = probePlaylist(cfg, masterUrl)
-        print "[plexflix:livetv] start "; startNo; " ("; strategy.name; ") HTTP "; probe.code; " "; Left(masterUrl, 140)
+        print "[plexflix:livetv] start "; startNo; " ("; strategy.name; " "; strategy.videoCodecs; "/"; strategy.audioCodecs; ") HTTP "; probe.code; " "; Left(masterUrl, 140)
         if probe.ok then
             playUrl = transcodeVariant(cfg, masterUrl, probe.body)
             if playUrl <> "" then
@@ -2998,36 +3003,6 @@ function transcodeVariant(cfg as Object, masterUrl as String, body as String) as
     return ""
 end function
 
-' Polls /transcode/sessions until the grabber transcode for this live
-' session reports a couple of seconds of stream (gives up after ~8s)
-sub waitForGrabber(cfg as Object, liveUuid as String)
-    url = cfg.baseUrl + "/transcode/sessions?X-Plex-Token=" + cfg.token
-    buffered = -1.0
-    for tries = 1 to 20
-        listing = probePlaylist(cfg, url)
-        buffered = grabberOffset(listing.body, liveUuid)
-        if buffered >= 2.0 then exit for
-        if buffered < 0 and tries >= 4 then exit for
-        sleep(400)
-    end for
-    print "[plexflix:livetv] grabber buffered "; buffered; "s"
-end sub
-
-function grabberOffset(xml as String, liveUuid as String) as Float
-    at = Instr(1, xml, "key=" + Chr(34) + liveUuid + Chr(34))
-    if at = 0 then return -1.0
-    closeAt = Instr(at, xml, ">")
-    if closeAt = 0 then closeAt = Len(xml)
-    tag = Mid(xml, at, closeAt - at)
-    marker = "maxOffsetAvailable=" + Chr(34)
-    valueAt = Instr(1, tag, marker)
-    if valueAt = 0 then return 0.0
-    valueAt = valueAt + Len(marker)
-    endAt = Instr(valueAt, tag, Chr(34))
-    if endAt = 0 then return 0.0
-    return Val(Mid(tag, valueAt, endAt - valueAt))
-end function
-
 ' Plex's decision explains a refused or failing transcode (codes, messages)
 sub logDecision(cfg as Object, masterUrl as String)
     decisionUrl = masterUrl.Replace("/start.m3u8?", "/decision?")
@@ -3043,17 +3018,26 @@ sub logDecision(cfg as Object, masterUrl as String)
     end while
 end sub
 
-' Generic clients get H.264-only HLS; this widens it to what the device decodes
-function liveCopyProfile() as String
+function liveVideoCodecs() as String
     info = CreateObject("roDeviceInfo")
-    videoCodecs = "h264"
-    if info.CanDecodeVideo({ Codec: "hevc" }).result = true then videoCodecs = videoCodecs + ",hevc"
-    if info.CanDecodeVideo({ Codec: "mpeg2" }).result = true then videoCodecs = videoCodecs + ",mpeg2video"
-    audioCodecs = "aac,mp3"
-    if info.CanDecodeAudio({ Codec: "ac3" }).result = true then audioCodecs = audioCodecs + ",ac3"
-    if info.CanDecodeAudio({ Codec: "eac3" }).result = true then audioCodecs = audioCodecs + ",eac3"
-    print "[plexflix:livetv] device decodes video "; videoCodecs; " audio "; audioCodecs
-    return "add-transcode-target(type=videoProfile&context=streaming&protocol=hls&container=mpegts&videoCodec=" + videoCodecs + "&audioCodec=" + audioCodecs + "&replace=true)"
+    codecs = "h264"
+    if info.CanDecodeVideo({ Codec: "hevc" }).result = true then codecs = codecs + ",hevc"
+    if info.CanDecodeVideo({ Codec: "mpeg2" }).result = true then codecs = codecs + ",mpeg2video"
+    return codecs
+end function
+
+function liveAudioCodecs() as String
+    info = CreateObject("roDeviceInfo")
+    codecs = "aac,mp3"
+    if info.CanDecodeAudio({ Codec: "ac3" }).result = true then codecs = codecs + ",ac3"
+    if info.CanDecodeAudio({ Codec: "eac3" }).result = true then codecs = codecs + ",eac3"
+    return codecs
+end function
+
+' Same shape as Plex Web's profile extra: the codec lists are encoded once
+' inside the directive and the whole directive again as a query value
+function liveProfileExtra(videoCodecs as String, audioCodecs as String) as String
+    return "append-transcode-target-codec(type=videoProfile&context=streaming&videoCodec=" + videoCodecs.Replace(",", "%2C") + "&audioCodec=" + audioCodecs.Replace(",", "%2C") + "&protocol=hls)"
 end function
 
 ' Why a transcode died is only visible server-side; this shows whether Plex
@@ -4284,7 +4268,12 @@ function buildStreamUrl(cfg as Object, item as Object) as Object
     query.push("protocol=hls")
     query.push("fastSeek=1")
     query.push("directPlay=0")
-    query.push("directStream=1")
+    if item.directStream = false then
+        query.push("directStream=0")
+        query.push("directStreamAudio=0")
+    else
+        query.push("directStream=1")
+    end if
     query.push("subtitles=auto")
     query.push("subtitleSize=100")
     query.push("audioBoost=100")
@@ -4303,7 +4292,9 @@ function buildStreamUrl(cfg as Object, item as Object) as Object
     session = safeToStr(item.session)
     if session <> "" then
         query.push("session=" + requestEncode(session))
-        query.push("X-Plex-Session-Identifier=" + requestEncode(session))
+        playbackId = safeToStr(item.sessionIdentifier)
+        if playbackId = "" then playbackId = session
+        query.push("X-Plex-Session-Identifier=" + requestEncode(playbackId))
     end if
     if item.extraQuery <> invalid then
         for each part in item.extraQuery
