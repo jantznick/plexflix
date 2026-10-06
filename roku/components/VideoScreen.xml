@@ -12,6 +12,7 @@
     </interface>
 
     <script type="text/brightscript" uri="VideoScreen.brs" />
+    <script type="text/brightscript" uri="pkg:/source/Spinner.brs" />
 
     <children>
         <Timer id="hideTimer" duration="5" repeat="false" />

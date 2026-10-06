@@ -1,6 +1,7 @@
 sub init()
     m.rowsRoot = m.top.findNode("rowsRoot")
     m.spinner = m.top.findNode("spinner")
+    PinSpinner(m.spinner)
     m.rowNodes = []
     m.rowOffsets = []
     m.rowSpeeds = []
@@ -28,7 +29,10 @@ end sub
 sub onActiveChange()
     if m.top.active = true then
         m.top.visible = true
-        if m.spinner <> invalid then m.spinner.control = "start"
+        if m.spinner <> invalid then
+            m.spinner.control = "start"
+            CenterSpinner(m.spinner, 960)
+        end if
         m.tick.control = "start"
     else
         m.tick.control = "stop"
