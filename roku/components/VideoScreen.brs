@@ -193,6 +193,8 @@ end sub
 
 function directStreamFormat(url as String, declared as String) as String
     if declared <> "" then return declared
+    ' Sports feed streams are HLS; videoType above is only ever more specific
+    if m.isSport then return "hls"
 
     lowerUrl = LCase(url)
     queryAt = Instr(1, lowerUrl, "?")
@@ -203,8 +205,7 @@ function directStreamFormat(url as String, declared as String) as String
     if Right(path, 4) = ".mpd" then return "dash"
     if Right(path, 4) = ".mp4" or Right(path, 4) = ".m4v" or Right(path, 4) = ".mov" then return "mp4"
     ' Live feeds are HLS in practice, and a proxy URL with the playlist encoded
-    ' in its path gives no other clue; telling Roku "mp4" there fails as a
-    ' network error before a single segment is fetched
+    ' in its path gives no other clue; read as mp4 it fails as a network error
     if m.isLive then return "hls"
     return "mp4"
 end function
