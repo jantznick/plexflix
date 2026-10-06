@@ -31,10 +31,13 @@ end sub
 
 sub buildStaticEntries()
     m.entries = [
-        { id: "home", kind: "nav", title: "Home" },
-        { id: "livetv", kind: "nav", title: "Live TV" },
-        { id: "sports", kind: "nav", title: "Live Sports" }
+        { id: "home", kind: "nav", title: "Home" }
     ]
+    if not IsKidsMode(m.top.config) then
+        m.entries.push({ id: "livetv", kind: "nav", title: "Live TV" })
+        m.entries.push({ id: "sports", kind: "nav", title: "Live Sports" })
+    end if
+    m.entries.push({ id: "profiles", kind: "nav", title: "Switch Profile" })
     rebuildItems()
 end sub
 
@@ -53,6 +56,7 @@ sub onLibrariesLoaded()
         m.libraries = response.items
     end if
 
+    kidsMode = IsKidsMode(m.top.config)
     m.entries = []
     m.entries.push({ id: "home", kind: "nav", title: "Home" })
     for each lib in m.libraries
@@ -63,8 +67,11 @@ sub onLibrariesLoaded()
             library: lib
         })
     end for
-    m.entries.push({ id: "livetv", kind: "nav", title: "Live TV" })
-    m.entries.push({ id: "sports", kind: "nav", title: "Live Sports" })
+    if not kidsMode then
+        m.entries.push({ id: "livetv", kind: "nav", title: "Live TV" })
+        m.entries.push({ id: "sports", kind: "nav", title: "Live Sports" })
+    end if
+    m.entries.push({ id: "profiles", kind: "nav", title: "Switch Profile" })
     rebuildItems()
     syncActiveIndex()
 end sub
@@ -141,6 +148,7 @@ function iconFor(entry as Object) as String
     if entry.id = "home" then return "pkg:/images/nav_home.png"
     if entry.id = "livetv" then return "pkg:/images/nav_live.png"
     if entry.id = "sports" then return "pkg:/images/nav_sports.png"
+    if entry.id = "profiles" then return "pkg:/images/nav_home.png"
     if entry.library <> invalid and asString(entry.library.sectionType) = "show" then
         return "pkg:/images/nav_tv.png"
     end if

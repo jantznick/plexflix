@@ -20,25 +20,70 @@ sub init()
     m.sportsDetailScreen = invalid
     m.castDetailScreen = invalid
     m.liveTvScreen = invalid
+    m.profileScreen = invalid
     m.section = "home"
     m.navExpanded = false
     m.activeLibraryId = ""
+    m.profileReady = false
 
-    m.sideNav.config = m.config
+    m.sideNav.visible = false
     m.sideNav.expanded = false
     m.sideNav.observeField("selected", "onNavSelected")
     m.sideNav.observeField("selectedLibrary", "onLibrarySelected")
     ' The nav can collapse itself (Back); keep the scrim and focus in sync when it does
     m.sideNav.observeField("expanded", "onNavExpandedChanged")
+
+    ' Nothing loads until a profile is chosen (adult PIN or kids)
+    showProfileSelect()
+end sub
+
+sub showProfileSelect()
+    clearScreens()
+    m.profileReady = false
+    m.config.profileMode = ""
+    m.sideNav.visible = false
+    m.sideNav.railVisible = false
+    setNavExpanded(false)
+
+    m.profileScreen = createObject("roSGNode", "ProfileSelectScreen")
+    m.profileScreen.config = m.config
+    m.profileScreen.observeField("selectedProfile", "onProfileSelected")
+    m.screens.appendChild(m.profileScreen)
+    m.profileScreen.setFocus(true)
+end sub
+
+sub onProfileSelected(event as Object)
+    profile = event.getData()
+    if profile = invalid then return
+    mode = asString(profile.mode)
+    if mode <> "adult" and mode <> "kids" then return
+
+    m.config.profileMode = mode
+    m.profileReady = true
+
+    if m.profileScreen <> invalid then
+        m.screens.removeChild(m.profileScreen)
+        m.profileScreen = invalid
+    end if
+
+    ' Re-assign config so SideNav rebuilds for kids vs adult entries
+    m.sideNav.config = m.config
+    m.sideNav.visible = true
+    m.sideNav.railVisible = true
+    m.section = "home"
+    m.activeLibraryId = ""
     showHome()
-    ' Start with the menu open; Home loads behind it
     setNavExpanded(true)
 end sub
 
 ' The icon rail belongs to browse surfaces: detail pages and the player use
 ' the full width and can't open the menu anyway
 sub updateNavRail()
-    overlay = (m.videoScreen <> invalid or m.detailScreen <> invalid or m.castDetailScreen <> invalid or m.sportsDetailScreen <> invalid)
+    if m.profileReady <> true then
+        m.sideNav.railVisible = false
+        return
+    end if
+    overlay = (m.videoScreen <> invalid or m.detailScreen <> invalid or m.castDetailScreen <> invalid or m.sportsDetailScreen <> invalid or m.profileScreen <> invalid)
     m.sideNav.railVisible = not overlay
 end sub
 
@@ -82,6 +127,7 @@ sub clearScreens()
     m.sportsDetailScreen = invalid
     m.castDetailScreen = invalid
     m.liveTvScreen = invalid
+    m.profileScreen = invalid
     updateNavRail()
 end sub
 
@@ -89,6 +135,18 @@ sub onNavSelected()
     section = m.sideNav.selected
     if section = invalid or section = "" then return
     if section = "library" then return ' handled by onLibrarySelected
+
+    if section = "profiles" then
+        setNavExpanded(false)
+        showProfileSelect()
+        return
+    end if
+
+    ' Kids mode has no Live TV / Sports
+    if IsKidsMode(m.config) and (section = "livetv" or section = "sports") then
+        setNavExpanded(false)
+        return
+    end if
 
     if section = m.section and sectionScreenExists(section) then
         setNavExpanded(false)
@@ -573,6 +631,9 @@ end sub
 
 function onKeyEvent(key as String, press as Boolean) as Boolean
     if not press then return false
+
+    ' Profile gate owns the remote until a profile is chosen
+    if m.profileReady <> true or m.profileScreen <> invalid then return false
 
     ' A dialog (search keyboard) owns the remote while it is up
     if dialogIsOpen() then return false

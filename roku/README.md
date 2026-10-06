@@ -7,8 +7,10 @@ This is intentionally a **design/UX shell** on top of existing Plex data. Creden
 ## What you get
 
 - Dark Netflix-like home: billboard hero + horizontal shelves
-- **Collapsible sidebar** (Left to open): Home, your **Libraries**, **Live TV**, Live Sports.
-  It starts open on launch; collapsed, a 72px icon rail stays on browse screens
+- **Profile gate** on launch: adult (PIN) or kids (kids libraries only)
+- **Collapsible sidebar** (Left to open): Home, your **Libraries**, **Live TV**, Live Sports
+  (kids mode hides Live TV / Sports and only lists kids libraries).
+  It starts open after a profile is chosen; collapsed, a 72px icon rail stays on browse screens
   (hidden on detail pages and in the player) with the current section lit
 - Selecting a library in the sidebar opens that library’s shelves
 - **Live TV**: Guide layout always visible (columns + placeholder rows while syncing); program info top-left, preview top-right
@@ -40,11 +42,20 @@ baseUrl: "http://192.168.x.x:32400"
 token: "YOUR_PLEX_TOKEN"
 sportsFeedUrl: "https://roku-hockey.s3.us-west-004.backblazeb2.com/secretfeedfilename.json"
 tmdbApiKey: "YOUR_TMDB_API_KEY"
+
+' Profiles (local gate — not Plex Home managed users)
+adultProfileName: "Nick"
+adultPin: "1234"
+kidsProfileName: "Kids"
+kidsLibraries: ["Kids TV", "Kids Movies", "Kids YouTube"]
 ```
 
 Optional keys:
 - `tmdbApiKey` — cast bios / photos / known-for, plus synopsis art for Discover titles not in your library (https://www.themoviedb.org/settings/api)
 - Leave as `REPLACE_WITH_TMDB_API_KEY` to skip TMDB (Plex people data still used when available)
+- `adultPin` — 4+ digit PIN required to open the adult profile (default `1234`; change before sideload)
+- `kidsLibraries` — Plex library titles kids mode is allowed to show (case-insensitive match)
+
 `sportsFeedUrl` can point at any JSON feed. Category maps like `{ "FOOTBALL": [ { title, thumbnail, content.videos[].url } ] }` are supported.
 
 Notes:
@@ -52,7 +63,7 @@ Notes:
 - Use the Plex server IP reachable from your Roku (usually LAN HTTP on `32400`)
 - Token guide: https://support.plex.tv/articles/204059436-finding-an-authentication-token-x-plex-token/
 - Roku and Plex must be on the same network (or otherwise routable)
-
+- Profile names in `kidsLibraries` must match your Plex library titles (or contain them)
 ## Package
 
 From the repo root:
@@ -206,6 +217,17 @@ exit instead of being left running.
 - Loading uses a Netflix-style scrolling poster mosaic on home launch (CDN-refreshable)
 - Soft loading banner for in-app fetches — the UI stays navigable
 
+## Profiles
+
+On launch (before Home or the sidebar load) you get a **Who's watching?** gate:
+
+- **Nick (adult)** — full app (libraries, Live TV, sports, Discover). Opens only after the PIN in `adultPin`
+- **Kids** — Home + sidebar are limited to the libraries listed in `kidsLibraries` (default: Kids TV, Kids Movies, Kids YouTube). Live TV, Live Sports, and Discover are hidden
+
+Switch anytime from the sidebar **Switch Profile** item (adult PIN is asked again when returning to Nick).
+
+This is a local channel gate on top of your existing Plex libraries — it does not call Plex Home managed-user APIs. Rename profiles or change the kids allow-list in `PlexConfig.brs` and republish.
+
 ## Daily splash posters (home server)
 
 The channel ships with hardcoded TMDB CDN posters for the scrolling splash. To refresh them from *your* Plex library every day, run this on the home server (not this laptop):
@@ -236,8 +258,8 @@ Outfit (Google Fonts / OFL) ships under `roku/fonts/`. Swap TTFs there and updat
 
 ## Out of scope for this MVP
 
-- Account login / PIN pairing UI
-- Global (cross-library) search, profiles, downloads
+- Account login / Plex Home managed-user token switching
+- Global (cross-library) search, downloads
 - Direct Play codec negotiation beyond HLS transcode
 - Settings screen (edit `PlexConfig.brs` and republish)
 
