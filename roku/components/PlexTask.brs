@@ -2934,11 +2934,16 @@ function liveSessionFromTune(cfg as Object, result as Object) as Dynamic
                 if variant <> "" then
                     print "[plexflix:livetv] variant "; Left(variant, 160)
                     playUrl = variant
+                    vprobe = { ok: false, code: 0, body: "" }
                     for waitNo = 1 to 20
                         vprobe = probePlaylist(cfg, variant)
                         if vprobe.ok and Instr(1, vprobe.body, "#EXTINF") > 0 then exit for
                         sleep(300)
                     end for
+                    print "[plexflix:livetv] variant HTTP "; vprobe.code; " after "; waitNo; " tries: "; Left(vprobe.body, 500)
+                    logFirstSegment(cfg, variant, vprobe.body)
+                else
+                    print "[plexflix:livetv] playlist: "; Left(probe.body, 500)
                 end if
                 return { ok: true, url: playUrl, session: transcodeSession, subscriptionId: subId, liveSession: mediaUuid }
             end if
@@ -2976,6 +2981,52 @@ function probePlaylist(cfg as Object, url as String) as Object
     body = msg.GetString()
     return { ok: (code >= 200 and code < 300 and Instr(1, body, "#EXTM3U") > 0), code: code, body: body }
 end function
+
+sub logFirstSegment(cfg as Object, playlistUrl as String, body as String)
+    segment = ""
+    for each raw in body.Tokenize(Chr(10))
+        candidate = raw.Trim()
+        if candidate <> "" and Left(candidate, 1) <> "#" then
+            segment = candidate
+            exit for
+        end if
+    end for
+    if segment = "" then return
+    segmentUrl = segment
+    if Left(segment, 4) <> "http" then
+        dirPart = playlistUrl
+        queryAt = Instr(1, dirPart, "?")
+        if queryAt > 0 then dirPart = Left(dirPart, queryAt - 1)
+        slash = 0
+        hit = Instr(1, dirPart, "/")
+        while hit > 0
+            slash = hit
+            hit = Instr(hit + 1, dirPart, "/")
+        end while
+        if Left(segment, 1) = "/" then
+            segmentUrl = cfg.baseUrl + segment
+        else
+            segmentUrl = Left(dirPart, slash) + segment
+        end if
+    end if
+    request = CreateObject("roUrlTransfer")
+    port = CreateObject("roMessagePort")
+    request.SetMessagePort(port)
+    request.SetUrl(segmentUrl)
+    request.AddHeader("X-Plex-Token", cfg.token)
+    request.AddHeader("X-Plex-Client-Identifier", cfg.clientId)
+    if not request.AsyncHead() then return
+    msg = wait(8000, port)
+    if msg = invalid then
+        request.AsyncCancel()
+        print "[plexflix:livetv] segment timeout "; Left(segmentUrl, 160)
+        return
+    end if
+    headers = msg.GetResponseHeaders()
+    contentType = ""
+    if headers <> invalid and headers["content-type"] <> invalid then contentType = headers["content-type"]
+    print "[plexflix:livetv] segment HTTP "; msg.GetResponseCode(); " "; contentType; " "; Left(segmentUrl, 160)
+end sub
 
 ' First media-playlist URI in a master playlist, made absolute and tokenized;
 ' empty when the playlist is already a media playlist

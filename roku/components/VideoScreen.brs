@@ -184,6 +184,19 @@ sub playDirect(url as String, item as Object)
     contentNode.title = valueOrEmpty(item.title)
     contentNode.streamFormat = directStreamFormat(url, valueOrEmpty(item.streamFormat))
     logPlayback("streamFormat " + contentNode.streamFormat)
+    cfg = m.top.config
+    if m.isLive and cfg <> invalid and valueOrEmpty(cfg.baseUrl) <> "" and Left(url, Len(cfg.baseUrl)) = cfg.baseUrl then
+        ' Plex ties a transcode session to the client that started it, and
+        ' segment requests carry no query string of their own
+        contentNode.live = true
+        contentNode.HttpHeaders = [
+            "X-Plex-Token:" + valueOrEmpty(cfg.token),
+            "X-Plex-Client-Identifier:" + valueOrEmpty(cfg.clientId),
+            "X-Plex-Product:" + valueOrEmpty(cfg.product),
+            "X-Plex-Platform:Roku",
+            "X-Plex-Device:Roku"
+        ]
+    end if
     m.video.content = contentNode
     m.video.control = "play"
     clearStatus()

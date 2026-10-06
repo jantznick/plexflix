@@ -99,11 +99,6 @@ sub init()
     m.dvrList.observeField("escapeBack", "onEscapeToMenu")
     m.menuList.observeField("itemSelected", "onMenuSelected")
 
-    m.tuneTimer = createObject("roSGNode", "Timer")
-    m.tuneTimer.repeat = false
-    m.tuneTimer.duration = 0.85
-    m.tuneTimer.observeField("fire", "onTunePreview")
-
     m.clockTimer = createObject("roSGNode", "Timer")
     m.clockTimer.repeat = true
     m.clockTimer.duration = 15
@@ -394,7 +389,6 @@ sub onGuideLoaded()
     refocusAnchor(nowSeconds())
     renderGrid()
     updateGridInfo()
-    schedulePreviewTune()
     if response.source = "fallback" then
         showToast("Guide data unavailable — showing channels only")
     end if
@@ -820,9 +814,9 @@ function moveLeft() as Boolean
 end function
 
 sub afterFocusMove(channelChanged as Boolean)
+    if channelChanged then dropStalePreview()
     renderGrid()
     updateGridInfo()
-    if channelChanged then schedulePreviewTune()
 end sub
 
 ' ---------------------------------------------------------------------------
@@ -944,14 +938,17 @@ end sub
 ' Preview
 ' ---------------------------------------------------------------------------
 
-sub schedulePreviewTune()
-    if not m.guideLoaded or m.tab <> 0 then return
-    m.tuneTimer.control = "stop"
-    m.tuneTimer.control = "start"
+' The preview square shows art; video only resumes there after Back from a
+' full-screen channel, and moving to another channel ends that session
+sub dropStalePreview()
+    ch = focusedChannel()
+    if not m.previewVideo.visible then return
+    if ch <> invalid and ch.key = m.previewKey then return
+    stopPreview()
+    releaseOwnedLive()
 end sub
 
 sub stopPreview()
-    m.tuneTimer.control = "stop"
     if m.previewVideo <> invalid then
         m.previewVideo.control = "stop"
         m.previewVideo.visible = false
@@ -959,38 +956,6 @@ sub stopPreview()
     m.previewKey = ""
     m.previewTag.visible = false
     m.previewTagLabel.visible = false
-end sub
-
-sub onTunePreview()
-    ch = focusedChannel()
-    if ch = invalid or m.zone = "menu" then return
-    if ch.key = m.previewKey and m.previewVideo.visible then return
-    m.previewKey = ch.key
-    m.previewHint.text = "Tuning " + channelLabel(ch) + "…"
-    m.previewHint.visible = true
-    m.previewTask = createObject("roSGNode", "PlexTask")
-    m.previewTask.config = m.top.config
-    m.previewTask.action = "tuneLiveChannel"
-    m.previewTask.item = { dvrId: m.ctx.dvrId, channelId: ch.tuneId, tuneAlt: ch.tuneAlt, releaseFirst: takeOwnedLive(ch.key) }
-    m.previewTask.observeField("response", "onPreviewReady")
-    m.previewTask.control = "RUN"
-end sub
-
-sub onPreviewReady()
-    response = m.previewTask.response
-    ch = focusedChannel()
-    if ch = invalid or ch.key <> m.previewKey or m.tab <> 0 or m.zone = "menu" then
-        if response <> invalid and response.ok = true then releaseLive({ subscriptionId: valueOr(response.subscriptionId, ""), session: valueOr(response.session, "") })
-        return
-    end if
-    if response = invalid or response.ok <> true or response.url = invalid or response.url = "" then
-        m.previewHint.text = "Preview unavailable"
-        m.previewHint.visible = true
-        m.previewKey = ""
-        return
-    end if
-    adoptLive(ch.key, response)
-    playPreview(ch, response.url)
 end sub
 
 ' Each tune holds a tuner until its temporary subscription is dropped, so the
@@ -1034,6 +999,16 @@ sub playPreview(ch as Object, url as String)
     contentNode.url = url
     contentNode.streamFormat = "hls"
     contentNode.live = true
+    cfg = m.top.config
+    if cfg <> invalid then
+        contentNode.HttpHeaders = [
+            "X-Plex-Token:" + valueOr(cfg.token, ""),
+            "X-Plex-Client-Identifier:" + valueOr(cfg.clientId, ""),
+            "X-Plex-Product:" + valueOr(cfg.product, ""),
+            "X-Plex-Platform:Roku",
+            "X-Plex-Device:Roku"
+        ]
+    end if
     m.previewVideo.content = contentNode
     m.previewVideo.visible = true
     m.previewHint.visible = false
@@ -1057,7 +1032,6 @@ sub applyTab(index as Integer)
         m.dvrView.visible = false
         renderGrid()
         updateGridInfo()
-        schedulePreviewTune()
     else
         stopPreview()
         releaseOwnedLive()
@@ -1407,7 +1381,6 @@ sub onRefocus()
         return
     end if
     renderGrid()
-    schedulePreviewTune()
 end sub
 
 ' ---------------------------------------------------------------------------
