@@ -609,9 +609,6 @@ function metadataToItem(cfg as Object, meta as Object) as Object
     showPosterUrl = ""
     if showThumb <> "" then showPosterUrl = imageUrl(cfg, showThumb, 360, 540)
 
-    librarySectionID = ""
-    if meta.librarySectionID <> invalid then librarySectionID = safeToStr(meta.librarySectionID)
-
     return {
         title: title,
         shortTitle: rawTitle,
@@ -639,8 +636,7 @@ function metadataToItem(cfg as Object, meta as Object) as Object
         parentIndex: parentIndexVal,
         grandparentRatingKey: grandparentRatingKey,
         parentRatingKey: parentRatingKey,
-        grandparentTitle: grandparentTitle,
-        librarySectionID: librarySectionID
+        grandparentTitle: grandparentTitle
     }
 end function
 
@@ -786,8 +782,6 @@ function buildHome(cfg as Object) as Object
         return { ok: false, error: "Set your Plex token in roku/source/PlexConfig.brs" }
     end if
 
-    if IsKidsMode(cfg) then return buildKidsHome(cfg)
-
     root = createObject("roSGNode", "ContentNode")
     seenTitles = {}
     movieSectionKeys = []
@@ -859,114 +853,6 @@ function buildHome(cfg as Object) as Object
     shuffleHomeRows(root)
 
     return { ok: true, content: root }
-end function
-
-' Kids home: only Kids TV / Kids Movies / Kids YouTube (names from config).
-' No Discover, no adult genre shelves, no Live TV/sports surfaces.
-function buildKidsHome(cfg as Object) as Object
-    root = createObject("roSGNode", "ContentNode")
-    seenTitles = {}
-
-    kids = resolveKidsSections(cfg)
-    if kids.count() = 0 then
-        return {
-            ok: false,
-            error: "No kids libraries found. Check kidsLibraries names in PlexConfig.brs match your Plex library titles."
-        }
-    end if
-
-    allowedIds = {}
-    for each section in kids
-        allowedIds[section.sectionId] = true
-    end for
-
-    onDeck = plexGet(cfg, "/library/onDeck")
-    if onDeck.ok = true then
-        items = filterItemsBySections(collectMetadata(cfg, onDeck.json), allowedIds)
-        addUniqueRowLoose(root, seenTitles, "Continue Watching", enrichEpisodeShowDescriptions(cfg, preferShowPosters(items)))
-    end if
-
-    for each section in kids
-        key = section.sectionId
-        title = section.title
-        sectionType = section.sectionType
-
-        onDeckSection = plexGet(cfg, "/library/sections/" + key + "/onDeck")
-        if onDeckSection.ok = true then
-            addUniqueRowLoose(root, seenTitles, title + " · Continue Watching", enrichEpisodeShowDescriptions(cfg, preferShowPosters(collectMetadata(cfg, onDeckSection.json))))
-        end if
-
-        recent = plexGet(cfg, "/library/sections/" + key + "/recentlyAdded")
-        if recent.ok = true then
-            addUniqueRow(root, seenTitles, title + " · Recently Added", collectMetadata(cfg, recent.json))
-        end if
-
-        sectionHubs = plexGet(cfg, "/hubs/sections/" + key + "?count=" + safeToStr(cfg.rowSize))
-        if sectionHubs.ok = true and sectionHubs.json <> invalid and sectionHubs.json.MediaContainer <> invalid then
-            appendHubRows(root, seenTitles, sectionHubs.json.MediaContainer.Hub, cfg)
-        end if
-
-        allItems = plexGet(cfg, "/library/sections/" + key + "/all?sort=addedAt:desc")
-        if allItems.ok = true then
-            label = title
-            if sectionType = "movie" then label = title + " · Movies"
-            if sectionType = "show" then label = title + " · Shows"
-            addUniqueRow(root, seenTitles, label, collectMetadata(cfg, allItems.json))
-        end if
-    end for
-
-    if root.getChildCount() = 0 then
-        return { ok: false, error: "Kids libraries responded, but no titles were returned." }
-    end if
-
-    shuffleHomeRows(root)
-    return { ok: true, content: root }
-end function
-
-function resolveKidsSections(cfg as Object) as Object
-    sections = []
-    result = plexGet(cfg, "/library/sections")
-    if result.ok <> true then return sections
-
-    dirs = invalid
-    if result.json <> invalid and result.json.MediaContainer <> invalid then
-        dirs = result.json.MediaContainer.Directory
-    end if
-    if dirs = invalid then return sections
-    if GetInterface(dirs, "ifArray") = invalid then dirs = [dirs]
-
-    for each dir in dirs
-        title = safeToStr(dir.title)
-        if IsKidsLibraryTitle(cfg, title) then
-            key = safeToStr(dir.key)
-            sectionId = sectionIdFromKey(key)
-            if sectionId = "" then sectionId = key
-            if sectionId <> "" then
-                sections.push({
-                    title: title,
-                    sectionId: sectionId,
-                    sectionType: safeToStr(dir.type),
-                    key: key
-                })
-            end if
-        end if
-    end for
-    return sections
-end function
-
-function filterItemsBySections(items as Object, allowedIds as Object) as Object
-    filtered = []
-    if items = invalid then return filtered
-    for each item in items
-        if item <> invalid then
-            sid = ""
-            if item.DoesExist("librarySectionID") then sid = safeToStr(item.librarySectionID)
-            if sid <> "" and allowedIds.DoesExist(sid) then
-                filtered.push(item)
-            end if
-        end if
-    end for
-    return filtered
 end function
 
 sub shuffleHomeRows(root as Object)
@@ -1809,21 +1695,9 @@ function fetchPinnedSources(cfg as Object) as Object
     if dirs = invalid then return { ok: true, items: [] }
     if GetInterface(dirs, "ifArray") = invalid then dirs = [dirs]
 
-    kidsMode = IsKidsMode(cfg)
-
     for each dir in dirs
         sectionType = safeToStr(dir.type)
-        title = safeToStr(dir.title)
-        ' Adult nav: movie + show libraries. Kids: only allow-listed titles
-        ' (any section type — YouTube channel libs are often show, sometimes not).
-        include = false
-        if kidsMode then
-            include = IsKidsLibraryTitle(cfg, title)
-        else if sectionType = "movie" or sectionType = "show" then
-            include = true
-        end if
-
-        if include then
+        if sectionType = "movie" or sectionType = "show" then
             key = safeToStr(dir.key)
             sectionId = sectionIdFromKey(key)
             if sectionId <> "" then
@@ -1832,7 +1706,7 @@ function fetchPinnedSources(cfg as Object) as Object
                 art = ""
                 if dir.art <> invalid then art = safeToStr(dir.art)
                 items.push({
-                    title: title,
+                    title: safeToStr(dir.title),
                     mediaType: "library",
                     sectionType: sectionType,
                     sectionId: sectionId,
