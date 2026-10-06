@@ -3030,12 +3030,15 @@ function mapSportsEntries(list as Object) as Object
             end if
             if streams.count() > 0 then
                 primary = streams[0].streamUrl
+                primaryFormat = ""
+                if streams[0].streamFormat <> invalid then primaryFormat = streams[0].streamFormat
                 items.push({
                     title: title,
                     description: league,
                     mediaType: "sport",
                     key: primary,
                     streamUrl: primary,
+                    streamFormat: primaryFormat,
                     streams: streams,
                     streamCount: streams.count(),
                     hdPosterUrl: thumb,
@@ -3065,7 +3068,7 @@ function extractSportsStreams(entry as Object) as Object
                 if url <> "" then
                     label = firstString(video, ["quality", "videoType"])
                     if label = "" then label = "Stream " + safeToStr(idx)
-                    streams.push({ title: label, streamUrl: url })
+                    streams.push({ title: label, streamUrl: url, streamFormat: feedStreamFormat(video) })
                     idx = idx + 1
                 end if
             end if
@@ -3098,6 +3101,17 @@ function extractSportsStreams(entry as Object) as Object
         end while
     end if
     return streams
+end function
+
+' Direct Publisher feeds name the format in videoType. Proxied URLs hide the
+' real playlist path (base64 in the path), so the URL alone can't be trusted.
+function feedStreamFormat(video as Object) as String
+    kind = LCase(firstString(video, ["videoType", "streamFormat", "format"]))
+    if kind = "hls" or kind = "m3u8" then return "hls"
+    if kind = "dash" or kind = "mpd" then return "dash"
+    if kind = "smooth" or kind = "ism" then return "ism"
+    if kind = "mp4" or kind = "mov" or kind = "m4v" then return "mp4"
+    return ""
 end function
 
 function extractSportsStreamUrl(entry as Object) as String

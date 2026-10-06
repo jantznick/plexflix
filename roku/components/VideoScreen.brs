@@ -182,20 +182,32 @@ sub playDirect(url as String, item as Object)
     contentNode = createObject("roSGNode", "ContentNode")
     contentNode.url = url
     contentNode.title = valueOrEmpty(item.title)
-    lowerUrl = LCase(url)
-    if Right(lowerUrl, 5) = ".m3u8" or Instr(1, lowerUrl, "m3u8") > 0 then
-        contentNode.streamFormat = "hls"
-    else if Right(lowerUrl, 4) = ".mpd" then
-        contentNode.streamFormat = "dash"
-    else
-        contentNode.streamFormat = "mp4"
-    end if
+    contentNode.streamFormat = directStreamFormat(url, valueOrEmpty(item.streamFormat))
+    logPlayback("streamFormat " + contentNode.streamFormat)
     m.video.content = contentNode
     m.video.control = "play"
     clearStatus()
     restartStallTimer()
     ensurePlayerFocus()
 end sub
+
+function directStreamFormat(url as String, declared as String) as String
+    if declared <> "" then return declared
+
+    lowerUrl = LCase(url)
+    queryAt = Instr(1, lowerUrl, "?")
+    path = lowerUrl
+    if queryAt > 0 then path = Left(lowerUrl, queryAt - 1)
+
+    if Instr(1, lowerUrl, "m3u8") > 0 then return "hls"
+    if Right(path, 4) = ".mpd" then return "dash"
+    if Right(path, 4) = ".mp4" or Right(path, 4) = ".m4v" or Right(path, 4) = ".mov" then return "mp4"
+    ' Live feeds are HLS in practice, and a proxy URL with the playlist encoded
+    ' in its path gives no other clue; telling Roku "mp4" there fails as a
+    ' network error before a single segment is fetched
+    if m.isLive then return "hls"
+    return "mp4"
+end function
 
 sub onStreamReady()
     response = m.task.response
