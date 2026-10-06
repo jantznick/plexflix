@@ -107,7 +107,7 @@
                 </Group>
             </Group>
 
-            <Timer id="grabPollTimer" repeat="true" duration="2.5" />
+            <Timer id="grabPollTimer" repeat="true" duration="2" />
 
             <Label id="softStatus" translation="[248, 346]" width="1200" height="28" text="" color="0x666670">
                 <Font role="font" uri="pkg:/fonts/Outfit-Regular.ttf" size="18" />

@@ -49,6 +49,8 @@ sub init()
     m.grabJobId = ""
     m.grabPollFails = 0
     m.grabStatusBusy = false
+    m.grabAwaitingPlex = false
+    m.plexCheckBusy = false
     m.seasons = []
     m.seasonQueue = 0
     m.seasonContent = invalid
@@ -78,6 +80,8 @@ sub onContentSet()
     m.grabJobId = ""
     m.grabPollFails = 0
     m.grabStatusBusy = false
+    m.grabAwaitingPlex = false
+    m.plexCheckBusy = false
     if item.DoesExist("onWatchlist") and item.onWatchlist = true then m.onWatchlist = true
     if item.DoesExist("isDiscover") and item.isDiscover = true then m.isUnavailable = true
     if item.DoesExist("unavailable") and item.unavailable = true then m.isUnavailable = true
@@ -376,7 +380,9 @@ function unavailableMessage(item as Object) as String
 end function
 
 sub loadUnavailableDetail(item as Object)
-    if m.softStatus <> invalid then m.softStatus.text = "Looking up details & similar titles…"
+    if m.grabAwaitingPlex <> true then
+        if m.softStatus <> invalid then m.softStatus.text = "Looking up details & similar titles…"
+    end if
     m.extrasTask = createObject("roSGNode", "PlexTask")
     m.extrasTask.config = m.top.config
     m.extrasTask.action = "unavailableDetail"
@@ -387,6 +393,22 @@ end sub
 
 sub onUnavailableLoaded()
     response = m.extrasTask.response
+    m.plexCheckBusy = false
+
+    ' Post-grab: keep rechecking until Plex has the title, then auto-flip to Play
+    if m.grabAwaitingPlex = true then
+        if response <> invalid and response.ok = true and response.localItem <> invalid then
+            localItem = response.localItem
+            if response.onWatchlist = true then localItem.onWatchlist = true
+            stopGrabPolling()
+            if m.softStatus <> invalid then m.softStatus.text = "Ready — opening…"
+            m.top.content = localItem
+            return
+        end if
+        if m.softStatus <> invalid then m.softStatus.text = "Ready — waiting for Plex to index…"
+        return
+    end if
+
     if m.softStatus <> invalid then m.softStatus.text = ""
     if response = invalid or response.ok <> true then
         if m.softStatus <> invalid then m.softStatus.text = "Couldn't load extra details — try similar picks below if any"
@@ -1096,7 +1118,7 @@ end sub
 
 sub startGrabPolling()
     if m.grabPollTimer = invalid then return
-    if m.grabJobId = "" then return
+    if m.grabJobId = "" and m.grabAwaitingPlex <> true then return
     m.grabPollTimer.control = "start"
 end sub
 
@@ -1105,6 +1127,8 @@ sub stopGrabPolling()
     m.grabBusy = false
     m.grabJobId = ""
     m.grabPollFails = 0
+    m.grabAwaitingPlex = false
+    m.plexCheckBusy = false
     paintGrabLabel()
 end sub
 
@@ -1113,6 +1137,20 @@ sub onGrabPollFire()
         stopGrabPolling()
         return
     end if
+
+    ' After grab reports ready, re-check Plex every 2s until this page flips to Play
+    if m.grabAwaitingPlex = true then
+        if m.plexCheckBusy = true then return
+        item = m.top.content
+        if item = invalid then
+            stopGrabPolling()
+            return
+        end if
+        m.plexCheckBusy = true
+        loadUnavailableDetail(item)
+        return
+    end if
+
     if m.grabJobId = "" then
         stopGrabPolling()
         return
@@ -1163,13 +1201,17 @@ sub applyGrabJobStatus(job as Object)
     if message = "" then message = asString(job.stage)
 
     if status = "ready" then
-        if m.grabPollTimer <> invalid then m.grabPollTimer.control = "stop"
         m.grabBusy = false
+        m.grabAwaitingPlex = true
         paintGrabLabel()
-        if m.softStatus <> invalid then m.softStatus.text = "Ready — refresh or reopen this title to Play"
-        ' Soft re-check: if local copy appeared, promote to Play page
+        if m.softStatus <> invalid then m.softStatus.text = "Ready — waiting for Plex to index…"
+        ' Keep the 2s timer running; it now re-checks local library until Play appears
+        startGrabPolling()
         item = m.top.content
-        if item <> invalid then loadUnavailableDetail(item)
+        if item <> invalid then
+            m.plexCheckBusy = true
+            loadUnavailableDetail(item)
+        end if
         return
     end if
 
@@ -1177,6 +1219,7 @@ sub applyGrabJobStatus(job as Object)
         if m.grabPollTimer <> invalid then m.grabPollTimer.control = "stop"
         m.grabBusy = false
         m.grabJobId = ""
+        m.grabAwaitingPlex = false
         paintGrabLabel()
         err = message
         if err = "" then err = "Grab failed — try again or use Watchlist"

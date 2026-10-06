@@ -173,7 +173,7 @@ On unavailable Discover titles:
 
 | Button | Role |
 |--------|------|
-| **Grab Now** | `POST /jobs` → poll progress on softStatus → flip toward Play when `ready` |
+| **Grab Now** | `POST /jobs` → poll progress on softStatus → when ready, re-check Plex every 2s until the page auto-flips to Play |
 | **Add to Watchlist** | Existing Plex Discover watchlist (save for later, no download) |
 | **Back** | Unchanged |
 
