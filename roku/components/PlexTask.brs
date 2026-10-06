@@ -35,6 +35,22 @@ sub exec()
         m.top.response = fetchLiveTv(cfg)
     else if action = "liveTvGuide" then
         m.top.response = fetchLiveTvGuide(cfg)
+    else if action = "liveTvGrid" then
+        m.top.response = fetchLiveTvGrid(cfg, m.top.item)
+    else if action = "dvrSchedule" then
+        m.top.response = fetchDvrSchedule(cfg)
+    else if action = "recordOptions" then
+        m.top.response = fetchRecordOptions(cfg, m.top.item)
+    else if action = "recordCreate" then
+        m.top.response = createRecording(cfg, m.top.item)
+    else if action = "recordCancel" then
+        m.top.response = cancelRecording(cfg, m.top.item)
+    else if action = "ruleSettings" then
+        m.top.response = fetchRuleSettings(cfg, m.top.item)
+    else if action = "ruleUpdate" then
+        m.top.response = updateRecordingRule(cfg, m.top.item)
+    else if action = "releaseLive" then
+        m.top.response = releaseLiveSession(cfg, m.top.item)
     else if action = "tuneLiveChannel" then
         m.top.response = tuneLiveChannel(cfg, m.top.item)
     else if action = "sportsFeed" then
@@ -2858,20 +2874,374 @@ function tuneLiveChannel(cfg as Object, item as Object) as Object
     end if
     if dvrId = "" then return { ok: false, error: "No DVR available to tune" }
     if channelId = "" then return { ok: false, error: "Missing channel id" }
+    if item.releaseFirst <> invalid then releaseLiveSession(cfg, item.releaseFirst)
 
-    path = "/livetv/dvrs/" + dvrId + "/channels/" + requestEncode(channelId) + "/tune"
-    result = plexPost(cfg, path, "")
-    if result.ok <> true then return result
-
-    sessionId = extractLiveSessionId(result.json, result.body)
-    if sessionId = "" then
-        return { ok: false, error: "Tuned, but no Live TV session id was returned" }
+    ' Plex binds the live session to the tune's X-Plex-Session-Identifier and
+    ' kills transcodes of it requested under any other identifier
+    playbackId = LCase(CreateObject("roDeviceInfo").GetRandomUUID())
+    attempt = plexPost(cfg, "/livetv/dvrs/" + dvrId + "/channels/" + requestEncode(channelId) + "/tune?X-Plex-Session-Identifier=" + playbackId, "")
+    failure = tuneFailure(attempt)
+    if failure = "" then
+        live = liveSessionFromTune(cfg, attempt, playbackId)
+        if live <> invalid then return live
+        ' A subscription with no grab means no free tuner; don't leave it holding one
+        print "[plexflix:livetv] tune "; channelId; " response: "; Left(safeToStr(attempt.body), 600)
+        releaseLiveSession(cfg, { subscriptionId: tunedSubscriptionId(attempt.json) })
+        failure = "No free tuner — another preview or recording is using it"
     end if
+    print "[plexflix:livetv] tune "; channelId; " failed: "; failure
+    return { ok: false, error: failure }
+end function
 
-    consumerId = safeToStr(cfg.clientId)
-    if consumerId = "" then consumerId = "plexflix-roku"
-    url = cfg.baseUrl + "/livetv/sessions/" + sessionId + "/" + requestEncode(consumerId) + "/index.m3u8?X-Plex-Token=" + cfg.token
-    return { ok: true, url: url, sessionId: sessionId }
+function tunedSubscriptionId(json as Dynamic) as String
+    if json = invalid or json.MediaContainer = invalid then return ""
+    for each subNode in nodeList(json.MediaContainer.MediaSubscription)
+        id = subscriptionId(subNode)
+        if id <> "" then return id
+    end for
+    return ""
+end function
+
+' The session is the tuned airing's Media uuid (MediaSubscription >
+' MediaGrabOperation > Metadata/Video > Media); Plex plays it through the
+' universal transcoder at /livetv/sessions/<uuid>
+function liveSessionFromTune(cfg as Object, result as Object, playbackId as String) as Dynamic
+    body = safeToStr(result.body)
+    subId = tunedSubscriptionId(result.json)
+    mediaUuid = deepFindMediaUuid(result.json, 0)
+    if mediaUuid = "" then
+        sessionPath = deepFindString(result.json, "/livetv/sessions/", 0)
+        if sessionPath <> "" then mediaUuid = extractLiveSessionId(invalid, Mid(sessionPath, Instr(1, sessionPath, "/livetv/sessions/")))
+    end if
+    if mediaUuid = "" and Instr(1, body, "MediaGrabOperation") > 0 then mediaUuid = scrapeAttr(body, "uuid")
+    if mediaUuid = "" then return invalid
+    print "[plexflix:livetv] tuned session "; mediaUuid; " subscription "; subId
+    transcodeSession = ""
+    ' start.m3u8 starts the transcode; the player gets the media playlist it
+    ' points at, since asking for start.m3u8 again restarts the session.
+    ' Passing broadcast MPEG-2/AC3 through is cheapest; the full H.264/AAC
+    ' conversion matches what Plex Web asks for
+    strategies = [
+        { name: "copy", directStream: true, videoCodecs: liveVideoCodecs(), audioCodecs: liveAudioCodecs() },
+        { name: "convert", directStream: false, videoCodecs: "h264", audioCodecs: "aac" }
+    ]
+    for startNo = 1 to strategies.count()
+        strategy = strategies[startNo - 1]
+        transcodeSession = LCase(CreateObject("roDeviceInfo").GetRandomUUID())
+        extra = [
+            "copyts=0",
+            "mediaBufferSize=102400",
+            "X-Plex-Incomplete-Segments=1",
+            "X-Plex-Client-Profile-Extra=" + requestEncode(liveProfileExtra(strategy.videoCodecs, strategy.audioCodecs))
+        ]
+        masterUrl = buildStreamUrl(cfg, { key: "/livetv/sessions/" + mediaUuid, session: transcodeSession, sessionIdentifier: playbackId, directStream: strategy.directStream, extraQuery: extra }).url
+        logDecision(cfg, masterUrl)
+        probe = probePlaylist(cfg, masterUrl)
+        print "[plexflix:livetv] start "; startNo; " ("; strategy.name; " "; strategy.videoCodecs; "/"; strategy.audioCodecs; ") HTTP "; probe.code; " "; Left(masterUrl, 140)
+        if probe.ok then
+            playUrl = transcodeVariant(cfg, masterUrl, probe.body)
+            if playUrl <> "" then
+                return { ok: true, url: playUrl, session: transcodeSession, subscriptionId: subId, liveSession: mediaUuid }
+            end if
+            logTranscoderState(cfg, probe.body)
+        end if
+        stopTranscode(cfg, { session: transcodeSession })
+        sleep(1000)
+    end for
+    releaseLiveSession(cfg, { subscriptionId: subId, session: transcodeSession })
+    return { ok: false, error: "Tuned, but Plex never served the live stream" }
+end function
+
+function probePlaylist(cfg as Object, url as String) as Object
+    request = CreateObject("roUrlTransfer")
+    port = CreateObject("roMessagePort")
+    request.SetMessagePort(port)
+    request.SetUrl(url)
+    request.RetainBodyOnError(true)
+    request.AddHeader("X-Plex-Token", cfg.token)
+    request.AddHeader("X-Plex-Product", cfg.product)
+    request.AddHeader("X-Plex-Version", cfg.version)
+    request.AddHeader("X-Plex-Client-Identifier", cfg.clientId)
+    request.AddHeader("X-Plex-Platform", "Roku")
+    request.AddHeader("X-Plex-Device", "Roku")
+    if Left(cfg.baseUrl, 8) = "https://" then
+        request.SetCertificatesFile("common:/certs/ca-bundle.crt")
+        request.InitClientCertificates()
+    end if
+    if not request.AsyncGetToString() then return { ok: false, code: 0, body: "" }
+    msg = wait(10000, port)
+    if msg = invalid then
+        request.AsyncCancel()
+        return { ok: false, code: 0, body: "" }
+    end if
+    code = msg.GetResponseCode()
+    body = msg.GetString()
+    return { ok: (code >= 200 and code < 300 and Instr(1, body, "#EXTM3U") > 0), code: code, body: body }
+end function
+
+' Media playlist behind a transcoder master, once it lists segments; empty
+' when the transcode session never comes up
+function transcodeVariant(cfg as Object, masterUrl as String, body as String) as String
+    variant = playlistVariantUrl(cfg, masterUrl, body)
+    if variant = "" then
+        if Instr(1, body, "#EXTINF") > 0 then return masterUrl
+        return ""
+    end if
+    misses = 0
+    for tries = 1 to 12
+        vprobe = probePlaylist(cfg, variant)
+        print "[plexflix:livetv] variant try "; tries; " HTTP "; vprobe.code; " "; Left(variant, 150)
+        if vprobe.ok and Instr(1, vprobe.body, "#EXTINF") > 0 then
+            logFirstSegment(cfg, variant, vprobe.body)
+            return variant
+        end if
+        if vprobe.code >= 500 then print "[plexflix:livetv] variant error body: "; Left(vprobe.body, 400)
+        if vprobe.code = 404 then misses = misses + 1
+        if misses >= 3 then exit for
+        sleep(400)
+    end for
+    return ""
+end function
+
+' Plex's decision explains a refused or failing transcode (codes, messages)
+sub logDecision(cfg as Object, masterUrl as String)
+    decisionUrl = masterUrl.Replace("/start.m3u8?", "/decision?")
+    decision = probePlaylist(cfg, decisionUrl)
+    body = decision.body
+    print "[plexflix:livetv] decision HTTP "; decision.code; ": "; Left(body, 300)
+    streamAt = Instr(1, body, "<Stream ")
+    while streamAt > 0
+        closeAt = Instr(streamAt, body, ">")
+        if closeAt = 0 then exit while
+        print "[plexflix:livetv]   "; Left(Mid(body, streamAt, closeAt - streamAt + 1), 260)
+        streamAt = Instr(closeAt, body, "<Stream ")
+    end while
+end sub
+
+function liveVideoCodecs() as String
+    info = CreateObject("roDeviceInfo")
+    codecs = "h264"
+    if info.CanDecodeVideo({ Codec: "hevc" }).result = true then codecs = codecs + ",hevc"
+    if info.CanDecodeVideo({ Codec: "mpeg2" }).result = true then codecs = codecs + ",mpeg2video"
+    return codecs
+end function
+
+function liveAudioCodecs() as String
+    info = CreateObject("roDeviceInfo")
+    codecs = "aac,mp3"
+    if info.CanDecodeAudio({ Codec: "ac3" }).result = true then codecs = codecs + ",ac3"
+    if info.CanDecodeAudio({ Codec: "eac3" }).result = true then codecs = codecs + ",eac3"
+    return codecs
+end function
+
+' Same shape as Plex Web's profile extra: the codec lists are encoded once
+' inside the directive and the whole directive again as a query value
+function liveProfileExtra(videoCodecs as String, audioCodecs as String) as String
+    return "append-transcode-target-codec(type=videoProfile&context=streaming&videoCodec=" + videoCodecs.Replace(",", "%2C") + "&audioCodec=" + audioCodecs.Replace(",", "%2C") + "&protocol=hls)"
+end function
+
+' Why a transcode died is only visible server-side; this shows whether Plex
+' still lists it and what it decided
+sub logTranscoderState(cfg as Object, masterBody as String)
+    print "[plexflix:livetv] master playlist: "; Left(masterBody, 400)
+    sessions = probePlaylist(cfg, cfg.baseUrl + "/transcode/sessions?X-Plex-Token=" + cfg.token)
+    print "[plexflix:livetv] /transcode/sessions HTTP "; sessions.code; ": "; Left(sessions.body, 600)
+end sub
+
+sub logFirstSegment(cfg as Object, playlistUrl as String, body as String)
+    segment = ""
+    for each raw in body.Tokenize(Chr(10))
+        candidate = raw.Trim()
+        if candidate <> "" and Left(candidate, 1) <> "#" then
+            segment = candidate
+            exit for
+        end if
+    end for
+    if segment = "" then return
+    segmentUrl = segment
+    if Left(segment, 4) <> "http" then
+        dirPart = playlistUrl
+        queryAt = Instr(1, dirPart, "?")
+        if queryAt > 0 then dirPart = Left(dirPart, queryAt - 1)
+        slash = 0
+        hit = Instr(1, dirPart, "/")
+        while hit > 0
+            slash = hit
+            hit = Instr(hit + 1, dirPart, "/")
+        end while
+        if Left(segment, 1) = "/" then
+            segmentUrl = cfg.baseUrl + segment
+        else
+            segmentUrl = Left(dirPart, slash) + segment
+        end if
+    end if
+    request = CreateObject("roUrlTransfer")
+    port = CreateObject("roMessagePort")
+    request.SetMessagePort(port)
+    request.SetUrl(segmentUrl)
+    request.AddHeader("X-Plex-Token", cfg.token)
+    request.AddHeader("X-Plex-Client-Identifier", cfg.clientId)
+    if not request.AsyncHead() then return
+    msg = wait(8000, port)
+    if msg = invalid then
+        request.AsyncCancel()
+        print "[plexflix:livetv] segment timeout "; Left(segmentUrl, 160)
+        return
+    end if
+    headers = msg.GetResponseHeaders()
+    contentType = ""
+    if headers <> invalid and headers["content-type"] <> invalid then contentType = headers["content-type"]
+    print "[plexflix:livetv] segment HTTP "; msg.GetResponseCode(); " "; contentType; " "; Left(segmentUrl, 160)
+end sub
+
+' First media-playlist URI in a master playlist, made absolute and tokenized;
+' empty when the playlist is already a media playlist
+function playlistVariantUrl(cfg as Object, masterUrl as String, body as String) as String
+    if Instr(1, body, "#EXT-X-STREAM-INF") = 0 then return ""
+    line = ""
+    for each raw in body.Tokenize(Chr(10))
+        candidate = raw.Trim()
+        if candidate <> "" and Left(candidate, 1) <> "#" then
+            line = candidate
+            exit for
+        end if
+    end for
+    if line = "" then return ""
+    if Left(line, 4) = "http" then
+        url = line
+    else if Left(line, 1) = "/" then
+        url = cfg.baseUrl + line
+    else
+        dirEnd = Instr(1, masterUrl, "?")
+        if dirEnd = 0 then dirEnd = Len(masterUrl) + 1
+        dirPart = Left(masterUrl, dirEnd - 1)
+        slash = 0
+        hit = Instr(1, dirPart, "/")
+        while hit > 0
+            slash = hit
+            hit = Instr(hit + 1, dirPart, "/")
+        end while
+        url = Left(dirPart, slash) + line
+    end if
+    if Instr(1, url, "X-Plex-Token=") = 0 then
+        if Instr(1, url, "?") > 0 then
+            url = url + "&X-Plex-Token=" + cfg.token
+        else
+            url = url + "?X-Plex-Token=" + cfg.token
+        end if
+    end if
+    return url
+end function
+
+' Ends a live preview/watch: stops its transcode and drops the temporary
+' "This Episode" subscription so the tuner is freed right away
+function releaseLiveSession(cfg as Object, item as Object) as Object
+    if item = invalid then return { ok: true }
+    session = safeToStr(item.session)
+    if session <> "" then stopTranscode(cfg, { session: session })
+    subId = safeToStr(item.subscriptionId)
+    if subId <> "" then
+        print "[plexflix:livetv] release subscription "; subId
+        plexCommand(cfg, "/media/subscriptions/" + requestEncode(subId), "DELETE")
+    end if
+    return { ok: true }
+end function
+
+' /tune answers 200 with status -1 and a message when the tuner refuses
+function tuneFailure(result as Object) as String
+    if result = invalid then return "No response"
+    if result.ok <> true then return safeToStr(result.error)
+    if result.json <> invalid and result.json.MediaContainer <> invalid then
+        mc = result.json.MediaContainer
+        if intOrZero(mc.status) < 0 or (intOrZero(mc.size) = 0 and safeToStr(mc.message) <> "") then
+            message = safeToStr(mc.message)
+            if message = "" then message = "Plex could not tune this channel"
+            return message
+        end if
+    end if
+    return ""
+end function
+
+function deepFindString(node as Dynamic, marker as String, depth as Integer) as String
+    if node = invalid or depth > 10 then return ""
+    nodeType = type(node)
+    if nodeType = "String" or nodeType = "roString" then
+        if Instr(1, node, marker) > 0 then return node
+        return ""
+    end if
+    if GetInterface(node, "ifAssociativeArray") <> invalid then
+        for each keyName in node
+            found = deepFindString(node[keyName], marker, depth + 1)
+            if found <> "" then return found
+        end for
+    else if GetInterface(node, "ifArray") <> invalid then
+        for each child in node
+            found = deepFindString(child, marker, depth + 1)
+            if found <> "" then return found
+        end for
+    end if
+    return ""
+end function
+
+' Pulls name="value" (XML) or "name":"value" (JSON) out of a raw body
+function scrapeAttr(body as String, name as String) as String
+    for each marker in [name + "=" + Chr(34), Chr(34) + name + Chr(34) + ":" + Chr(34)]
+        at = Instr(1, body, marker)
+        if at > 0 then
+            rest = Mid(body, at + Len(marker))
+            closeAt = Instr(1, rest, Chr(34))
+            if closeAt > 1 then return Left(rest, closeAt - 1)
+        end if
+    end for
+    return ""
+end function
+
+function deepFindMediaUuid(node as Dynamic, depth as Integer) as String
+    if node = invalid or depth > 10 then return ""
+    if GetInterface(node, "ifAssociativeArray") <> invalid then
+        for each media in nodeList(node.Media)
+            uuid = safeToStr(media.uuid)
+            if uuid <> "" then return uuid
+        end for
+        for each keyName in node
+            child = node[keyName]
+            if child <> invalid and (GetInterface(child, "ifAssociativeArray") <> invalid or GetInterface(child, "ifArray") <> invalid) then
+                found = deepFindMediaUuid(child, depth + 1)
+                if found <> "" then return found
+            end if
+        end for
+    else if GetInterface(node, "ifArray") <> invalid then
+        for each child in node
+            found = deepFindMediaUuid(child, depth + 1)
+            if found <> "" then return found
+        end for
+    end if
+    return ""
+end function
+
+function deepFindMetadataKey(node as Dynamic, depth as Integer) as String
+    if node = invalid or depth > 10 then return ""
+    if GetInterface(node, "ifAssociativeArray") <> invalid then
+        for each keyName in ["Metadata", "Video"]
+            for each meta in nodeList(node[keyName])
+                key = safeToStr(meta.key)
+                if Left(key, 1) = "/" then return key
+            end for
+        end for
+        for each keyName in node
+            child = node[keyName]
+            if child <> invalid and (GetInterface(child, "ifAssociativeArray") <> invalid or GetInterface(child, "ifArray") <> invalid) then
+                found = deepFindMetadataKey(child, depth + 1)
+                if found <> "" then return found
+            end if
+        end for
+    else if GetInterface(node, "ifArray") <> invalid then
+        for each child in node
+            found = deepFindMetadataKey(child, depth + 1)
+            if found <> "" then return found
+        end for
+    end if
+    return ""
 end function
 
 function extractLiveSessionId(json as Object, body as String) as String
@@ -2919,6 +3289,734 @@ function extractLiveSessionId(json as Object, body as String) as String
         end if
     end if
     return ""
+end function
+
+' ---------------------------------------------------------------------------
+' Live TV grid guide + DVR
+'
+' The EPG provider (tv.plex.providers.epg.*) serves the real guide: /grid
+' returns program Metadata whose Media entries are the individual airings,
+' each carrying beginsAt/endsAt and the channel it airs on (channelIdentifier,
+' channelVcn, channelCallSign, channelTitle, channelThumb).
+' ---------------------------------------------------------------------------
+
+function nodeList(value as Dynamic) as Object
+    if value = invalid then return []
+    if GetInterface(value, "ifArray") <> invalid then return value
+    if GetInterface(value, "ifAssociativeArray") <> invalid then return [value]
+    return []
+end function
+
+' Val() is single precision, which would round epoch seconds by minutes
+function epochOf(value as Dynamic) as Integer
+    if value = invalid then return 0
+    valueType = type(value)
+    if valueType = "Integer" or valueType = "roInt" or valueType = "roInteger" then return value
+    if valueType = "LongInteger" or valueType = "roLongInteger" then
+        if value > 100000000000& then return Int(value / 1000)
+        return value
+    end if
+    if valueType = "Float" or valueType = "Double" or valueType = "roFloat" or valueType = "roDouble" then
+        if value > 100000000000.0 then return Int(value / 1000)
+        return Int(value)
+    end if
+    if valueType = "String" or valueType = "roString" then
+        total# = 0
+        for i = 1 to Len(value)
+            c = Asc(Mid(value, i, 1)) - 48
+            if c < 0 or c > 9 then exit for
+            total# = total# * 10 + c
+        end for
+        if total# > 100000000000.0 then total# = total# / 1000
+        return Int(total#)
+    end if
+    return 0
+end function
+
+function truthy(value as Dynamic) as Boolean
+    if value = invalid then return false
+    s = LCase(safeToStr(value))
+    return s = "1" or s = "true"
+end function
+
+function firstDvrNode(json as Object) as Dynamic
+    if json = invalid or json.MediaContainer = invalid then return invalid
+    list = json.MediaContainer.Dvr
+    if list = invalid then list = json.MediaContainer.Directory
+    list = nodeList(list)
+    if list.count() = 0 then return invalid
+    return list[0]
+end function
+
+function epgProviderId(cfg as Object) as String
+    providers = plexGet(cfg, "/media/providers")
+    if providers.ok <> true or providers.json = invalid or providers.json.MediaContainer = invalid then return ""
+    mc = providers.json.MediaContainer
+    list = mc.MediaProvider
+    if list = invalid then list = mc.Provider
+    for each provider in nodeList(list)
+        ident = safeToStr(provider.identifier)
+        if Instr(1, LCase(ident), "providers.epg") > 0 then return ident
+    end for
+    return ""
+end function
+
+function liveTvContext(cfg as Object) as Object
+    ctx = { dvrId: "", epgId: "", enabled: {}, error: "" }
+    dvrs = plexGet(cfg, "/livetv/dvrs")
+    if dvrs.ok <> true then
+        ctx.error = safeToStr(dvrs.error)
+        return ctx
+    end if
+    ctx.dvrId = firstDvrId(dvrs.json)
+    dvr = firstDvrNode(dvrs.json)
+    if dvr <> invalid then
+        ctx.epgId = safeToStr(dvr.epgIdentifier)
+        ' ChannelMapping.enabled says which EPG channels (channelKey) the user kept
+        for each dev in nodeList(dvr.Device)
+            for each mapping in nodeList(dev.ChannelMapping)
+                epgKey = safeToStr(mapping.channelKey)
+                if epgKey <> "" then
+                    if mapping.enabled = invalid or truthy(mapping.enabled) then ctx.enabled[epgKey] = true
+                end if
+            end for
+        end for
+    end if
+    if ctx.epgId = "" then ctx.epgId = epgProviderId(cfg)
+    print "[plexflix:livetv] dvr="; ctx.dvrId; " epg="; ctx.epgId; " enabled="; ctx.enabled.count()
+    return ctx
+end function
+
+function epgArt(cfg as Object, meta as Object) as String
+    for each keyName in ["art", "grandparentArt", "thumb", "grandparentThumb", "parentThumb"]
+        value = safeToStr(meta[keyName])
+        if value <> "" then return imageUrlWide(cfg, value, 1280)
+    end for
+    return ""
+end function
+
+function airingFrom(cfg as Object, meta as Object, media as Dynamic) as Dynamic
+    src = media
+    if src = invalid then src = meta
+    beginsAt = epochOf(src.beginsAt)
+    endsAt = epochOf(src.endsAt)
+    if beginsAt = 0 then beginsAt = epochOf(meta.beginsAt)
+    if endsAt = 0 then endsAt = epochOf(meta.endsAt)
+    if beginsAt <= 0 or endsAt <= beginsAt then return invalid
+
+    channelId = firstString(src, ["channelIdentifier", "channelID"])
+    if channelId = "" then channelId = firstString(meta, ["channelIdentifier", "channelID"])
+    vcn = firstString(src, ["channelVcn", "channelNumber"])
+    if vcn = "" then vcn = firstString(meta, ["channelVcn", "channelNumber"])
+    callSign = firstString(src, ["channelCallSign", "channelShortTitle"])
+    if callSign = "" then callSign = firstString(meta, ["channelCallSign", "channelShortTitle"])
+    channelTitle = firstString(src, ["channelTitle"])
+    if channelTitle = "" then channelTitle = firstString(meta, ["channelTitle"])
+    channelThumb = firstString(src, ["channelThumb"])
+    if channelThumb = "" then channelThumb = firstString(meta, ["channelThumb"])
+
+    channelKey = channelId
+    if channelKey = "" and vcn <> "" then channelKey = "vcn:" + vcn
+    if channelKey = "" then channelKey = callSign
+    if channelKey = "" then channelKey = channelTitle
+
+    kind = safeToStr(meta.type)
+    title = safeToStr(meta.title)
+    subtitle = ""
+    episodeLabel = ""
+    if kind = "episode" then
+        show = safeToStr(meta.grandparentTitle)
+        if show <> "" then
+            if title <> "" and LCase(title) <> LCase(show) then subtitle = title
+            title = show
+        end if
+        season = intOrZero(meta.parentIndex)
+        episode = intOrZero(meta.index)
+        if season > 0 and episode > 0 then
+            episodeLabel = "S" + StrI(season).Trim() + " E" + StrI(episode).Trim()
+        else if episode > 0 then
+            episodeLabel = "E" + StrI(episode).Trim()
+        end if
+    else if kind = "movie" then
+        subtitle = safeToStr(meta.year)
+    end if
+    if title = "" then title = "Untitled"
+
+    isNew = truthy(src.premiere) or truthy(meta.premiere)
+
+    return {
+        channelKey: channelKey,
+        channelId: channelId,
+        channelVcn: vcn,
+        channelCallSign: callSign,
+        channelTitle: channelTitle,
+        channelThumb: channelThumb,
+        title: title,
+        subtitle: subtitle,
+        episodeLabel: episodeLabel,
+        summary: safeToStr(meta.summary),
+        year: safeToStr(meta.year),
+        contentRating: safeToStr(meta.contentRating),
+        kind: kind,
+        guid: safeToStr(meta.guid),
+        showGuid: safeToStr(meta.grandparentGuid),
+        ratingKey: safeToStr(meta.ratingKey),
+        key: safeToStr(meta.key),
+        art: epgArt(cfg, meta),
+        isNew: isNew,
+        placeholder: false,
+        beginsAt: beginsAt,
+        endsAt: endsAt
+    }
+end function
+
+function gridAirings(cfg as Object, json as Object, startAt as Integer, endAt as Integer) as Object
+    out = []
+    if json = invalid or json.MediaContainer = invalid then return out
+    mc = json.MediaContainer
+    list = mc.Metadata
+    if list = invalid then list = mc.Video
+    for each meta in nodeList(list)
+        medias = nodeList(meta.Media)
+        if medias.count() = 0 then medias = [invalid]
+        for each media in medias
+            air = airingFrom(cfg, meta, media)
+            if air <> invalid and air.endsAt > startAt and air.beginsAt < endAt then out.push(air)
+        end for
+    end for
+    return out
+end function
+
+function channelSortKey(number as String) as Double
+    if number = "" then return 999999999.0
+    major# = 0
+    minor# = 0
+    seenDot = false
+    minorDigits = 0
+    for i = 1 to Len(number)
+        c = Mid(number, i, 1)
+        if c >= "0" and c <= "9" then
+            if seenDot then
+                minor# = minor# * 10 + (Asc(c) - 48)
+                minorDigits = minorDigits + 1
+            else
+                major# = major# * 10 + (Asc(c) - 48)
+            end if
+        else if (c = "." or c = "-") and not seenDot then
+            seenDot = true
+        else
+            exit for
+        end if
+    end for
+    return major# * 10000 + minor#
+end function
+
+function sortChannels(channels as Object) as Object
+    keyed = []
+    for each ch in channels
+        keyed.push({ k: channelSortKey(ch.number), c: ch })
+    end for
+    ' Insertion sort: guides are a few hundred channels at most
+    for i = 1 to keyed.count() - 1
+        cur = keyed[i]
+        j = i - 1
+        while j >= 0 and keyed[j].k > cur.k
+            keyed[j + 1] = keyed[j]
+            j = j - 1
+        end while
+        keyed[j + 1] = cur
+    end for
+    out = []
+    for each entry in keyed
+        out.push(entry.c)
+    end for
+    return out
+end function
+
+function sortAirings(list as Object) as Object
+    for i = 1 to list.count() - 1
+        cur = list[i]
+        j = i - 1
+        while j >= 0 and list[j].beginsAt > cur.beginsAt
+            list[j + 1] = list[j]
+            j = j - 1
+        end while
+        list[j + 1] = cur
+    end for
+    out = []
+    lastBegin = -1
+    for each air in list
+        if air.beginsAt <> lastBegin then out.push(air)
+        lastBegin = air.beginsAt
+    end for
+    return out
+end function
+
+function fetchLiveTvGrid(cfg as Object, params as Dynamic) as Object
+    if params = invalid then params = {}
+    dvrId = safeToStr(params.dvrId)
+    epgId = safeToStr(params.epgId)
+    enabled = params.enabled
+    fresh = truthy(params.fresh) or dvrId = ""
+
+    if fresh then
+        ctx = liveTvContext(cfg)
+        dvrId = ctx.dvrId
+        epgId = ctx.epgId
+        enabled = ctx.enabled
+        if dvrId = "" then
+            err = "No DVR configured on this Plex server"
+            if ctx.error <> "" then err = ctx.error
+            return { ok: false, error: err }
+        end if
+    end if
+    if enabled = invalid then enabled = {}
+
+    nowSec = CreateObject("roDateTime").AsSeconds()
+    startAt = epochOf(params.startAt)
+    endAt = epochOf(params.endAt)
+    if startAt <= 0 then startAt = nowSec - (nowSec mod 1800)
+    if endAt <= startAt then endAt = startAt + 4 * 3600
+
+    airings = []
+    gridError = ""
+    if epgId <> "" then
+        base = "/" + epgId + "/grid?sort=beginsAt&X-Plex-Container-Start=0&X-Plex-Container-Size=4000"
+        win = "&endsAt%3E=" + safeToStr(startAt) + "&beginsAt%3C=" + safeToStr(endAt)
+        for each path in [base + "&type=1%2C4" + win, base + win]
+            res = plexGet(cfg, path)
+            if res.ok = true then
+                airings = gridAirings(cfg, res.json, startAt, endAt)
+                if airings.count() > 0 then exit for
+            else
+                gridError = safeToStr(res.error)
+            end if
+        end for
+    end if
+    print "[plexflix:livetv] grid "; epgId; " "; startAt; "-"; endAt; " airings="; airings.count(); " "; gridError
+
+    byKey = {}
+    order = []
+    for each air in airings
+        ck = air.channelKey
+        if ck <> "" then
+            if not byKey.DoesExist(ck) then
+                number = air.channelVcn
+                ' /tune takes the EPG channel identifier, not the guide number
+                ' or the tuner's own id from ChannelMapping
+                tuneId = air.channelId
+                if tuneId = "" then tuneId = number
+                name = air.channelTitle
+                ' channelTitle is usually "2.1 WCBS"; drop the repeated number
+                if number <> "" and Left(name, Len(number) + 1) = number + " " then name = Mid(name, Len(number) + 2)
+                callSign = air.channelCallSign
+                if callSign = "" then callSign = name
+                byKey[ck] = {
+                    key: ck,
+                    number: number,
+                    callSign: callSign,
+                    name: name,
+                    logo: imageUrl(cfg, air.channelThumb, 160, 90),
+                    tuneId: tuneId,
+                    tuneAlt: air.channelId,
+                    programs: []
+                }
+                order.push(ck)
+            end if
+            byKey[ck].programs.push(air)
+        end if
+    end for
+
+    channels = []
+    for each ck in order
+        ch = byKey[ck]
+        ch.programs = sortAirings(ch.programs)
+        channels.push(ch)
+    end for
+
+    if fresh and enabled.count() > 0 then
+        kept = []
+        for each ch in channels
+            if ch.tuneAlt = "" or enabled.DoesExist(ch.tuneAlt) then kept.push(ch)
+        end for
+        if kept.count() > 0 then channels = kept
+    end if
+
+    source = "grid"
+    if fresh then
+        ' Tuner channels with no guide data still belong in the guide
+        listed = plexGet(cfg, "/livetv/dvrs/" + dvrId + "/channels")
+        if listed.ok = true then
+            byNumber = {}
+            for each ch in channels
+                if ch.number <> "" then byNumber[ch.number] = ch
+            end for
+            for each extra in mapLiveTvChannels(cfg, listed.json, dvrId)
+                number = safeToStr(extra.channelNumber)
+                if number <> "" and byNumber.DoesExist(number) then
+                    existing = byNumber[number]
+                    if existing.logo = "" then existing.logo = safeToStr(extra.hdPosterUrl)
+                else if number <> "" or safeToStr(extra.callSign) <> "" then
+                    channels.push({
+                        key: "dvr:" + number + ":" + safeToStr(extra.callSign),
+                        number: number,
+                        callSign: safeToStr(extra.callSign),
+                        name: safeToStr(extra.callSign),
+                        logo: safeToStr(extra.hdPosterUrl),
+                        tuneId: safeToStr(extra.channelId),
+                        tuneAlt: "",
+                        programs: []
+                    })
+                    if number <> "" then byNumber[number] = channels.peek()
+                end if
+            end for
+        end if
+
+        if airings.count() = 0 then
+            source = "fallback"
+            legacy = fetchLiveTvGuide(cfg)
+            if legacy.ok = true and channels.count() = 0 then
+                for each old in legacy.channels
+                    programs = []
+                    if safeToStr(old.programTitle) <> "" and safeToStr(old.programTitle) <> safeToStr(old.title) then
+                        programs.push({ title: safeToStr(old.programTitle), subtitle: "", summary: safeToStr(old.description), beginsAt: 0, endsAt: 0, art: safeToStr(old.hdBackdropUrl), guid: "", showGuid: "", episodeLabel: "", isNew: false, kind: "", placeholder: false })
+                    end if
+                    channels.push({
+                        key: "legacy:" + safeToStr(old.channelId),
+                        number: safeToStr(old.channelNumber),
+                        callSign: safeToStr(old.callSign),
+                        name: safeToStr(old.callSign),
+                        logo: "",
+                        tuneId: safeToStr(old.channelId),
+                        tuneAlt: "",
+                        programs: programs
+                    })
+                end for
+            end if
+        end if
+        channels = sortChannels(channels)
+    end if
+
+    if fresh and channels.count() = 0 then
+        err = "No Live TV channels found"
+        if gridError <> "" then err = gridError
+        return { ok: false, error: err }
+    end if
+
+    return {
+        ok: true,
+        source: source,
+        dvrId: dvrId,
+        epgId: epgId,
+        enabled: enabled,
+        startAt: startAt,
+        endAt: endAt,
+        channels: channels
+    }
+end function
+
+' Tuning live TV creates a temporary "This Episode" subscription with a
+' rolling grab; it isn't a recording the user asked for
+function isLiveTuneSubscription(subNode as Object) as Boolean
+    if safeToStr(subNode.channelIdentifier) <> "" then return true
+    for each grab in nodeList(subNode.MediaGrabOperation)
+        if truthy(grab.rolling) then return true
+    end for
+    return false
+end function
+
+function subscriptionId(subNode as Object) as String
+    id = firstString(subNode, ["key", "id", "ratingKey"])
+    marker = "/media/subscriptions/"
+    idx = Instr(1, id, marker)
+    if idx > 0 then id = Mid(id, idx + Len(marker))
+    return id
+end function
+
+function subscriptionTypeLabel(subType as Integer) as String
+    if subType = 1 then return "Movie"
+    if subType = 2 then return "Series"
+    if subType = 4 then return "Single airing"
+    return "Recording"
+end function
+
+function grabToUpcoming(cfg as Object, grab as Object, subId as String, subType as Integer) as Dynamic
+    metas = nodeList(grab.Metadata)
+    if metas.count() = 0 then metas = nodeList(grab.Video)
+    if metas.count() = 0 then return invalid
+    meta = metas[0]
+    medias = nodeList(meta.Media)
+    media = invalid
+    if medias.count() > 0 then media = medias[0]
+    air = airingFrom(cfg, meta, media)
+    if air = invalid then
+        air = { title: safeToStr(meta.title), subtitle: "", beginsAt: 0, endsAt: 0, channelKey: "", channelVcn: "", channelCallSign: "", guid: safeToStr(meta.guid), showGuid: safeToStr(meta.grandparentGuid), episodeLabel: "", summary: safeToStr(meta.summary), art: epgArt(cfg, meta), isNew: false, kind: "", placeholder: false }
+    end if
+    id = subId
+    if id = "" then id = safeToStr(grab.mediaSubscriptionID)
+    air.subscriptionId = id
+    air.subscriptionType = subType
+    air.status = safeToStr(grab.status)
+    air.grabKey = safeToStr(grab.key)
+    return air
+end function
+
+function fetchDvrSchedule(cfg as Object) as Object
+    upcoming = []
+    rules = []
+    errors = []
+
+    res = plexGet(cfg, "/media/subscriptions?includeGrabs=1&X-Plex-Container-Size=500")
+    if res.ok = true and res.json <> invalid and res.json.MediaContainer <> invalid then
+        for each subNode in nodeList(res.json.MediaContainer.MediaSubscription)
+          if not isLiveTuneSubscription(subNode) then
+            id = subscriptionId(subNode)
+            subType = intOrZero(subNode.type)
+            target = invalid
+            for each candidate in [subNode.Directory, subNode.Video, subNode.Metadata]
+                found = nodeList(candidate)
+                if target = invalid and found.count() > 0 then target = found[0]
+            end for
+            title = ""
+            guid = ""
+            art = ""
+            summary = ""
+            if target <> invalid then
+                title = firstString(target, ["grandparentTitle", "title"])
+                guid = safeToStr(target.guid)
+                art = epgArt(cfg, target)
+                summary = safeToStr(target.summary)
+            end if
+            if title = "" then title = safeToStr(subNode.title)
+            grabs = nodeList(subNode.MediaGrabOperation)
+            rules.push({
+                id: id,
+                title: title,
+                type: subType,
+                typeLabel: subscriptionTypeLabel(subType),
+                guid: guid,
+                library: safeToStr(subNode.librarySectionTitle),
+                airingsType: safeToStr(subNode.airingsType),
+                count: grabs.count(),
+                art: art,
+                summary: summary,
+                settings: ruleSettings(subNode)
+            })
+            logSettings(id, subNode)
+            for each grab in grabs
+                item = grabToUpcoming(cfg, grab, id, subType)
+                if item <> invalid then upcoming.push(item)
+            end for
+          end if
+        end for
+    else if res.error <> invalid then
+        errors.push(safeToStr(res.error))
+    end if
+
+    if upcoming.count() = 0 then
+        scheduled = plexGet(cfg, "/media/subscriptions/scheduled")
+        if scheduled.ok = true and scheduled.json <> invalid and scheduled.json.MediaContainer <> invalid then
+            for each grab in nodeList(scheduled.json.MediaContainer.MediaGrabOperation)
+                item = invalid
+                if not truthy(grab.rolling) then item = grabToUpcoming(cfg, grab, "", 0)
+                if item <> invalid then upcoming.push(item)
+            end for
+        end if
+    end if
+
+    upcoming = sortAirings(upcoming)
+    print "[plexflix:dvr] rules="; rules.count(); " upcoming="; upcoming.count()
+    if rules.count() = 0 and upcoming.count() = 0 and errors.count() > 0 then
+        return { ok: false, error: errors[0] }
+    end if
+    return { ok: true, upcoming: upcoming, rules: rules }
+end function
+
+' Editable prefs on a rule: enum settings ("0:Any|1:HD only") and booleans
+function ruleSettings(subNode as Object) as Object
+    out = []
+    for each setting in nodeList(subNode.Setting)
+        prefId = safeToStr(setting.id)
+        if prefId <> "" and not truthy(setting.hidden) then
+            label = firstString(setting, ["label", "summary"])
+            if label = "" then label = prefId
+            value = safeToStr(setting.value)
+            if value = "" then value = safeToStr(setting.default)
+            choices = []
+            enumText = safeToStr(setting.enumValues)
+            if enumText <> "" then
+                for each pair in enumText.Split("|")
+                    colon = Instr(1, pair, ":")
+                    if colon > 0 then
+                        choices.push({ value: Left(pair, colon - 1), label: Mid(pair, colon + 1) })
+                    else if pair <> "" then
+                        choices.push({ value: pair, label: pair })
+                    end if
+                end for
+            else if LCase(safeToStr(setting.type)) = "bool" then
+                if value = "1" or value = "0" then
+                    choices = [{ value: "1", label: "Yes" }, { value: "0", label: "No" }]
+                else
+                    choices = [{ value: "true", label: "Yes" }, { value: "false", label: "No" }]
+                end if
+            else if LCase(safeToStr(setting.type)) = "int" then
+                lowerId = LCase(prefId)
+                ' Padding prefs (startOffsetMinutes / endOffsetMinutes) ship without enumValues
+                if Instr(1, lowerId, "offset") > 0 or Instr(1, lowerId, "minutes") > 0 then
+                    hasCurrent = false
+                    for each n in [0, 1, 2, 3, 5, 10, 15, 20, 30, 45, 60]
+                        text = StrI(n).Trim()
+                        if text = value then hasCurrent = true
+                        choices.push({ value: text, label: text + " min" })
+                    end for
+                    if not hasCurrent and value <> "" then choices.push({ value: value, label: value + " min" })
+                end if
+            end if
+            if choices.count() > 1 then out.push({ id: prefId, label: label, value: value, choices: choices })
+        end if
+    end for
+    return out
+end function
+
+' Rules listed without their prefs: the subscription template for the same
+' guid carries the full Setting list (labels, enums, defaults)
+function fetchRuleSettings(cfg as Object, item as Object) as Object
+    guid = ""
+    if item <> invalid then guid = safeToStr(item.guid)
+    if guid = "" then return { ok: false, error: "This rule has no editable settings" }
+    res = plexGet(cfg, "/media/subscriptions/template?guid=" + requestEncode(guid))
+    if res.ok <> true then return res
+    if res.json = invalid or res.json.MediaContainer = invalid then return { ok: false, error: "Plex returned no rule settings" }
+    wanted = intOrZero(item.type)
+    best = invalid
+    for each tpl in nodeList(res.json.MediaContainer.SubscriptionTemplate)
+        for each subNode in nodeList(tpl.MediaSubscription)
+            if best = invalid or intOrZero(subNode.type) = wanted then best = subNode
+        end for
+    end for
+    if best = invalid then return { ok: false, error: "Plex returned no rule settings" }
+    settings = ruleSettings(best)
+    logSettings(safeToStr(item.subscriptionId) + " (template)", best)
+    return { ok: true, settings: settings }
+end function
+
+sub logSettings(label as String, subNode as Object)
+    ids = []
+    for each setting in nodeList(subNode.Setting)
+        ids.push(safeToStr(setting.id) + "=" + safeToStr(setting.value) + "[" + safeToStr(setting.type) + "]")
+    end for
+    text = ""
+    for each part in ids
+        if text <> "" then text = text + ", "
+        text = text + part
+    end for
+    print "[plexflix:dvr] rule "; label; " settings: "; text
+end sub
+
+function updateRecordingRule(cfg as Object, item as Object) as Object
+    id = ""
+    if item <> invalid then id = safeToStr(item.subscriptionId)
+    if id = "" then return { ok: false, error: "No rule to update" }
+    query = ""
+    if item.prefs <> invalid then
+        for each prefId in item.prefs
+            if query <> "" then query = query + "&"
+            query = query + "prefs%5B" + prefId + "%5D=" + requestEncode(safeToStr(item.prefs[prefId]))
+        end for
+    end if
+    if query = "" then return { ok: true }
+    print "[plexflix:dvr] update subscription "; id; " "; query
+    return plexCommand(cfg, "/media/subscriptions/" + requestEncode(id) + "?" + query, "PUT")
+end function
+
+function recordOptionLabel(subType as Integer, kind as String) as String
+    if subType = 1 then return "Record movie"
+    if subType = 2 then return "Record series"
+    if subType = 4 then
+        if kind = "movie" then return "Record this airing"
+        return "Record this episode"
+    end if
+    return "Record"
+end function
+
+function bracketEncode(value as String) as String
+    out = value.Replace("[", "%5B")
+    return out.Replace("]", "%5D")
+end function
+
+function fetchRecordOptions(cfg as Object, item as Object) as Object
+    guid = ""
+    if item <> invalid then guid = safeToStr(item.guid)
+    if guid = "" then return { ok: false, error: "This program has no guide id to record" }
+    res = plexGet(cfg, "/media/subscriptions/template?guid=" + requestEncode(guid))
+    if res.ok <> true then return res
+    mc = invalid
+    if res.json <> invalid then mc = res.json.MediaContainer
+    if mc = invalid then return { ok: false, error: "Plex returned no recording template" }
+
+    kind = safeToStr(item.kind)
+    options = []
+    for each tpl in nodeList(mc.SubscriptionTemplate)
+        for each subNode in nodeList(tpl.MediaSubscription)
+            subType = intOrZero(subNode.type)
+            prefsMap = {}
+            for each setting in nodeList(subNode.Setting)
+                prefId = safeToStr(setting.id)
+                value = safeToStr(setting.value)
+                if value = "" then value = safeToStr(setting.default)
+                if prefId <> "" then prefsMap[prefId] = value
+            end for
+            options.push({
+                label: recordOptionLabel(subType, kind),
+                type: subType,
+                parameters: bracketEncode(safeToStr(subNode.parameters)),
+                librarySectionId: safeToStr(subNode.targetLibrarySectionID),
+                locationId: safeToStr(subNode.targetSectionLocationID),
+                prefsMap: prefsMap,
+                settings: ruleSettings(subNode)
+            })
+        end for
+    end for
+    if options.count() = 0 then return { ok: false, error: "Plex can't record this program" }
+
+    ' Single airing first, then series: the common choice leads
+    sorted = []
+    for each wanted in [4, 1, 2]
+        for each opt in options
+            if opt.type = wanted then sorted.push(opt)
+        end for
+    end for
+    for each opt in options
+        if opt.type <> 4 and opt.type <> 1 and opt.type <> 2 then sorted.push(opt)
+    end for
+    return { ok: true, options: sorted }
+end function
+
+function createRecording(cfg as Object, item as Object) as Object
+    if item = invalid then return { ok: false, error: "Nothing to record" }
+    query = safeToStr(item.parameters)
+    if query <> "" and Left(query, 1) = "&" then query = Mid(query, 2)
+    if query <> "" then query = query + "&"
+    query = query + "type=" + safeToStr(item.type)
+    if safeToStr(item.librarySectionId) <> "" then query = query + "&targetLibrarySectionID=" + safeToStr(item.librarySectionId)
+    if safeToStr(item.locationId) <> "" then query = query + "&targetSectionLocationID=" + safeToStr(item.locationId)
+    query = query + "&includeGrabs=1"
+    prefs = {}
+    if item.prefsMap <> invalid then prefs.Append(item.prefsMap)
+    if item.overrides <> invalid then prefs.Append(item.overrides)
+    for each prefId in prefs
+        query = query + "&prefs%5B" + prefId + "%5D=" + requestEncode(safeToStr(prefs[prefId]))
+    end for
+    print "[plexflix:dvr] create subscription "; query
+    return plexPost(cfg, "/media/subscriptions?" + query, "")
+end function
+
+function cancelRecording(cfg as Object, item as Object) as Object
+    id = ""
+    if item <> invalid then id = safeToStr(item.subscriptionId)
+    if id = "" then return { ok: false, error: "No recording to cancel" }
+    print "[plexflix:dvr] delete subscription "; id
+    return plexCommand(cfg, "/media/subscriptions/" + requestEncode(id), "DELETE")
 end function
 
 function fetchSportsFeed(cfg as Object) as Object
@@ -3170,7 +4268,12 @@ function buildStreamUrl(cfg as Object, item as Object) as Object
     query.push("protocol=hls")
     query.push("fastSeek=1")
     query.push("directPlay=0")
-    query.push("directStream=1")
+    if item.directStream = false then
+        query.push("directStream=0")
+        query.push("directStreamAudio=0")
+    else
+        query.push("directStream=1")
+    end if
     query.push("subtitles=auto")
     query.push("subtitleSize=100")
     query.push("audioBoost=100")
@@ -3189,7 +4292,14 @@ function buildStreamUrl(cfg as Object, item as Object) as Object
     session = safeToStr(item.session)
     if session <> "" then
         query.push("session=" + requestEncode(session))
-        query.push("X-Plex-Session-Identifier=" + requestEncode(session))
+        playbackId = safeToStr(item.sessionIdentifier)
+        if playbackId = "" then playbackId = session
+        query.push("X-Plex-Session-Identifier=" + requestEncode(playbackId))
+    end if
+    if item.extraQuery <> invalid then
+        for each part in item.extraQuery
+            query.push(part)
+        end for
     end if
 
     url = cfg.baseUrl + "/video/:/transcode/universal/start.m3u8?" + joinStrings(query, "&")

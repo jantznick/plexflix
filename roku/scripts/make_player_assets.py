@@ -98,6 +98,27 @@ def make_player_scrim(width=16, height=360):
     write_png(os.path.join(IMAGES, "player_scrim.png"), width, height, pixels)
 
 
+def make_guide_fades(length=360, thickness=16, color=(8, 11, 18)):
+    """Guide-background ramps that melt the program art into the page.
+
+    guide_fade_h: solid on the left, clear on the right.
+    guide_fade_v: clear on top, solid at the bottom.
+    """
+    r, g, b = color
+    ramp = [int(round(255 * ((1 - i / (length - 1)) ** 1.4))) for i in range(length)]
+    pixels = []
+    for _ in range(thickness):
+        for x in range(length):
+            pixels.append((r, g, b, ramp[x]))
+    write_png(os.path.join(IMAGES, "guide_fade_h.png"), length, thickness, pixels)
+
+    pixels = []
+    for y in range(length):
+        for _ in range(thickness):
+            pixels.append((r, g, b, ramp[length - 1 - y]))
+    write_png(os.path.join(IMAGES, "guide_fade_v.png"), thickness, length, pixels)
+
+
 def make_focus_ring(size=32, thick=4, corner=8):
     """9-patch focus border for the RowList / MarkupGrid native focus indicator.
 
@@ -132,6 +153,28 @@ def make_focus_ring(size=32, thick=4, corner=8):
             else:
                 pixels.append(clear)
     write_png(os.path.join(IMAGES, "focus_ring.9.png"), full, full, pixels)
+
+
+def make_menu_focus(size=16, inset=4):
+    """Solid 9-patch fill for LabelList focus, so the highlight follows scrolling."""
+    full = size + 2
+    clear = (0, 0, 0, 0)
+    marker = (0, 0, 0, 255)
+    fill = (237, 240, 245, 255)
+    pixels = []
+    for y in range(full):
+        for x in range(full):
+            edge_x = x in (0, full - 1)
+            edge_y = y in (0, full - 1)
+            if edge_x and edge_y:
+                pixels.append(clear)
+            elif edge_y:
+                pixels.append(marker if inset < x <= size - inset else clear)
+            elif edge_x:
+                pixels.append(marker if inset < y <= size - inset else clear)
+            else:
+                pixels.append(fill)
+    write_png(os.path.join(IMAGES, "menu_focus.9.png"), full, full, pixels)
 
 
 def rect_strokes(x0, y0, x1, y1):
@@ -218,3 +261,5 @@ if __name__ == "__main__":
     make_player_scrim()
     make_focus_ring()
     make_nav_icons()
+    make_guide_fades()
+    make_menu_focus()

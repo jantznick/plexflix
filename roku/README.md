@@ -14,7 +14,17 @@ This is intentionally a **design/UX shell** on top of existing Plex data. Creden
   so returning is instant and the hubs refresh in the background (also after
   playback), updating only the rows whose items changed
 - Selecting a library in the sidebar opens that library’s shelves
-- **Live TV**: Guide layout always visible (columns + placeholder rows while syncing); program info top-left, preview top-right
+- **Live TV**: a real grid guide built from your Plex EPG (`/<epg provider>/grid`): channel logo, number and call sign
+  down the left, half-hour time slots across the top, program blocks sized by duration, a red now-line, and a live
+  preview of the focused channel. Up/Down change channel, Left/Right move through programs (time pages in 30-minute
+  steps and later hours load as you go), `<<`/`>>` page channels. OK on something airing now watches it; OK on a future
+  show (or `*` on anything) opens **Record this episode / Record series / Cancel recording**. Back from a channel
+  you were watching returns to the guide with that channel still playing in the preview
+- **DVR**: Upcoming lists scheduled recordings (OK cancels one). Rules lists each show with a rule; OK opens an editor for
+  its Plex recording settings (quality, replace lower quality, padding, commercial detection, episodes to keep, …;
+  OK on a setting opens its choices to pick from), plus Save and Delete. "Edit series rule" is also on the guide and Upcoming menus.
+  Programs that will record are tagged **REC** (or **SERIES**) in the grid. Finished recordings land in the Plex
+  library the rule targets, like any other episode or movie
 - **Libraries**: mosaic hero + **View all**; full grid with filter, search, order-by and an A–Z rail
 - **Continue Watching**, **Recently Added**, Plex hubs, library shelves, **genre rows**, and **Discover** trending (Netflix/Disney+/etc.)
 - Home shelves require **15–30** items (except Continue Watching) and **loop** horizontally
@@ -195,7 +205,7 @@ exit instead of being left running.
 ## Remote / focus
 
 - **Left** opens the sidebar from Home, Libraries, Live Sports (and sports detail via Back first); **Right** hides it
-- **Back** on a section's main screen (Home, a library, Live TV, Live Sports) opens the sidebar; from deep in Home's shelves or a library's shelves it returns to the top first
+- **Back** in the Live TV guide first jumps to the top channel at the current time; **Back** on a section's main screen (Home, a library, Live TV, Live Sports) opens the sidebar; from deep in Home's shelves or a library's shelves it returns to the top first
 - **Back** with the sidebar open exits the channel
 - Libraries appear as flat items in the sidebar (no wrapping cycle at the ends)
 - Arrow keys move across poster rows
