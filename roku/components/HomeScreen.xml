@@ -6,6 +6,14 @@
         <field id="loadingMessage" type="string" />
         <field id="openMenu" type="boolean" alwaysNotify="true" />
         <field id="refocus" type="boolean" alwaysNotify="true" onChange="onRefocus" />
+        <!-- True while the full-screen splash mosaic is up; MainScene keeps the
+             side nav (full and icon rail) off it -->
+        <field id="splashActive" type="boolean" value="true" />
+        <!-- MainScene keeps Home alive while another section is up: parked, it
+             stops polling and never takes focus -->
+        <field id="suspended" type="boolean" value="false" onChange="onSuspendedChange" />
+        <!-- Re-fetch the hubs in the background and update rows in place -->
+        <field id="refresh" type="boolean" alwaysNotify="true" onChange="onRefresh" />
     </interface>
 
     <script type="text/brightscript" uri="HomeScreen.brs" />

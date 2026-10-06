@@ -10,8 +10,12 @@ This is intentionally a **design/UX shell** on top of existing Plex data. Creden
 - **Profile gate** on launch: adult (PIN) or kids (kids libraries only)
 - **Collapsible sidebar** (Left to open): Home, your **Libraries**, **Live TV**, Live Sports
   (kids mode hides Live TV / Sports and only lists kids libraries).
-  It starts open after a profile is chosen; collapsed, a 72px icon rail stays on browse screens
-  (hidden on detail pages and in the player) with the current section lit
+  Collapsed, a 72px icon rail stays on browse screens with the current section
+  lit; it is hidden on detail pages, in the player, over the launch splash, and
+  on the profile gate
+- **Home stays loaded**: switching sections parks it instead of discarding it,
+  so returning is instant and the hubs refresh in the background (also after
+  playback), updating only the rows whose items changed
 - Selecting a library in the sidebar opens that library’s shelves
 - **Live TV**: Guide layout always visible (columns + placeholder rows while syncing); program info top-left, preview top-right
 - **Libraries**: mosaic hero + **View all**; full grid with filter, search, order-by and an A–Z rail
@@ -64,6 +68,7 @@ Notes:
 - Token guide: https://support.plex.tv/articles/204059436-finding-an-authentication-token-x-plex-token/
 - Roku and Plex must be on the same network (or otherwise routable)
 - Profile names in `kidsLibraries` must match your Plex library titles (or contain them)
+
 ## Package
 
 From the repo root:
@@ -202,7 +207,9 @@ exit instead of being left running.
 
 ## Remote / focus
 
-- **Left** opens the sidebar from Home, Libraries, Live Sports (and sports detail via Back first); **Right** or **Back** hides it
+- **Left** opens the sidebar from Home, Libraries, Live Sports (and sports detail via Back first); **Right** hides it
+- **Back** on a section's main screen (Home, a library, Live TV, Live Sports) opens the sidebar; from deep in Home's shelves or a library's shelves it returns to the top first
+- **Back** with the sidebar open exits the channel
 - Libraries appear as flat items in the sidebar (no wrapping cycle at the ends)
 - Arrow keys move across poster rows
 - Every list, grid and shelf uses `vertFocusAnimationStyle="floatingFocus"`: Up and

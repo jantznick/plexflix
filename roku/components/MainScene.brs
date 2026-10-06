@@ -26,8 +26,8 @@ sub init()
     m.activeLibraryId = ""
     m.profileReady = false
 
-    m.sideNav.visible = false
     m.sideNav.expanded = false
+    m.sideNav.suppressed = true
     m.sideNav.observeField("selected", "onNavSelected")
     m.sideNav.observeField("selectedLibrary", "onLibrarySelected")
     ' The nav can collapse itself (Back); keep the scrim and focus in sync when it does
@@ -38,10 +38,12 @@ sub init()
 end sub
 
 sub showProfileSelect()
+    ' Switching profiles must drop the parked Home — kids vs adult load different hubs
+    discardHome()
     clearScreens()
     m.profileReady = false
     m.config.profileMode = ""
-    m.sideNav.visible = false
+    m.sideNav.suppressed = true
     m.sideNav.railVisible = false
     setNavExpanded(false)
 
@@ -50,6 +52,13 @@ sub showProfileSelect()
     m.profileScreen.observeField("selectedProfile", "onProfileSelected")
     m.screens.appendChild(m.profileScreen)
     m.profileScreen.setFocus(true)
+    updateNavRail()
+end sub
+
+sub discardHome()
+    if m.homeScreen = invalid then return
+    if m.screens <> invalid then m.screens.removeChild(m.homeScreen)
+    m.homeScreen = invalid
 end sub
 
 sub onProfileSelected(event as Object)
@@ -68,23 +77,34 @@ sub onProfileSelected(event as Object)
 
     ' Re-assign config so SideNav rebuilds for kids vs adult entries
     m.sideNav.config = m.config
-    m.sideNav.visible = true
-    m.sideNav.railVisible = true
+    m.sideNav.suppressed = false
     m.section = "home"
     m.activeLibraryId = ""
     showHome()
-    setNavExpanded(true)
+    ' Nav stays closed over the splash; the icon rail appears once Home has loaded
 end sub
 
 ' The icon rail belongs to browse surfaces: detail pages and the player use
 ' the full width and can't open the menu anyway
 sub updateNavRail()
-    if m.profileReady <> true then
+    if m.profileReady <> true or m.profileScreen <> invalid then
+        m.sideNav.suppressed = true
         m.sideNav.railVisible = false
         return
     end if
-    overlay = (m.videoScreen <> invalid or m.detailScreen <> invalid or m.castDetailScreen <> invalid or m.sportsDetailScreen <> invalid or m.profileScreen <> invalid)
+    overlay = (m.videoScreen <> invalid or m.detailScreen <> invalid or m.castDetailScreen <> invalid or m.sportsDetailScreen <> invalid)
     m.sideNav.railVisible = not overlay
+    m.sideNav.suppressed = splashShowing()
+end sub
+
+' Nothing draws over the splash mosaic, open menu or rail
+function splashShowing() as Boolean
+    if m.homeScreen = invalid then return false
+    return m.homeScreen.splashActive = true
+end function
+
+sub onHomeSplashChange()
+    updateNavRail()
 end sub
 
 sub onNavExpandedChanged(event as Object)
@@ -94,6 +114,7 @@ sub onNavExpandedChanged(event as Object)
 end sub
 
 sub setNavExpanded(expanded as Boolean)
+    if expanded and splashShowing() then return
     m.navExpanded = expanded
     m.sideNav.expanded = expanded
     m.navScrim.visible = expanded
@@ -114,10 +135,16 @@ end sub
 sub clearScreens()
     ' Stop the library hub's focus guard before its node leaves the tree
     if m.libraryBrowseScreen <> invalid then m.libraryBrowseScreen.suspended = true
-    while m.screens.getChildCount() > 0
-        m.screens.removeChildIndex(0)
-    end while
-    m.homeScreen = invalid
+    ' Home is parked rather than dropped, so coming back to it is instant and
+    ' only a background refresh instead of the splash and a full load
+    for i = m.screens.getChildCount() - 1 to 0 step -1
+        child = m.screens.getChild(i)
+        if m.homeScreen = invalid or not child.isSameNode(m.homeScreen) then m.screens.removeChildIndex(i)
+    end for
+    if m.homeScreen <> invalid then
+        m.homeScreen.suspended = true
+        m.homeScreen.visible = false
+    end if
     m.detailScreen = invalid
     m.videoScreen = invalid
     m.libraryBrowseScreen = invalid
@@ -194,14 +221,28 @@ end sub
 
 sub showHome()
     clearScreens()
+    m.section = "home"
     m.sideNav.active = "home"
+
+    if m.homeScreen <> invalid then
+        m.homeScreen.visible = true
+        m.homeScreen.suspended = false
+        m.homeScreen.setFocus(true)
+        m.homeScreen.refocus = true
+        m.homeScreen.refresh = true
+        updateNavRail()
+        return
+    end if
+
     m.homeScreen = createObject("roSGNode", "HomeScreen")
     m.homeScreen.config = m.config
     m.homeScreen.observeField("selectedItem", "onBrowseSelected")
     m.homeScreen.observeField("loadingMessage", "onSoftLoading")
     m.homeScreen.observeField("openMenu", "onOpenMenu")
+    m.homeScreen.observeField("splashActive", "onHomeSplashChange")
     m.screens.appendChild(m.homeScreen)
     m.homeScreen.setFocus(true)
+    updateNavRail()
 end sub
 
 function dialogIsOpen() as Boolean
@@ -214,7 +255,7 @@ sub onOpenMenu()
     if m.videoScreen <> invalid or m.detailScreen <> invalid then return
     if dialogIsOpen() then return
     setNavExpanded(true)
-    m.sideNav.setFocus(true)
+    if m.navExpanded then m.sideNav.setFocus(true)
 end sub
 
 sub showLibraryBrowse(source as Object)
@@ -595,6 +636,8 @@ sub onVideoClosed()
         m.videoScreen = invalid
     end if
     updateNavRail()
+    ' Resume points and watched flags just moved; a parked Home refreshes on return
+    if m.homeScreen <> invalid and m.section = "home" then m.homeScreen.refresh = true
     if m.detailScreen <> invalid then
         m.detailScreen.setFocus(true)
     else if m.sportsDetailScreen <> invalid then
@@ -654,17 +697,21 @@ function onKeyEvent(key as String, press as Boolean) as Boolean
         else if m.libraryAllScreen <> invalid then
             m.libraryAllScreen.close = true
             return true
-        else if m.libraryBrowseScreen <> invalid then
-            m.libraryBrowseScreen.close = true
-            return true
         else if m.navExpanded then
-            setNavExpanded(false)
+            m.top.exitApp = true
+            return true
+        else
+            ' Nothing is on screen yet but the splash; let Back leave as usual
+            if splashShowing() then return false
+            ' The main screen of every section: Back brings up the menu, and Back
+            ' again from there leaves the channel
+            onOpenMenu()
             return true
         end if
     else if key = "left" and not m.navExpanded and m.videoScreen = invalid and m.detailScreen = invalid and m.castDetailScreen = invalid then
         ' Allow Left → menu from home / libraries / sports / sports detail
         setNavExpanded(true)
-        m.sideNav.setFocus(true)
+        if m.navExpanded then m.sideNav.setFocus(true)
         return true
     else if key = "right" and m.navExpanded then
         setNavExpanded(false)

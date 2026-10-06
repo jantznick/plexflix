@@ -46,6 +46,7 @@ sub init()
     m.rowList.observeField("rowItemFocused", "onRowItemFocused")
     m.rowList.observeField("escapeLeft", "onEscapeLeft")
     m.rowList.observeField("escapeUp", "onEscapeUp")
+    m.rowList.observeField("escapeBack", "onEscapeBack")
 
     m.focusPoll = createObject("roSGNode", "Timer")
     m.focusPoll.repeat = true
@@ -70,6 +71,7 @@ end sub
 
 sub hideSplash()
     if m.splashMosaic <> invalid then m.splashMosaic.active = false
+    m.top.splashActive = false
 end sub
 
 sub loadHome()
@@ -113,12 +115,108 @@ sub onHomeLoaded()
     m.rowList.content = content
     m.currentRow = -1
     setBrowseMode(false)
-    m.rowList.setFocus(true)
+    if m.top.suspended <> true then m.rowList.setFocus(true)
 
     firstRow = content.getChild(0)
     if firstRow <> invalid and firstRow.getChildCount() > 0 then
         updateHeroContent(firstRow.getChild(0))
     end if
+end sub
+
+'--------------------------------------------------------------------
+' Parking and background refresh
+'--------------------------------------------------------------------
+
+sub onSuspendedChange()
+    if m.top.suspended = true then
+        m.focusPoll.control = "stop"
+    else
+        m.focusPoll.control = "start"
+    end if
+end sub
+
+sub onRefresh()
+    if m.top.refresh <> true or m.top.config = invalid then return
+    ' The first load is still running, or a refresh already is
+    if m.rowList.content = invalid or m.refreshTask <> invalid then return
+
+    m.refreshTask = createObject("roSGNode", "PlexTask")
+    m.refreshTask.config = m.top.config
+    m.refreshTask.action = "home"
+    m.refreshTask.observeField("response", "onRefreshLoaded")
+    m.refreshTask.control = "RUN"
+end sub
+
+' Swap in fresh hubs without disturbing the viewer: rows whose items are
+' unchanged are left alone, so their posters neither flicker nor reload
+sub onRefreshLoaded()
+    response = m.refreshTask.response
+    m.refreshTask = invalid
+    ' A failed refresh keeps what is on screen rather than replacing it with an error
+    if response = invalid or response.ok <> true then return
+    fresh = response.content
+    if fresh = invalid or fresh.getChildCount() = 0 then return
+
+    current = m.rowList.content
+    if current = invalid then return
+
+    if sameRowLayout(current, fresh) then
+        for i = 0 to fresh.getChildCount() - 1
+            oldRow = current.getChild(i)
+            newRow = fresh.getChild(i)
+            if rowSignature(oldRow) <> rowSignature(newRow) then replaceRowItems(oldRow, newRow)
+        end for
+    else
+        ' Rows came or went (Continue Watching emptied, a new hub): swap the
+        ' whole list but put the highlight back as close as possible
+        info = m.rowList.rowItemFocused
+        rowIndex = 0
+        colIndex = 0
+        if info <> invalid and info.count() >= 2 then
+            rowIndex = info[0]
+            colIndex = info[1]
+        end if
+        m.rowList.content = fresh
+        if rowIndex > fresh.getChildCount() - 1 then rowIndex = fresh.getChildCount() - 1
+        count = fresh.getChild(rowIndex).getChildCount()
+        if colIndex > count - 1 then colIndex = count - 1
+        if colIndex < 0 then colIndex = 0
+        m.rowList.jumpToRowItem = [rowIndex, colIndex]
+        m.currentRow = -1
+    end if
+    applyFocusedRow(true)
+end sub
+
+function sameRowLayout(a as Object, b as Object) as Boolean
+    if a.getChildCount() <> b.getChildCount() then return false
+    for i = 0 to a.getChildCount() - 1
+        if asString(a.getChild(i).title) <> asString(b.getChild(i).title) then return false
+    end for
+    return true
+end function
+
+' Enough to notice a new episode, a moved resume point or a watched flag
+function rowSignature(row as Object) as String
+    parts = ""
+    for i = 0 to row.getChildCount() - 1
+        item = row.getChild(i)
+        watched = "0"
+        flag = item.watched
+        if (type(flag) = "Boolean" or type(flag) = "roBoolean") and flag then watched = "1"
+        parts = parts + asString(item.ratingKey) + ":" + asString(item.viewOffset) + ":" + watched + ":" + asString(item.unwatchedCount) + "|"
+    end for
+    return parts
+end function
+
+sub replaceRowItems(target as Object, source as Object)
+    items = []
+    for i = 0 to source.getChildCount() - 1
+        items.push(source.getChild(i))
+    end for
+    ' A node has one parent, so they leave the fresh tree before joining this one
+    source.removeChildrenIndex(source.getChildCount(), 0)
+    target.removeChildrenIndex(target.getChildCount(), 0)
+    target.appendChildren(items)
 end sub
 
 sub onFocusPoll()
@@ -311,6 +409,16 @@ end sub
 
 sub onEscapeLeft()
     m.top.openMenu = true
+end sub
+
+' Back from deep in the shelves returns to the top first; from the top it
+' opens the menu, which is where Back leaves the channel
+sub onEscapeBack()
+    if m.isCollapsed then
+        onEscapeUp()
+    else
+        m.top.openMenu = true
+    end if
 end sub
 
 sub onEscapeUp()
