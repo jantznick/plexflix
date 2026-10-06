@@ -19,11 +19,9 @@
     <script type="text/brightscript" uri="PosterItem.brs" />
 
     <children>
-        <!--
-            Focus chrome must stay inside the RowList/MarkupGrid cell. Negative
-            translations get clipped on device (missing sides / empty ring).
-            Content is inset; the ring is drawn on the outer cell edge.
-        -->
+        <!-- The focus border is the owning list's native indicator
+             (focus_ring.9.png), drawn on the cell edge; art is inset so it
+             never covers the border -->
         <Group id="visual">
             <Rectangle
                 id="shadow"
@@ -125,15 +123,6 @@
                 <Font role="font" uri="pkg:/fonts/Outfit-Medium.ttf" size="18" />
             </Label>
 
-            <!-- One visibility toggle so all four sides appear together -->
-            <!-- Accent first so the white sides always draw over it -->
-            <Group id="focusChrome" visible="false">
-                <Rectangle id="focusAccent" width="160" height="4" translation="[4, 244]" color="0xE50914" />
-                <Rectangle id="ringT" width="168" height="4" translation="[0, 0]" color="0xFFFFFF" />
-                <Rectangle id="ringB" width="168" height="4" translation="[0, 248]" color="0xFFFFFF" />
-                <Rectangle id="ringL" width="4" height="252" translation="[0, 0]" color="0xFFFFFF" />
-                <Rectangle id="ringR" width="4" height="252" translation="[164, 0]" color="0xFFFFFF" />
-            </Group>
-        </Group>
+            <!-- One visibility toggle so all four sides appear together -->        </Group>
     </children>
 </component>

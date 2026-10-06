@@ -44,7 +44,10 @@
             numColumns="7"
             numRows="4"
             vertFocusAnimationStyle="floatingFocus"
-            drawFocusFeedback="false"
+            drawFocusFeedback="true"
+            drawFocusFeedbackOnTop="true"
+            focusBitmapUri="pkg:/images/focus_ring.9.png"
+            focusFootprintBlendColor="0x00000000"
         />
 
         <AlphaRail id="alphaRail" translation="[1688, 100]" visible="false" />

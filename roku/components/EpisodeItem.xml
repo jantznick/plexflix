@@ -16,7 +16,8 @@
     <script type="text/brightscript" uri="EpisodeItem.brs" />
 
     <children>
-        <!-- Focus chrome stays inside the RowList cell — negative offsets clip on device -->
+        <!-- The focus border is the RowList's native indicator (focus_ring.9.png),
+             drawn on the cell edge; art is inset so it never covers the border -->
         <Rectangle
             id="shadow"
             width="304"
@@ -81,14 +82,5 @@
             uri="pkg:/images/watched_check.png"
             visible="false"
         />
-
-        <!-- Accent first so the white sides always draw over it -->
-        <Group id="focusChrome" visible="false">
-            <Rectangle id="focusAccent" width="312" height="4" translation="[4, 172]" color="0xE50914" />
-            <Rectangle id="ringT" width="320" height="4" translation="[0, 0]" color="0xFFFFFF" />
-            <Rectangle id="ringB" width="320" height="4" translation="[0, 176]" color="0xFFFFFF" />
-            <Rectangle id="ringL" width="4" height="180" translation="[0, 0]" color="0xFFFFFF" />
-            <Rectangle id="ringR" width="4" height="180" translation="[316, 0]" color="0xFFFFFF" />
-        </Group>
     </children>
 </component>
