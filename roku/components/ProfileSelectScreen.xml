@@ -1,0 +1,108 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!--
+  Launch gate: pick Adult (PIN) or Kids before any library content loads.
+-->
+<component name="ProfileSelectScreen" extends="Group">
+    <interface>
+        <field id="config" type="assocarray" onChange="onConfigReady" />
+        <!-- { mode: "adult"|"kids", name: string } -->
+        <field id="selectedProfile" type="assocarray" alwaysNotify="true" />
+    </interface>
+
+    <script type="text/brightscript" uri="ProfileSelectScreen.brs" />
+    <script type="text/brightscript" uri="pkg:/source/PlexConfig.brs" />
+    <script type="text/brightscript" uri="pkg:/source/Fonts.brs" />
+
+    <children>
+        <Rectangle id="bg" width="1920" height="1080" color="0x07070B" />
+
+        <!-- Soft depth so the picker isn't a flat slab -->
+        <Rectangle width="1920" height="420" translation="[0, 0]" color="0x12121A" opacity="0.85" />
+        <Rectangle width="1920" height="320" translation="[0, 760]" color="0x0A0A10" opacity="0.9" />
+
+        <Poster
+            id="brandLogo"
+            translation="[760, 72]"
+            width="400"
+            height="110"
+            loadDisplayMode="scaleToFit"
+            uri="pkg:/images/loading-logo.png"
+        />
+
+        <Label
+            id="heading"
+            translation="[0, 220]"
+            width="1920"
+            height="64"
+            horizAlign="center"
+            text="Who's watching?"
+            color="0xF2F2F5"
+        >
+            <Font role="font" uri="pkg:/fonts/Outfit-SemiBold.ttf" size="48" />
+        </Label>
+
+        <Label
+            id="subheading"
+            translation="[360, 290]"
+            width="1200"
+            height="40"
+            horizAlign="center"
+            text="Pick a profile to continue"
+            color="0x8A8A96"
+        >
+            <Font role="font" uri="pkg:/fonts/Outfit-Medium.ttf" size="24" />
+        </Label>
+
+        <Group id="profiles" translation="[560, 400]" />
+
+        <!-- PIN overlay (hidden until adult is chosen) -->
+        <Group id="pinOverlay" visible="false">
+            <Rectangle width="1920" height="1080" color="0x000000" opacity="0.72" />
+            <Rectangle
+                id="pinCard"
+                translation="[660, 220]"
+                width="600"
+                height="640"
+                color="0x14141C"
+            />
+            <Label
+                id="pinTitle"
+                translation="[660, 260]"
+                width="600"
+                height="48"
+                horizAlign="center"
+                text="Enter PIN"
+                color="0xFFFFFF"
+            >
+                <Font role="font" uri="pkg:/fonts/Outfit-SemiBold.ttf" size="32" />
+            </Label>
+            <Label
+                id="pinHint"
+                translation="[660, 312]"
+                width="600"
+                height="36"
+                horizAlign="center"
+                text=""
+                color="0x8A8A96"
+            >
+                <Font role="font" uri="pkg:/fonts/Outfit-Medium.ttf" size="20" />
+            </Label>
+
+            <Group id="pinDots" translation="[810, 380]" />
+
+            <Label
+                id="pinError"
+                translation="[660, 450]"
+                width="600"
+                height="32"
+                horizAlign="center"
+                text=""
+                color="0xE50914"
+            >
+                <Font role="font" uri="pkg:/fonts/Outfit-Medium.ttf" size="20" />
+            </Label>
+
+            <Group id="pinPad" translation="[750, 500]" />
+        </Group>
+    </children>
+</component>
