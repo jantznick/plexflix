@@ -70,6 +70,7 @@ end sub
 
 sub hideSplash()
     if m.splashMosaic <> invalid then m.splashMosaic.active = false
+    m.top.splashActive = false
 end sub
 
 sub loadHome()

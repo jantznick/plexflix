@@ -18,7 +18,7 @@ sub init()
 end sub
 
 sub onFocusChainChange()
-    if m.top.expanded = true and not m.top.isInFocusChain() then m.top.setFocus(true)
+    if m.top.expanded = true and m.top.suppressed <> true and not m.top.isInFocusChain() then m.top.setFocus(true)
 end sub
 
 sub onConfigReady()
@@ -172,8 +172,12 @@ sub onExpandedChange()
 end sub
 
 sub applyExpanded()
-    m.top.visible = true
     m.top.translation = [0, 0]
+    if m.top.suppressed = true then
+        m.top.visible = false
+        return
+    end if
+    m.top.visible = true
     if m.top.expanded = true then
         m.full.visible = true
         m.mini.visible = false

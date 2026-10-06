@@ -30,9 +30,9 @@ sub init()
     m.sideNav.observeField("selectedLibrary", "onLibrarySelected")
     ' The nav can collapse itself (Back); keep the scrim and focus in sync when it does
     m.sideNav.observeField("expanded", "onNavExpandedChanged")
+    ' The menu starts open, but only once the splash has made way for Home
+    m.openNavAfterSplash = true
     showHome()
-    ' Start with the menu open; Home loads behind it
-    setNavExpanded(true)
 end sub
 
 ' The icon rail belongs to browse surfaces: detail pages and the player use
@@ -40,6 +40,22 @@ end sub
 sub updateNavRail()
     overlay = (m.videoScreen <> invalid or m.detailScreen <> invalid or m.castDetailScreen <> invalid or m.sportsDetailScreen <> invalid)
     m.sideNav.railVisible = not overlay
+    m.sideNav.suppressed = splashShowing()
+end sub
+
+' Nothing draws over the splash mosaic, open menu or rail
+function splashShowing() as Boolean
+    if m.homeScreen = invalid then return false
+    return m.homeScreen.splashActive = true
+end function
+
+sub onHomeSplashChange()
+    updateNavRail()
+    if splashShowing() then return
+    if m.openNavAfterSplash = true then
+        m.openNavAfterSplash = false
+        setNavExpanded(true)
+    end if
 end sub
 
 sub onNavExpandedChanged(event as Object)
@@ -49,6 +65,7 @@ sub onNavExpandedChanged(event as Object)
 end sub
 
 sub setNavExpanded(expanded as Boolean)
+    if expanded and splashShowing() then return
     m.navExpanded = expanded
     m.sideNav.expanded = expanded
     m.navScrim.visible = expanded
@@ -142,8 +159,10 @@ sub showHome()
     m.homeScreen.observeField("selectedItem", "onBrowseSelected")
     m.homeScreen.observeField("loadingMessage", "onSoftLoading")
     m.homeScreen.observeField("openMenu", "onOpenMenu")
+    m.homeScreen.observeField("splashActive", "onHomeSplashChange")
     m.screens.appendChild(m.homeScreen)
     m.homeScreen.setFocus(true)
+    updateNavRail()
 end sub
 
 function dialogIsOpen() as Boolean
@@ -156,7 +175,7 @@ sub onOpenMenu()
     if m.videoScreen <> invalid or m.detailScreen <> invalid then return
     if dialogIsOpen() then return
     setNavExpanded(true)
-    m.sideNav.setFocus(true)
+    if m.navExpanded then m.sideNav.setFocus(true)
 end sub
 
 sub showLibraryBrowse(source as Object)
@@ -603,7 +622,7 @@ function onKeyEvent(key as String, press as Boolean) as Boolean
     else if key = "left" and not m.navExpanded and m.videoScreen = invalid and m.detailScreen = invalid and m.castDetailScreen = invalid then
         ' Allow Left → menu from home / libraries / sports / sports detail
         setNavExpanded(true)
-        m.sideNav.setFocus(true)
+        if m.navExpanded then m.sideNav.setFocus(true)
         return true
     else if key = "right" and m.navExpanded then
         setNavExpanded(false)
