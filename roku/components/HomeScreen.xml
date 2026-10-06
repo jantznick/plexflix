@@ -6,6 +6,9 @@
         <field id="loadingMessage" type="string" />
         <field id="openMenu" type="boolean" alwaysNotify="true" />
         <field id="refocus" type="boolean" alwaysNotify="true" onChange="onRefocus" />
+        <!-- True while the full-screen splash mosaic is up; MainScene keeps the
+             side nav (full and icon rail) off it -->
+        <field id="splashActive" type="boolean" value="true" />
     </interface>
 
     <script type="text/brightscript" uri="HomeScreen.brs" />
