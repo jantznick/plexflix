@@ -52,7 +52,7 @@
                     id="rowList"
                     translation="[96, 0]"
                     itemComponentName="PosterItem"
-                    numRows="2"
+                    numRows="3"
                     rowItemSize="[[180, 270]]"
                     rowItemSpacing="[[26, 0]]"
                     itemSize="[1728, 345]"
