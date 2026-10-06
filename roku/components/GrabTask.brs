@@ -157,20 +157,42 @@ function grabRequest(cfg as Object, method as String, path as String, body as St
 end function
 
 function safeStr(value as Dynamic) as String
+    ' BrightScript will not coerce Int + String — handle boxed types explicitly
     if value = invalid then return ""
-    return (value + "").Trim()
+    valueType = type(value)
+    if valueType = "String" or valueType = "roString" then
+        return value.Trim()
+    end if
+    if valueType = "Integer" or valueType = "roInt" or valueType = "roInteger" or valueType = "LongInteger" or valueType = "roLongInteger" then
+        return StrI(value).Trim()
+    end if
+    if valueType = "Float" or valueType = "Double" or valueType = "roFloat" or valueType = "roDouble" then
+        return Str(value).Trim()
+    end if
+    if valueType = "Boolean" or valueType = "roBoolean" then
+        if value = true then return "true"
+        return "false"
+    end if
+    return ""
 end function
 
 function grabInt(value as Dynamic, fallback as Integer) as Integer
     if value = invalid then return fallback
-    if type(value) = "Integer" or type(value) = "LongInteger" or type(value) = "Float" or type(value) = "Double" then
+    valueType = type(value)
+    if valueType = "Integer" or valueType = "roInt" or valueType = "roInteger" or valueType = "LongInteger" or valueType = "roLongInteger" then
+        return value
+    end if
+    if valueType = "Float" or valueType = "Double" or valueType = "roFloat" or valueType = "roDouble" then
         return Int(value)
     end if
-    s = safeStr(value)
-    if s = "" then return fallback
-    n = s.ToInt()
-    if n = 0 and s <> "0" then return fallback
-    return n
+    if valueType = "String" or valueType = "roString" then
+        s = value.Trim()
+        if s = "" then return fallback
+        n = Int(Val(s))
+        if n = 0 and s <> "0" then return fallback
+        return n
+    end if
+    return fallback
 end function
 
 function grabEncode(value as String) as String
