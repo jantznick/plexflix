@@ -9,6 +9,9 @@ sub init()
     m.playBtn = m.top.findNode("playBtn")
     m.backBtn = m.top.findNode("backBtn")
     m.randomBtn = m.top.findNode("randomBtn")
+    m.grabBtn = m.top.findNode("grabBtn")
+    m.grabBg = m.top.findNode("grabBg")
+    m.grabLabel = m.top.findNode("grabLabel")
     m.watchlistBtn = m.top.findNode("watchlistBtn")
     m.watchlistBg = m.top.findNode("watchlistBg")
     m.watchlistLabel = m.top.findNode("watchlistLabel")
@@ -18,6 +21,10 @@ sub init()
     m.playLabel = m.top.findNode("playLabel")
     m.unavailablePanel = m.top.findNode("unavailablePanel")
     m.unavailableBody = m.top.findNode("unavailableBody")
+    m.grabPollTimer = m.top.findNode("grabPollTimer")
+    if m.grabPollTimer <> invalid then
+        m.grabPollTimer.observeField("fire", "onGrabPollFire")
+    end if
 
     m.tvPanel = m.top.findNode("tvPanel")
     m.seasonRows = m.top.findNode("seasonRows")
@@ -38,6 +45,10 @@ sub init()
     m.isUnavailable = false
     m.onWatchlist = false
     m.watchlistBusy = false
+    m.grabBusy = false
+    m.grabJobId = ""
+    m.grabPollFails = 0
+    m.grabStatusBusy = false
     m.seasons = []
     m.seasonQueue = 0
     m.seasonContent = invalid
@@ -55,12 +66,18 @@ sub onContentSet()
     item = m.top.content
     if item = invalid then return
 
+    stopGrabPolling()
+
     m.focusEpisodeKey = asString(item.focusEpisodeKey)
     m.focusSeasonKey = asString(item.focusSeasonKey)
 
     m.isUnavailable = false
     m.onWatchlist = false
     m.watchlistBusy = false
+    m.grabBusy = false
+    m.grabJobId = ""
+    m.grabPollFails = 0
+    m.grabStatusBusy = false
     if item.DoesExist("onWatchlist") and item.onWatchlist = true then m.onWatchlist = true
     if item.DoesExist("isDiscover") and item.isDiscover = true then m.isUnavailable = true
     if item.DoesExist("unavailable") and item.unavailable = true then m.isUnavailable = true
@@ -226,8 +243,10 @@ end sub
 
 sub showTvMode()
     m.isUnavailable = false
+    stopGrabPolling()
     m.movieActions.visible = true
     if m.unavailablePanel <> invalid then m.unavailablePanel.visible = false
+    if m.grabBtn <> invalid then m.grabBtn.visible = false
     if m.watchlistBtn <> invalid then m.watchlistBtn.visible = false
     if m.playBtn <> invalid then m.playBtn.visible = true
     if m.backBtn <> invalid then m.backBtn.translation = [248, 0]
@@ -251,8 +270,10 @@ end sub
 
 sub showMovieMode()
     m.isUnavailable = false
+    stopGrabPolling()
     m.movieActions.visible = true
     if m.unavailablePanel <> invalid then m.unavailablePanel.visible = false
+    if m.grabBtn <> invalid then m.grabBtn.visible = false
     if m.watchlistBtn <> invalid then m.watchlistBtn.visible = false
     if m.playBtn <> invalid then m.playBtn.visible = true
     if m.backBtn <> invalid then m.backBtn.translation = [248, 0]
@@ -286,7 +307,20 @@ sub showUnavailableMode(item as Object)
     if m.playBtn <> invalid then m.playBtn.visible = false
     if m.randomBtn <> invalid then m.randomBtn.visible = false
     if m.watchlistBtn <> invalid then m.watchlistBtn.visible = true
-    if m.backBtn <> invalid then m.backBtn.translation = [340, 0]
+
+    ' Fail-open: Grab Now only appears when grabUrl is configured. Empty/down
+    ' server must never remove Watchlist or Back.
+    showGrab = grabIsConfigured()
+    if m.grabBtn <> invalid then m.grabBtn.visible = showGrab
+    if showGrab = true then
+        if m.grabBtn <> invalid then m.grabBtn.translation = [0, 0]
+        if m.watchlistBtn <> invalid then m.watchlistBtn.translation = [240, 0]
+        if m.backBtn <> invalid then m.backBtn.translation = [580, 0]
+    else
+        if m.watchlistBtn <> invalid then m.watchlistBtn.translation = [0, 0]
+        if m.backBtn <> invalid then m.backBtn.translation = [340, 0]
+    end if
+
     m.movieActions.translation = [248, 348]
     if m.softStatus <> invalid then m.softStatus.translation = [248, 412]
     if m.relatedPanel <> invalid then m.relatedPanel.translation = [0, 440]
@@ -295,6 +329,7 @@ sub showUnavailableMode(item as Object)
     if m.unavailableBody <> invalid then m.unavailableBody.text = unavailableMessage(item)
     if m.softStatus <> invalid then m.softStatus.text = "Looking up details & similar titles…"
     paintWatchlistLabel()
+    paintGrabLabel()
 
     m.relatedContent = createObject("roSGNode", "ContentNode")
     m.relatedRows.content = m.relatedContent
@@ -311,6 +346,23 @@ sub paintWatchlistLabel()
         m.watchlistLabel.text = "Add to Watchlist"
     end if
 end sub
+
+sub paintGrabLabel()
+    if m.grabLabel = invalid then return
+    if m.grabJobId <> "" and m.grabBusy = true then
+        m.grabLabel.text = "Grabbing…"
+    else
+        m.grabLabel.text = "Grab Now"
+    end if
+end sub
+
+function grabIsConfigured() as Boolean
+    cfg = m.top.config
+    if cfg = invalid then return false
+    if cfg.DoesExist("grabUrl") <> true then return false
+    if cfg.grabUrl = invalid then return false
+    return (cfg.grabUrl + "").Trim() <> ""
+end function
 
 function unavailableMessage(item as Object) as String
     mt = ""
@@ -374,6 +426,7 @@ sub onUnavailableLoaded()
             if asString(detail.guid) <> "" then content.guid = detail.guid
             if asString(response.discoverRatingKey) <> "" then content.discoverRatingKey = response.discoverRatingKey
             if asString(response.guid) <> "" then content.guid = response.guid
+            if asString(response.tmdbId) <> "" then content.tmdbId = response.tmdbId
             content.onWatchlist = m.onWatchlist
             content.isDiscover = true
             content.unavailable = true
@@ -829,37 +882,57 @@ function nodeToItem(item as Object) as Object
 end function
 
 sub onCloseRequested()
+    stopGrabPolling()
     if m.top.close = true then m.top.closed = true
 end sub
 
 sub updateMovieButtonFocus()
     if m.isUnavailable = true then
-        ' Watchlist (0) + Back (1)
+        ' Optional Grab Now + Watchlist + Back
         if m.playBg <> invalid then m.playBg.color = "0x2A2A32"
+        if m.grabBg <> invalid then m.grabBg.color = "0x2A2A32"
         if m.watchlistBg <> invalid then m.watchlistBg.color = "0x2A2A32"
         m.backBg.color = "0x2A2A32"
         if m.randomBg <> invalid then m.randomBg.color = "0x2A2A32"
         if m.top.findNode("playShadow") <> invalid then m.top.findNode("playShadow").opacity = 0.0
+        if m.top.findNode("grabShadow") <> invalid then m.top.findNode("grabShadow").opacity = 0.0
         if m.top.findNode("watchlistShadow") <> invalid then m.top.findNode("watchlistShadow").opacity = 0.0
         if m.top.findNode("backShadow") <> invalid then m.top.findNode("backShadow").opacity = 0.0
         if m.top.findNode("randomShadow") <> invalid then m.top.findNode("randomShadow").opacity = 0.0
 
-        if m.focusIndex = 0 then
-            if m.watchlistBg <> invalid then m.watchlistBg.color = "0xE50914"
-            if m.top.findNode("watchlistShadow") <> invalid then m.top.findNode("watchlistShadow").opacity = 0.5
+        hasGrab = (m.grabBtn <> invalid and m.grabBtn.visible = true)
+        if hasGrab = true then
+            if m.focusIndex = 0 then
+                if m.grabBg <> invalid then m.grabBg.color = "0xE50914"
+                if m.top.findNode("grabShadow") <> invalid then m.top.findNode("grabShadow").opacity = 0.5
+            else if m.focusIndex = 1 then
+                if m.watchlistBg <> invalid then m.watchlistBg.color = "0xE50914"
+                if m.top.findNode("watchlistShadow") <> invalid then m.top.findNode("watchlistShadow").opacity = 0.5
+            else
+                m.focusIndex = 2
+                m.backBg.color = "0xE50914"
+                if m.top.findNode("backShadow") <> invalid then m.top.findNode("backShadow").opacity = 0.5
+            end if
         else
-            m.focusIndex = 1
-            m.backBg.color = "0xE50914"
-            if m.top.findNode("backShadow") <> invalid then m.top.findNode("backShadow").opacity = 0.5
+            if m.focusIndex = 0 then
+                if m.watchlistBg <> invalid then m.watchlistBg.color = "0xE50914"
+                if m.top.findNode("watchlistShadow") <> invalid then m.top.findNode("watchlistShadow").opacity = 0.5
+            else
+                m.focusIndex = 1
+                m.backBg.color = "0xE50914"
+                if m.top.findNode("backShadow") <> invalid then m.top.findNode("backShadow").opacity = 0.5
+            end if
         end if
         return
     end if
 
     m.playBg.color = "0x2A2A32"
     m.backBg.color = "0x2A2A32"
+    if m.grabBg <> invalid then m.grabBg.color = "0x2A2A32"
     if m.watchlistBg <> invalid then m.watchlistBg.color = "0x2A2A32"
     if m.randomBg <> invalid then m.randomBg.color = "0x2A2A32"
     if m.top.findNode("playShadow") <> invalid then m.top.findNode("playShadow").opacity = 0.0
+    if m.top.findNode("grabShadow") <> invalid then m.top.findNode("grabShadow").opacity = 0.0
     if m.top.findNode("backShadow") <> invalid then m.top.findNode("backShadow").opacity = 0.0
     if m.top.findNode("randomShadow") <> invalid then m.top.findNode("randomShadow").opacity = 0.0
     if m.top.findNode("watchlistShadow") <> invalid then m.top.findNode("watchlistShadow").opacity = 0.0
@@ -877,7 +950,10 @@ sub updateMovieButtonFocus()
 end sub
 
 function actionButtonCount() as Integer
-    if m.isUnavailable = true then return 2
+    if m.isUnavailable = true then
+        if m.grabBtn <> invalid and m.grabBtn.visible = true then return 3
+        return 2
+    end if
     if m.isShow = true and m.randomBtn <> invalid and m.randomBtn.visible = true then return 3
     return 2
 end function
@@ -930,6 +1006,189 @@ sub onWatchlistMutated()
             m.softStatus.text = "Removed from Watchlist"
         end if
     end if
+end sub
+
+' --- Grab Now (fail-open: errors only update softStatus; never block the page) ---
+
+sub requestGrabNow()
+    if m.isUnavailable <> true then return
+    if grabIsConfigured() <> true then
+        if m.softStatus <> invalid then m.softStatus.text = "Grab server not configured"
+        return
+    end if
+    if m.grabBusy = true then
+        if m.softStatus <> invalid then m.softStatus.text = "Already grabbing…"
+        return
+    end if
+
+    item = m.top.content
+    if item = invalid then return
+
+    payload = {
+        title: asString(item.title),
+        year: asString(item.year),
+        mediaType: asString(item.mediaType),
+        tmdbId: asString(item.tmdbId),
+        imdbId: asString(item.imdbId),
+        tvdbId: asString(item.tvdbId),
+        guid: asString(item.guid)
+    }
+    mt = LCase(payload.mediaType)
+    if mt = "show" or mt = "series" or mt = "tv" or mt = "season" or mt = "episode" then
+        payload.mediaType = "episode"
+        ' v1: Grab Now on a show starts at S01E01; custom episode picker comes later
+        payload.season = 1
+        payload.episode = 1
+        if item.DoesExist("season") and item.season <> invalid then payload.season = item.season
+        if item.DoesExist("episode") and item.episode <> invalid then payload.episode = item.episode
+    else
+        payload.mediaType = "movie"
+    end if
+
+    m.grabBusy = true
+    m.grabPollFails = 0
+    paintGrabLabel()
+    if m.softStatus <> invalid then m.softStatus.text = "Starting grab…"
+
+    m.grabTask = createObject("roSGNode", "GrabTask")
+    m.grabTask.config = m.top.config
+    m.grabTask.action = "create"
+    m.grabTask.item = payload
+    m.grabTask.observeField("response", "onGrabCreated")
+    m.grabTask.control = "RUN"
+end sub
+
+sub onGrabCreated()
+    response = invalid
+    if m.grabTask <> invalid then response = m.grabTask.response
+
+    ' Fail-open: any problem unlocks the button and leaves Watchlist/Back alone
+    if response = invalid or response.ok <> true then
+        m.grabBusy = false
+        m.grabJobId = ""
+        paintGrabLabel()
+        err = "Grab unavailable — try Watchlist or try again later"
+        if response <> invalid and asString(response.error) <> "" then err = asString(response.error)
+        if m.softStatus <> invalid then m.softStatus.text = err
+        return
+    end if
+
+    job = response.job
+    if job = invalid then
+        m.grabBusy = false
+        paintGrabLabel()
+        if m.softStatus <> invalid then m.softStatus.text = "Grab unavailable — try again later"
+        return
+    end if
+
+    m.grabJobId = asString(job.id)
+    if m.grabJobId = "" then
+        m.grabBusy = false
+        paintGrabLabel()
+        if m.softStatus <> invalid then m.softStatus.text = "Grab unavailable — try again later"
+        return
+    end if
+
+    paintGrabLabel()
+    applyGrabJobStatus(job)
+    startGrabPolling()
+end sub
+
+sub startGrabPolling()
+    if m.grabPollTimer = invalid then return
+    if m.grabJobId = "" then return
+    m.grabPollTimer.control = "start"
+end sub
+
+sub stopGrabPolling()
+    if m.grabPollTimer <> invalid then m.grabPollTimer.control = "stop"
+    m.grabBusy = false
+    m.grabJobId = ""
+    m.grabPollFails = 0
+    paintGrabLabel()
+end sub
+
+sub onGrabPollFire()
+    if m.isUnavailable <> true then
+        stopGrabPolling()
+        return
+    end if
+    if m.grabJobId = "" then
+        stopGrabPolling()
+        return
+    end if
+    ' Don't stack overlapping status tasks
+    if m.grabStatusBusy = true then return
+    m.grabStatusBusy = true
+
+    m.grabStatusTask = createObject("roSGNode", "GrabTask")
+    m.grabStatusTask.config = m.top.config
+    m.grabStatusTask.action = "status"
+    m.grabStatusTask.item = { id: m.grabJobId }
+    m.grabStatusTask.observeField("response", "onGrabStatus")
+    m.grabStatusTask.control = "RUN"
+end sub
+
+sub onGrabStatus()
+    m.grabStatusBusy = false
+    response = invalid
+    if m.grabStatusTask <> invalid then response = m.grabStatusTask.response
+
+    if response = invalid or response.ok <> true then
+        m.grabPollFails = m.grabPollFails + 1
+        ' After a few misses, stop polling so a dead server can't spin forever
+        if m.grabPollFails >= 3 then
+            if m.grabPollTimer <> invalid then m.grabPollTimer.control = "stop"
+            m.grabBusy = false
+            paintGrabLabel()
+            err = "Lost contact with grab server — download may still finish in NZBGet"
+            if response <> invalid and asString(response.error) <> "" then err = asString(response.error)
+            if m.softStatus <> invalid then m.softStatus.text = err
+        end if
+        return
+    end if
+
+    m.grabPollFails = 0
+    job = response.job
+    if job = invalid then return
+    applyGrabJobStatus(job)
+end sub
+
+sub applyGrabJobStatus(job as Object)
+    if job = invalid then return
+    status = LCase(asString(job.status))
+    percent = 0
+    if job.DoesExist("percent") and job.percent <> invalid then percent = job.percent
+    message = asString(job.message)
+    if message = "" then message = asString(job.stage)
+
+    if status = "ready" then
+        if m.grabPollTimer <> invalid then m.grabPollTimer.control = "stop"
+        m.grabBusy = false
+        paintGrabLabel()
+        if m.softStatus <> invalid then m.softStatus.text = "Ready — refresh or reopen this title to Play"
+        ' Soft re-check: if local copy appeared, promote to Play page
+        item = m.top.content
+        if item <> invalid then loadUnavailableDetail(item)
+        return
+    end if
+
+    if status = "failed" then
+        if m.grabPollTimer <> invalid then m.grabPollTimer.control = "stop"
+        m.grabBusy = false
+        m.grabJobId = ""
+        paintGrabLabel()
+        err = message
+        if err = "" then err = "Grab failed — try again or use Watchlist"
+        if m.softStatus <> invalid then m.softStatus.text = err
+        return
+    end if
+
+    line = "Grabbing"
+    if status <> "" then line = UCase(Left(status, 1)) + Mid(status, 2)
+    if percent > 0 then line = line + " " + StrI(percent).Trim() + "%"
+    if message <> "" and message <> status then line = line + " — " + message
+    if m.softStatus <> invalid then m.softStatus.text = line
 end sub
 
 sub focusActionButtons()
@@ -1046,10 +1305,21 @@ function onKeyEvent(key as String, press as Boolean) as Boolean
         return true
     else if key = "OK"
         if m.isUnavailable = true then
-            if m.focusIndex = 0 then
-                toggleWatchlist()
+            hasGrab = (m.grabBtn <> invalid and m.grabBtn.visible = true)
+            if hasGrab = true then
+                if m.focusIndex = 0 then
+                    requestGrabNow()
+                else if m.focusIndex = 1 then
+                    toggleWatchlist()
+                else
+                    m.top.closed = true
+                end if
             else
-                m.top.closed = true
+                if m.focusIndex = 0 then
+                    toggleWatchlist()
+                else
+                    m.top.closed = true
+                end if
             end if
             return true
         end if

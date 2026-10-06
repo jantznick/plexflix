@@ -160,24 +160,32 @@ PYTHONPATH=. python3 -m unittest discover -s tests -v
 python3 -m grab.server   # after exporting the env vars
 ```
 
-## Out of scope (v1)
+## Out of scope (v1 backend)
 
-- Roku UI wiring (`grabUrl` / **Grab Now** button in `PlexConfig.brs`)
 - Sonarr Start fresh → queue E02–E05 (and “grab all episodes” signal from Roku)
 - Automatic Filebot-style renaming (rely on NZBGet category DestDir + your
   existing post-processing for now)
+- Custom episode picker UI (shows currently Grab → S01E01)
 
-## Planned Roku UX (not built yet)
+## Planned Roku UX
 
-Keep **Add to Watchlist** as-is. On unavailable Discover titles, add a second
-primary action:
+On unavailable Discover titles:
 
 | Button | Role |
 |--------|------|
-| **Grab Now** | `POST /jobs` → poll progress on softStatus → flip to Play when `ready` |
+| **Grab Now** | `POST /jobs` → poll progress on softStatus → flip toward Play when `ready` |
 | **Add to Watchlist** | Existing Plex Discover watchlist (save for later, no download) |
 | **Back** | Unchanged |
 
-So watchlist stays the slow/passive path; Grab Now is the fast path. For TV,
+### Fail-open (required)
+
+Grab Now must never break the channel:
+
+- Empty `grabUrl` → button hidden; page behaves as before (Watchlist + Back only)
+- Unreachable / timed-out / bad server → soft status message only; Watchlist and Back keep working
+- Polling stops after a few consecutive failures so a dead server cannot spin forever
+- Detail load never waits on grab health
+
+Watchlist stays the slow/passive path; Grab Now is the fast path. For TV,
 Grab Now can later open a small choice (this episode / start at S01E01) without
-removing watchlist.
+removing watchlist. v1 Grab Now on a show starts at **S01E01**.

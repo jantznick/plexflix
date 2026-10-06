@@ -75,6 +75,14 @@
                         <Font role="font" uri="pkg:/fonts/Outfit-SemiBold.ttf" size="26" />
                     </Label>
                 </Group>
+                <!-- Unavailable titles only; hidden when grabUrl is empty (fail-open) -->
+                <Group id="grabBtn" translation="[0, 0]" visible="false">
+                    <Rectangle id="grabShadow" width="228" height="60" translation="[4, 5]" color="0x000000" opacity="0.0" />
+                    <Rectangle id="grabBg" width="220" height="56" color="0x2A2A32" />
+                    <Label id="grabLabel" width="220" height="56" horizAlign="center" vertAlign="center" text="Grab Now" color="0xFFFFFF">
+                        <Font role="font" uri="pkg:/fonts/Outfit-SemiBold.ttf" size="24" />
+                    </Label>
+                </Group>
                 <Group id="watchlistBtn" translation="[0, 0]" visible="false">
                     <Rectangle id="watchlistShadow" width="328" height="60" translation="[4, 5]" color="0x000000" opacity="0.0" />
                     <Rectangle id="watchlistBg" width="320" height="56" color="0x2A2A32" />
@@ -98,6 +106,8 @@
                     </Label>
                 </Group>
             </Group>
+
+            <Timer id="grabPollTimer" repeat="true" duration="2.5" />
 
             <Label id="softStatus" translation="[248, 346]" width="1200" height="28" text="" color="0x666670">
                 <Font role="font" uri="pkg:/fonts/Outfit-Regular.ttf" size="18" />

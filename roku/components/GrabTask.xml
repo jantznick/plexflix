@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!-- Talks to the grab sidecar (grab/ in the repo root). Always fail-open:
+     timeouts and connection errors return { ok: false } — never throw. -->
+<component name="GrabTask" extends="Task">
+    <interface>
+        <field id="config" type="assocarray" />
+        <field id="action" type="string" />
+        <field id="item" type="assocarray" />
+        <field id="response" type="assocarray" />
+    </interface>
+    <script type="text/brightscript" uri="GrabTask.brs" />
+</component>
