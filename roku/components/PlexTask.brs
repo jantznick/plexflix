@@ -287,7 +287,9 @@ function fetchMediaStreams(cfg as Object, item as Object) as Object
     ratingKey = safeToStr(item.ratingKey)
     if ratingKey = "" then return { ok: false, error: "Missing ratingKey" }
 
-    result = plexGet(cfg, "/library/metadata/" + ratingKey)
+    ' includeMarkers brings back the intro / credits / commercial ranges Plex
+    ' generates, so the player can offer a skip without a second request
+    result = plexGet(cfg, "/library/metadata/" + ratingKey + "?includeMarkers=1")
     if result.ok <> true or result.json = invalid then return { ok: false, error: "Could not read media info" }
     container = result.json.MediaContainer
     if container = invalid then return { ok: false, error: "Could not read media info" }
@@ -315,11 +317,17 @@ function fetchMediaStreams(cfg as Object, item as Object) as Object
     audio = []
     subtitles = [{ id: 0, label: "Off", selected: true }]
     partId = ""
+    previewUrlBase = ""
     parts = medias[0].Part
     if parts <> invalid then
         if GetInterface(parts, "ifArray") = invalid then parts = [parts]
         if parts.count() > 0 then
             partId = safeToStr(parts[0].id)
+            ' indexes="sd" means the server has built a BIF preview index for
+            ' this file, which is what makes scrubbing thumbnails possible
+            if safeToStr(parts[0].indexes) = "sd" then
+                previewUrlBase = cfg.baseUrl + "/library/parts/" + partId + "/indexes/sd/"
+            end if
             streams = parts[0].Stream
             if streams <> invalid then
                 if GetInterface(streams, "ifArray") = invalid then streams = [streams]
@@ -348,8 +356,38 @@ function fetchMediaStreams(cfg as Object, item as Object) as Object
         partId: partId,
         versions: versions,
         audio: audio,
-        subtitles: subtitles
+        subtitles: subtitles,
+        markers: extractMarkers(meta),
+        previewUrlBase: previewUrlBase
     }
+end function
+
+function extractMarkers(meta as Object) as Object
+    out = []
+    if meta = invalid then return out
+
+    markers = meta.Marker
+    if markers = invalid then return out
+    if GetInterface(markers, "ifArray") = invalid then markers = [markers]
+
+    for each marker in markers
+        kind = LCase(safeToStr(marker.type))
+        label = markerLabel(kind)
+        startAt = intOrZero(marker.startTimeOffset)
+        endAt = intOrZero(marker.endTimeOffset)
+        ' Plex occasionally emits zero-length or unlabelled markers
+        if label <> "" and endAt > startAt then
+            out.push({ kind: kind, startAt: startAt, endAt: endAt, label: label })
+        end if
+    end for
+    return out
+end function
+
+function markerLabel(kind as String) as String
+    if kind = "intro" then return "Skip Intro"
+    if kind = "credits" then return "Skip Credits"
+    if kind = "commercial" then return "Skip Ad"
+    return ""
 end function
 
 function versionLabel(media as Object, index as Integer) as String
