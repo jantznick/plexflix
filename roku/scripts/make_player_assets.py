@@ -98,6 +98,27 @@ def make_player_scrim(width=16, height=360):
     write_png(os.path.join(IMAGES, "player_scrim.png"), width, height, pixels)
 
 
+def make_guide_fades(length=360, thickness=16, color=(8, 11, 18)):
+    """Guide-background ramps that melt the program art into the page.
+
+    guide_fade_h: solid on the left, clear on the right.
+    guide_fade_v: clear on top, solid at the bottom.
+    """
+    r, g, b = color
+    ramp = [int(round(255 * ((1 - i / (length - 1)) ** 1.4))) for i in range(length)]
+    pixels = []
+    for _ in range(thickness):
+        for x in range(length):
+            pixels.append((r, g, b, ramp[x]))
+    write_png(os.path.join(IMAGES, "guide_fade_h.png"), length, thickness, pixels)
+
+    pixels = []
+    for y in range(length):
+        for _ in range(thickness):
+            pixels.append((r, g, b, ramp[length - 1 - y]))
+    write_png(os.path.join(IMAGES, "guide_fade_v.png"), thickness, length, pixels)
+
+
 def make_focus_ring(size=32, thick=4, corner=8):
     """9-patch focus border for the RowList / MarkupGrid native focus indicator.
 
@@ -218,3 +239,4 @@ if __name__ == "__main__":
     make_player_scrim()
     make_focus_ring()
     make_nav_icons()
+    make_guide_fades()
