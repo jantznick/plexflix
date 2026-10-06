@@ -12,7 +12,7 @@ function GetPlexConfig() as Object
         clientId: "plexflix-roku-mvp-001",
 
         product: "PlexFlix",
-        version: "0.9.7",
+        version: "0.9.8",
 
         ' How many items to request per row (home clamps display to 15–30)
         rowSize: 40,
@@ -24,6 +24,12 @@ function GetPlexConfig() as Object
 
         ' Live sports JSON feed (editable). Expected objects with title/name + url/stream fields.
         sportsFeedUrl: "https://roku-hockey.s3.us-west-004.backblazeb2.com/secretfeedfilename.json",
+
+        ' Multiview compositor on the home server (multiview/ in this repo).
+        ' Leave empty to hide multiview from the sports guide.
+        multiviewUrl: "",
+        ' Must match MULTIVIEW_TOKEN in its docker-compose.yml when that is set
+        multiviewToken: "",
 
         ' Optional TMDB key for cast bios / photos / known-for when Plex people data is thin.
         ' https://www.themoviedb.org/settings/api

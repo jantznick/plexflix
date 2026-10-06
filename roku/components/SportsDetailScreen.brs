@@ -146,7 +146,40 @@ end sub
 
 sub showHint()
     m.summaryLabel.color = "0xC8C8D0"
-    m.summaryLabel.text = "OK a stream to play. Remote Back returns to the guide."
+    if m.top.multiviewEnabled = true then
+        m.summaryLabel.text = "OK a stream to play, * to add it to multiview, Play to watch your multiview. Back returns to the guide."
+    else
+        m.summaryLabel.text = "OK a stream to play. Remote Back returns to the guide."
+    end if
+end sub
+
+sub onMultiviewEnabled()
+    if m.top.streamError = "" then showHint()
+end sub
+
+sub onMultiviewNote()
+    note = m.top.multiviewNote
+    if note = "" then return
+    m.summaryLabel.color = "0xC8C8D0"
+    m.summaryLabel.text = note
+end sub
+
+sub toggleFocusedStream()
+    idx = m.streamList.itemFocused
+    if idx = invalid or idx < 0 or idx >= m.streams.count() then return
+    stream = m.streams[idx]
+    title = m.titleLabel.text
+    ' Alternates of one game are told apart by their stream label
+    if m.streams.count() > 1 then title = title + " (" + asString(stream.title) + ")"
+    format = asString(stream.streamFormat)
+    if format = "" and idx = 0 then format = asString(m.eventItem.streamFormat)
+    m.top.multiviewToggle = {
+        url: asString(stream.streamUrl),
+        title: title,
+        league: m.metaLabel.text,
+        streamFormat: format,
+        hdPosterUrl: asString(m.eventItem.hdPosterUrl)
+    }
 end sub
 
 function onKeyEvent(key as String, press as Boolean) as Boolean
@@ -154,6 +187,15 @@ function onKeyEvent(key as String, press as Boolean) as Boolean
     if key = "back" or key = "left" then
         m.top.closed = true
         return true
+    end if
+    if m.top.multiviewEnabled = true then
+        if key = "options" then
+            toggleFocusedStream()
+            return true
+        else if key = "play" then
+            m.top.multiviewLaunch = true
+            return true
+        end if
     end if
     return false
 end function

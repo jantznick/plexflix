@@ -6,6 +6,12 @@
         <field id="loadingMessage" type="string" />
         <field id="openMenu" type="boolean" alwaysNotify="true" />
         <field id="refocus" type="boolean" alwaysNotify="true" onChange="onRefocus" />
+        <!-- Multiview picks live here so they survive filters and the game
+             page; the game page reaches them through MainScene -->
+        <field id="multiviewToggle" type="assocarray" alwaysNotify="true" onChange="onMultiviewToggle" />
+        <field id="launchMultiview" type="boolean" alwaysNotify="true" onChange="onLaunchMultiview" />
+        <field id="multiviewMessage" type="string" alwaysNotify="true" />
+        <field id="multiviewRequested" type="assocarray" />
     </interface>
 
     <script type="text/brightscript" uri="SportsScreen.brs" />
@@ -55,6 +61,21 @@
                 uri="pkg:/images/poster_placeholder.png"
                 opacity="0.5"
             />
+
+            <!-- Right of the preview art; hidden unless multiviewUrl is set -->
+            <Group id="multiTray" translation="[1404, 0]" visible="false">
+                <Rectangle width="324" height="196" color="0x121A2A" />
+                <Rectangle width="324" height="4" color="0xE50914" />
+                <Label id="multiCount" translation="[18, 14]" width="290" height="32" color="0xFFFFFF" text="MULTIVIEW  0/4">
+                    <Font role="font" uri="pkg:/fonts/Outfit-Bold.ttf" size="24" />
+                </Label>
+                <Label id="multiList" translation="[18, 50]" width="290" height="104" color="0xC5CCD8" wrap="true" maxLines="4" text="">
+                    <Font role="font" uri="pkg:/fonts/Outfit-Medium.ttf" size="20" />
+                </Label>
+                <Label id="multiHint" translation="[18, 158]" width="290" height="28" color="0x8FA0B8" text="">
+                    <Font role="font" uri="pkg:/fonts/Outfit-Regular.ttf" size="19" />
+                </Label>
+            </Group>
         </Group>
 
         <Rectangle translation="[0, 392]" width="1920" height="56" color="0x1A2438" />

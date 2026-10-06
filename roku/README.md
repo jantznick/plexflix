@@ -31,6 +31,8 @@ This is intentionally a **design/UX shell** on top of existing Plex data. Creden
 - **Progress is written back to Plex**, so resume points and Continue Watching
   stay in sync with every other Plex client
 - Live sports from a configurable JSON feed URL (event detail + stream picker)
+- **Multiview**: 2–4 live games at once in Grid, Spotlight or Picture in picture,
+  tiled on your home server (see [Multiview](#multiview))
 - Optional **TMDB** enrichment for cast pages and Discover titles missing from your library (`tmdbApiKey` in config)
 - Discover titles not in Plex open a **Not in your library** detail view (no Play) with synopsis + similar local picks
 
@@ -43,6 +45,7 @@ baseUrl: "http://192.168.x.x:32400"
 token: "YOUR_PLEX_TOKEN"
 sportsFeedUrl: "https://roku-hockey.s3.us-west-004.backblazeb2.com/secretfeedfilename.json"
 tmdbApiKey: "YOUR_TMDB_API_KEY"
+multiviewUrl: "http://192.168.x.x:8095"   ' optional, see Multiview
 ```
 
 Optional keys:
@@ -191,6 +194,67 @@ going away can be collected before it finishes.
 
 Each playback names its own transcode session so the server side is torn down on
 exit instead of being left running.
+
+## Multiview
+
+A Roku decodes one video at a time, so the tiling happens on the home server:
+`multiview/` (repo root) runs ffmpeg to combine 2–4 sports feeds into a
+single 1080p HLS stream, and the channel plays that stream. Each game keeps its
+own audio track, and the channel draws the focus ring, labels and status on top
+using the tile rectangles the server reports.
+
+### Server (home server, Docker Compose)
+
+```bash
+cd multiview
+# pick ENCODER (libx264 / h264_qsv / h264_vaapi / h264_nvenc) and uncomment
+# the matching GPU block in docker-compose.yml first
+docker compose up -d --build
+docker compose logs -f
+```
+
+Then set `multiviewUrl` in `PlexConfig.brs` to `http://<server-ip>:8095` and
+republish. Leaving it empty hides multiview entirely.
+
+`libx264` works anywhere but is heavy at 1080p; an Intel iGPU (`h264_qsv` or
+`h264_vaapi` with `/dev/dri` passed through) or NVIDIA (`h264_nvenc`) is the
+comfortable option. Small tiles pull a lower rendition of each feed when its
+master playlist offers one, which keeps decoding cheap too.
+
+Tests run without Docker or network (they need `ffmpeg` on the path):
+
+```bash
+cd multiview && python3 -m unittest discover -s tests
+```
+
+### Using it
+
+- On the **Live Sports guide**, **\*** adds or removes the highlighted game
+  (its first stream); the panel top right lists the picks, and a picked row
+  says **Multiview** in its streams column
+- On a **game page**, **\*** adds the highlighted stream, for when an alternate
+  is the one that works
+- **Play** (guide or game page) starts multiview once 2–4 games are picked
+- In multiview: **arrows** move between games and **the sound follows the
+  highlight** (red bar under the tile); **OK** opens that game full screen in
+  the normal player, and Back returns to the mosaic; **\*** cycles
+  Grid → Spotlight → Picture in picture; **Fast forward** (or Rewind) moves
+  the highlighted game into the main spot; **Back** exits
+
+### When a feed hiccups
+
+The server checks every feed separately from ffmpeg (does its playlist load,
+and is it still advancing?). When ffmpeg dies or stops producing, the feeds
+that fail that check are replaced by a "Reconnecting…" slate and ffmpeg is
+restarted with the rest. Feeds that are down keep being checked, and come
+back after staying healthy for 20 seconds.
+
+Each restart is written into the same playlists as a discontinuity, so the
+Roku rebuffers for a few seconds instead of erroring out. The cost of running
+one ffmpeg is that a restart (a feed dropping, recovering, or a layout change)
+briefly stalls every tile, not just the one that changed. Layout changes
+take around 10 seconds to appear, because they also have to pass through the
+player's live buffer; the overlay waits for them.
 
 ## Remote / focus
 

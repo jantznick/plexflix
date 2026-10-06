@@ -18,6 +18,7 @@ sub init()
     m.libraryHubSource = invalid
     m.sportsScreen = invalid
     m.sportsDetailScreen = invalid
+    m.multiviewScreen = invalid
     m.castDetailScreen = invalid
     m.liveTvScreen = invalid
     m.section = "home"
@@ -36,7 +37,7 @@ end sub
 ' The icon rail belongs to browse surfaces: detail pages and the player use
 ' the full width and can't open the menu anyway
 sub updateNavRail()
-    overlay = (m.videoScreen <> invalid or m.detailScreen <> invalid or m.castDetailScreen <> invalid or m.sportsDetailScreen <> invalid)
+    overlay = (m.videoScreen <> invalid or m.detailScreen <> invalid or m.castDetailScreen <> invalid or m.sportsDetailScreen <> invalid or m.multiviewScreen <> invalid)
     m.sideNav.railVisible = not overlay
     m.sideNav.suppressed = splashShowing()
 end sub
@@ -96,6 +97,7 @@ sub clearScreens()
     m.libraryHubSource = invalid
     m.sportsScreen = invalid
     m.sportsDetailScreen = invalid
+    releaseMultiview()
     m.castDetailScreen = invalid
     m.liveTvScreen = invalid
     updateNavRail()
@@ -183,7 +185,7 @@ function dialogIsOpen() as Boolean
 end function
 
 sub onOpenMenu()
-    if m.videoScreen <> invalid or m.detailScreen <> invalid then return
+    if m.videoScreen <> invalid or m.detailScreen <> invalid or m.multiviewScreen <> invalid then return
     if dialogIsOpen() then return
     setNavExpanded(true)
     if m.navExpanded then m.sideNav.setFocus(true)
@@ -284,6 +286,8 @@ sub showSports()
     m.sportsScreen.observeField("selectedItem", "onSportsItemSelected")
     m.sportsScreen.observeField("loadingMessage", "onSoftLoading")
     m.sportsScreen.observeField("openMenu", "onOpenMenu")
+    m.sportsScreen.observeField("multiviewRequested", "onMultiviewRequested")
+    m.sportsScreen.observeField("multiviewMessage", "onMultiviewMessage")
     m.screens.appendChild(m.sportsScreen)
     m.sportsScreen.setFocus(true)
 end sub
@@ -327,8 +331,11 @@ sub showSportsDetail(item as Object)
 
     m.sportsDetailScreen = createObject("roSGNode", "SportsDetailScreen")
     m.sportsDetailScreen.content = item
+    m.sportsDetailScreen.multiviewEnabled = multiviewEnabled()
     m.sportsDetailScreen.observeField("playRequested", "onSportsPlayRequested")
     m.sportsDetailScreen.observeField("closed", "onSportsDetailClosed")
+    m.sportsDetailScreen.observeField("multiviewToggle", "onSportsMultiviewToggle")
+    m.sportsDetailScreen.observeField("multiviewLaunch", "onSportsMultiviewLaunch")
     m.screens.appendChild(m.sportsDetailScreen)
     m.sportsDetailScreen.setFocus(true)
     m.sportsDetailScreen.refocus = true
@@ -348,6 +355,87 @@ sub onSportsPlayRequested()
     item = m.sportsDetailScreen.playRequested
     if item = invalid then return
     showVideo(item)
+end sub
+
+'--------------------------------------------------------------------
+' Multiview
+'--------------------------------------------------------------------
+
+function multiviewEnabled() as Boolean
+    return m.config.multiviewUrl <> invalid and m.config.multiviewUrl <> ""
+end function
+
+sub onSportsMultiviewToggle(event as Object)
+    pick = event.getData()
+    if pick = invalid or m.sportsScreen = invalid then return
+    m.sportsScreen.multiviewToggle = pick
+end sub
+
+sub onSportsMultiviewLaunch()
+    if m.sportsScreen <> invalid then m.sportsScreen.launchMultiview = true
+end sub
+
+' The guide owns the picks, but the game page is the one on screen when they
+' change from there
+sub onMultiviewMessage(event as Object)
+    message = event.getData()
+    if message = invalid or message = "" then return
+    if m.sportsDetailScreen <> invalid then m.sportsDetailScreen.multiviewNote = message
+end sub
+
+sub onMultiviewRequested(event as Object)
+    payload = event.getData()
+    if payload = invalid then return
+    showMultiview(payload)
+end sub
+
+sub showMultiview(payload as Object)
+    releaseMultiview()
+    m.multiviewScreen = createObject("roSGNode", "MultiviewScreen")
+    m.multiviewScreen.config = m.config
+    m.multiviewScreen.observeField("closed", "onMultiviewClosed")
+    m.multiviewScreen.observeField("playRequested", "onMultiviewPlayRequested")
+    m.screens.appendChild(m.multiviewScreen)
+    m.multiviewScreen.content = payload
+    m.multiviewScreen.setFocus(true)
+    updateNavRail()
+end sub
+
+sub onMultiviewPlayRequested()
+    if m.multiviewScreen = invalid then return
+    item = m.multiviewScreen.playRequested
+    if item = invalid then return
+    showVideo(item)
+end sub
+
+sub onMultiviewClosed()
+    releaseMultiview()
+    updateNavRail()
+    if m.sportsDetailScreen <> invalid then
+        m.sportsDetailScreen.setFocus(true)
+        m.sportsDetailScreen.refocus = true
+    else
+        restoreSectionFocus()
+    end if
+end sub
+
+' The DELETE runs from here for the same reason playback reports do: a Task
+' owned by the screen being removed can be collected before it finishes. If it
+' never arrives, the server reaps the idle session on its own.
+sub releaseMultiview()
+    if m.multiviewScreen = invalid then return
+    sessionId = asString(m.multiviewScreen.sessionId)
+    ' Unhooked first: close fires closed, which would land back in here
+    m.multiviewScreen.unobserveField("closed")
+    m.multiviewScreen.close = true
+    m.screens.removeChild(m.multiviewScreen)
+    m.multiviewScreen = invalid
+    if sessionId = "" then return
+    m.multiviewDeleteTask = createObject("roSGNode", "MultiviewTask")
+    m.multiviewDeleteTask.config = m.config
+    m.multiviewDeleteTask.action = "delete"
+    m.multiviewDeleteTask.item = { id: sessionId }
+    m.multiviewDeleteTask.control = "RUN"
 end sub
 
 sub showDetail(item as Object)
@@ -569,7 +657,12 @@ sub onVideoClosed()
     updateNavRail()
     ' Resume points and watched flags just moved; a parked Home refreshes on return
     if m.homeScreen <> invalid and m.section = "home" then m.homeScreen.refresh = true
-    if m.detailScreen <> invalid then
+    if m.multiviewScreen <> invalid then
+        ' Full screen from multiview: back to the mosaic, which kept its session
+        m.multiviewScreen.setFocus(true)
+        m.multiviewScreen.resume = true
+        if failure <> "" then m.multiviewScreen.notice = "That stream failed: " + failure
+    else if m.detailScreen <> invalid then
         m.detailScreen.setFocus(true)
     else if m.sportsDetailScreen <> invalid then
         m.sportsDetailScreen.setFocus(true)
@@ -613,6 +706,9 @@ function onKeyEvent(key as String, press as Boolean) as Boolean
         if m.videoScreen <> invalid then
             m.videoScreen.close = true
             return true
+        else if m.multiviewScreen <> invalid then
+            m.multiviewScreen.close = true
+            return true
         else if m.sportsDetailScreen <> invalid then
             m.sportsDetailScreen.close = true
             return true
@@ -636,7 +732,7 @@ function onKeyEvent(key as String, press as Boolean) as Boolean
             onOpenMenu()
             return true
         end if
-    else if key = "left" and not m.navExpanded and m.videoScreen = invalid and m.detailScreen = invalid and m.castDetailScreen = invalid then
+    else if key = "left" and not m.navExpanded and m.videoScreen = invalid and m.detailScreen = invalid and m.castDetailScreen = invalid and m.multiviewScreen = invalid then
         ' Allow Left → menu from home / libraries / sports / sports detail
         setNavExpanded(true)
         if m.navExpanded then m.sideNav.setFocus(true)

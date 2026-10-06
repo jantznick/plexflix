@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!-- Talks to the multiview compositor (multiview/ in the repo root):
+     create | status | update | delete a session -->
+<component name="MultiviewTask" extends="Task">
+    <interface>
+        <field id="config" type="assocarray" />
+        <field id="action" type="string" />
+        <field id="item" type="assocarray" />
+        <field id="response" type="assocarray" />
+    </interface>
+    <script type="text/brightscript" uri="MultiviewTask.brs" />
+</component>

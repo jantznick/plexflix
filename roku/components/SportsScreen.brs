@@ -35,6 +35,14 @@ sub init()
     m.events = []
     m.currentIndex = 0
 
+    ' Games picked for multiview, kept across sport filters and the game page
+    m.multi = []
+    m.multiEnabled = false
+    m.multiTray = m.top.findNode("multiTray")
+    m.multiCount = m.top.findNode("multiCount")
+    m.multiList = m.top.findNode("multiList")
+    m.multiHint = m.top.findNode("multiHint")
+
     m.guideList.observeField("itemFocused", "onGuideFocused")
     m.guideList.observeField("itemSelected", "onGuideSelected")
     m.guideList.observeField("escapeUp", "onGuideEscapeUp")
@@ -76,6 +84,9 @@ end sub
 
 sub onConfigReady()
     if m.top.config = invalid then return
+    url = m.top.config.multiviewUrl
+    m.multiEnabled = (url <> invalid and url <> "")
+    paintMultiTray()
     loadFeed()
 end sub
 
@@ -280,7 +291,134 @@ sub applySportsLine(node as Object, item as Object, league as String)
     if n = 0 and asString(item.streamUrl) <> "" then n = 1
     streamsCol = StrI(n).Trim() + " streams"
     if n = 1 then streamsCol = "1 stream"
+    if eventInMultiview(item) then streamsCol = streamsCol + "  ·  Multiview"
     setGuideCols(node, lg, title, "", streamsCol)
+end sub
+
+'--------------------------------------------------------------------
+' Multiview picks
+'--------------------------------------------------------------------
+
+function multiviewMax() as Integer
+    return 4
+end function
+
+' A pick is one stream, so the game page can add a specific alternate; from
+' the guide it is the event's first stream
+function eventStreamUrl(item as Object) as String
+    if item = invalid then return ""
+    url = asString(item.streamUrl)
+    if url = "" and item.streams <> invalid and item.streams.count() > 0 then url = asString(item.streams[0].streamUrl)
+    return url
+end function
+
+function multiIndexOf(url as String) as Integer
+    for i = 0 to m.multi.count() - 1
+        if m.multi[i].url = url then return i
+    end for
+    return -1
+end function
+
+function eventInMultiview(item as Object) as Boolean
+    if m.multi.count() = 0 or item = invalid then return false
+    if multiIndexOf(eventStreamUrl(item)) >= 0 then return true
+    if item.streams <> invalid then
+        for each stream in item.streams
+            if multiIndexOf(asString(stream.streamUrl)) >= 0 then return true
+        end for
+    end if
+    return false
+end function
+
+' Returns what happened, for whichever screen the viewer is looking at
+function toggleMultiview(pick as Object) as String
+    url = asString(pick.url)
+    if url = "" then return ""
+    title = asString(pick.title)
+    index = multiIndexOf(url)
+    if index >= 0 then
+        m.multi.delete(index)
+        message = "Removed " + title + " from multiview"
+    else if m.multi.count() >= multiviewMax() then
+        return "Multiview holds " + StrI(multiviewMax()).Trim() + " games. Remove one first."
+    else
+        m.multi.push(pick)
+        message = "Added " + title + " to multiview (" + StrI(m.multi.count()).Trim() + " of " + StrI(multiviewMax()).Trim() + ")"
+    end if
+    paintMultiTray()
+    refreshMultiviewRows()
+    return message
+end function
+
+sub toggleFocusedEvent()
+    if m.currentIndex >= m.events.count() then return
+    item = m.events[m.currentIndex]
+    message = toggleMultiview({
+        url: eventStreamUrl(item),
+        title: asString(item.title),
+        league: asString(item.league),
+        streamFormat: asString(item.streamFormat),
+        hdPosterUrl: asString(item.hdPosterUrl)
+    })
+    if message <> "" then m.statusLabel.text = message
+end sub
+
+' Rows are swapped rather than edited: a list item only redraws when it is
+' handed a new content node
+sub refreshMultiviewRows()
+    root = m.guideList.content
+    if root = invalid then return
+    for i = 0 to m.events.count() - 1
+        if i < root.getChildCount() then
+            old = root.getChild(i)
+            fresh = createObject("roSGNode", "ContentNode")
+            applySportsLine(fresh, m.events[i], asString(m.events[i].league))
+            if fresh.col3 <> old.col3 then root.replaceChild(fresh, i)
+        end if
+    end for
+end sub
+
+sub paintMultiTray()
+    if m.multiTray = invalid then return
+    m.multiTray.visible = m.multiEnabled
+    if not m.multiEnabled then return
+
+    m.multiCount.text = "MULTIVIEW  " + StrI(m.multi.count()).Trim() + "/" + StrI(multiviewMax()).Trim()
+    names = ""
+    for each pick in m.multi
+        ' One line each, so four picks always fit the four lines
+        line = pick.title
+        if Len(line) > 26 then line = Left(line, 25) + "…"
+        if names <> "" then names = names + Chr(10)
+        names = names + line
+    end for
+    m.multiList.text = names
+    if m.multi.count() = 0 then
+        m.multiHint.text = "Press * on a game to add it"
+    else if m.multi.count() = 1 then
+        m.multiHint.text = "Add one more game with *"
+    else
+        m.multiHint.text = "Press Play to watch together"
+    end if
+end sub
+
+' Called from here or, through MainScene, from the game page
+function requestMultiview() as String
+    if not m.multiEnabled then return ""
+    if m.multi.count() < 2 then return "Pick at least 2 games with * first"
+    m.top.multiviewRequested = { streams: m.multi, layout: "grid" }
+    return ""
+end function
+
+sub onMultiviewToggle()
+    pick = m.top.multiviewToggle
+    if pick = invalid then return
+    m.top.multiviewMessage = toggleMultiview(pick)
+end sub
+
+sub onLaunchMultiview()
+    if m.top.launchMultiview <> true then return
+    m.top.multiviewMessage = requestMultiview()
 end sub
 
 sub onGuideFocused()
@@ -357,6 +495,16 @@ end sub
 
 function onKeyEvent(key as String, press as Boolean) as Boolean
     if not press then return false
+    if m.multiEnabled and m.zone = "list" then
+        if key = "options" then
+            toggleFocusedEvent()
+            return true
+        else if key = "play" then
+            message = requestMultiview()
+            if message <> "" then m.statusLabel.text = message
+            return true
+        end if
+    end if
     if m.zone <> "pills" then return false
 
     ' Moving between sports filters at once, the way streaming apps' genre
