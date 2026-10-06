@@ -7,14 +7,13 @@ This is intentionally a **design/UX shell** on top of existing Plex data. Creden
 ## What you get
 
 - Dark Netflix-like home: billboard hero + horizontal shelves
-- **Collapsible sidebar** (Left to open): Home, **Search**, **Watchlist**, your
-  **Libraries**, **Live TV**, Live Sports.
+- **Collapsible sidebar** (Left to open): Home, **Search**, your **Libraries**,
+  **Live TV**, Live Sports.
   Collapsed, a 72px icon rail stays on browse screens with the current section
   lit; it is hidden on detail pages, in the player and over the launch splash
 - **Search**: Plex Discover catalog search for any movie/show (not just what’s
-  already in your libraries), with Movies / TV filters
-- **Watchlist**: your personal Plex Watchlist (same list as official Plex apps),
-  with **Add to Watchlist** / **Remove** on Discover title detail pages
+  already in your libraries), with Movies / TV filters; open a result and
+  **Add to Watchlist** / **Remove** from the detail page
 - **Home stays loaded**: switching sections parks it instead of discarding it,
   so returning is instant and the hubs refresh in the background (also after
   playback), updating only the rows whose items changed
@@ -102,13 +101,11 @@ Sidebar **Search** hits Plex Discover (`discover.provider.plex.tv/library/search
 so results include titles that are not in your local libraries. Pick a result to
 open the detail page.
 
-Sidebar **Watchlist** loads your personal Plex Watchlist
-(`/library/sections/watchlist/all`) — the same list the official Plex apps use.
-
 On any Discover title that is not in your library, the detail page offers
 **Add to Watchlist** / **Remove Watchlist** (`/actions/addToWatchlist` and
-`removeFromWatchlist`). If the same `plex://` GUID is already on your server,
-detail promotes to a normal Play page instead.
+`removeFromWatchlist`) — the same personal Watchlist as the official Plex apps.
+If the same `plex://` GUID is already on your server, detail promotes to a
+normal Play page instead.
 
 Uses the same `token` from `PlexConfig.brs` as the rest of Discover.
 

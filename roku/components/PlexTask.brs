@@ -1222,20 +1222,39 @@ function fetchWatchlistState(cfg as Object, discoverRk as String) as Boolean
         url = base + "?X-Plex-Token=" + cfg.token
         json = httpGetJson(url)
         if json <> invalid then
-            state = json
-            if json.MediaContainer <> invalid then
-                ' userState may nest under MediaContainer.UserState or be flat
-                if json.MediaContainer.UserState <> invalid then
-                    state = json.MediaContainer.UserState
-                else
-                    state = json.MediaContainer
-                end if
+            if userStateIsWatchlisted(json) then return true
+        end if
+    end for
+    return false
+end function
+
+function userStateIsWatchlisted(json as Object) as Boolean
+    if json = invalid then return false
+    candidates = []
+    candidates.push(json)
+    if json.MediaContainer <> invalid then
+        candidates.push(json.MediaContainer)
+        us = json.MediaContainer.UserState
+        if us <> invalid then
+            if GetInterface(us, "ifArray") <> invalid then
+                for each entry in us
+                    candidates.push(entry)
+                end for
+            else
+                candidates.push(us)
             end if
-            watchedAt = 0
-            if state <> invalid and state.watchlistedAt <> invalid then
-                watchedAt = state.watchlistedAt
+        end if
+    end if
+    if json.UserState <> invalid then candidates.push(json.UserState)
+
+    for each state in candidates
+        if state <> invalid and state.watchlistedAt <> invalid then
+            raw = state.watchlistedAt
+            if type(raw) = "String" or type(raw) = "roString" then
+                if raw <> "" and raw <> "0" then return true
+            else if raw > 0 then
+                return true
             end if
-            if watchedAt > 0 then return true
         end if
     end for
     return false
