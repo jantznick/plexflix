@@ -44,6 +44,8 @@
                 height="228"
                 translation="[8, 8]"
                 loadDisplayMode="scaleToZoom"
+                loadWidth="360"
+                loadHeight="540"
                 failedBitmapUri="pkg:/images/poster_placeholder.png"
                 loadingBitmapUri="pkg:/images/poster_placeholder.png"
                 uri="pkg:/images/poster_placeholder.png"

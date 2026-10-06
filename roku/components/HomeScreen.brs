@@ -385,7 +385,9 @@ sub updateHeroContent(item as Object)
     else if item.hdBackgroundImageUrl <> invalid and item.hdBackgroundImageUrl <> "" then
         uri = item.hdBackgroundImageUrl
     end if
-    if m.heroArt <> invalid and uri <> "" then m.heroArt.uri = uri
+    ' Skip reassignment when focus moves between items sharing art — restarting
+    ' a 1920 backdrop fetch fights the shelf posters for bandwidth
+    if m.heroArt <> invalid and uri <> "" and m.heroArt.uri <> uri then m.heroArt.uri = uri
 
     mediaType = asString(item.mediaType)
     isEpisode = (mediaType = "episode")

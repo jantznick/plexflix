@@ -32,6 +32,9 @@ sub onSizeChange()
 
     m.poster.width = contentW
     m.poster.height = contentH
+    ' Decode target ≈ 2× tile so focus scales stay sharp without pulling full-res art
+    m.poster.loadWidth = Int(contentW * 2)
+    m.poster.loadHeight = Int(contentH * 2)
     m.poster.translation = [pad, pad]
     if m.cardBg <> invalid then
         m.cardBg.width = contentW
