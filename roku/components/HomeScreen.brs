@@ -54,6 +54,11 @@ sub init()
     m.focusPoll.observeField("fire", "onFocusPoll")
     m.focusPoll.control = "start"
 
+    ' Infinite scroll: start fetching well before the end — Discover is slow
+    m.loadingMore = false
+    m.moreTask = invalid
+    m.loadMoreThreshold = 5
+
     m.top.observeField("config", "onConfigReady")
     m.top.setFocus(true)
 end sub
@@ -76,6 +81,8 @@ end sub
 
 sub loadHome()
     m.top.loadingMessage = "Connecting to Plex..."
+    m.loadingMore = false
+    m.moreTask = invalid
     m.task = createObject("roSGNode", "PlexTask")
     m.task.config = m.top.config
     m.task.action = "home"
@@ -114,6 +121,8 @@ sub onHomeLoaded()
 
     m.rowList.content = content
     m.currentRow = -1
+    m.loadingMore = false
+    m.moreTask = invalid
     setBrowseMode(false)
     if m.top.suspended <> true then m.rowList.setFocus(true)
 
@@ -121,6 +130,9 @@ sub onHomeLoaded()
     if firstRow <> invalid and firstRow.getChildCount() > 0 then
         updateHeroContent(firstRow.getChild(0))
     end if
+
+    ' Prefetch one Discover shelf so scrolling past the initial hubs feels continuous
+    maybeLoadMore(content.getChildCount() - 1)
 end sub
 
 '--------------------------------------------------------------------
@@ -132,6 +144,9 @@ sub onSuspendedChange()
         m.focusPoll.control = "stop"
     else
         m.focusPoll.control = "start"
+        ' Returning to Home: top up the Discover buffer if we're near the end
+        info = m.rowList.rowItemFocused
+        if info <> invalid and info.count() >= 1 then maybeLoadMore(info[0])
     end if
 end sub
 
@@ -145,6 +160,73 @@ sub onRefresh()
     m.refreshTask.action = "home"
     m.refreshTask.observeField("response", "onRefreshLoaded")
     m.refreshTask.control = "RUN"
+end sub
+
+'--------------------------------------------------------------------
+' Infinite scroll — append random Discover genre / trending shelves
+' (same idea as web IntersectionObserver + fetchRandomPlaylist)
+'--------------------------------------------------------------------
+
+sub maybeLoadMore(rowIndex as Integer)
+    if m.loadingMore = true then return
+    if m.moreTask <> invalid then return
+    if m.top.config = invalid then return
+    if m.top.suspended = true then return
+
+    content = m.rowList.content
+    if content = invalid then return
+    total = content.getChildCount()
+    if total <= 0 then return
+
+    ' Load when focus is within the last N rows (Discover latency needs headroom)
+    threshold = m.loadMoreThreshold
+    if threshold < 1 then threshold = 5
+    if rowIndex < total - threshold then return
+
+    titles = []
+    for i = 0 to total - 1
+        row = content.getChild(i)
+        if row <> invalid then titles.push(asString(row.title))
+    end for
+
+    m.loadingMore = true
+    m.moreTask = createObject("roSGNode", "PlexTask")
+    m.moreTask.config = m.top.config
+    m.moreTask.action = "homeMore"
+    m.moreTask.item = { titles: titles }
+    m.moreTask.observeField("response", "onHomeMoreLoaded")
+    m.moreTask.control = "RUN"
+end sub
+
+sub onHomeMoreLoaded()
+    response = invalid
+    if m.moreTask <> invalid then response = m.moreTask.response
+    m.moreTask = invalid
+    m.loadingMore = false
+
+    if response = invalid or response.ok <> true then return
+    fresh = response.content
+    if fresh = invalid or fresh.getChildCount() = 0 then return
+
+    current = m.rowList.content
+    if current = invalid then return
+
+    ' Detach children from the task tree (a node can only have one parent)
+    newRows = []
+    while fresh.getChildCount() > 0
+        row = fresh.getChild(0)
+        fresh.removeChildIndex(0)
+        if row <> invalid then newRows.push(row)
+    end while
+    if newRows.count() = 0 then return
+
+    current.appendChildren(newRows)
+
+    ' Only keep topping up while the viewer is actually near the end.
+    ' (Avoid chaining forever when focus isn't set yet after the initial prefetch.)
+    info = m.rowList.rowItemFocused
+    if info = invalid or info.count() < 1 then return
+    maybeLoadMore(info[0])
 end sub
 
 ' Swap in fresh hubs without disturbing the viewer: rows whose items are
@@ -244,6 +326,7 @@ sub applyFocusedRow(force as Boolean)
     m.currentRow = rowIndex
     if rowChanged then setBrowseMode(rowIndex > 0)
     updateHeroContent(item)
+    if rowChanged then maybeLoadMore(rowIndex)
 end sub
 
 sub setBrowseMode(collapsed as Boolean)
