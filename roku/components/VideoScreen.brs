@@ -18,6 +18,21 @@ sub init()
     m.castPanel = m.top.findNode("castPanel")
     m.castRow = m.top.findNode("castRow")
 
+    m.previewFrame = m.top.findNode("previewFrame")
+    m.previewImage = m.top.findNode("previewImage")
+
+    m.skipPill = m.top.findNode("skipPill")
+    m.skipLabel = m.top.findNode("skipLabel")
+
+    m.castModal = m.top.findNode("castModal")
+    m.castModalPhoto = m.top.findNode("castModalPhoto")
+    m.castModalName = m.top.findNode("castModalName")
+    m.castModalRole = m.top.findNode("castModalRole")
+    m.castModalMeta = m.top.findNode("castModalMeta")
+    m.castModalBio = m.top.findNode("castModalBio")
+    m.castModalKnownFor = m.top.findNode("castModalKnownFor")
+    m.castModalSpinner = m.top.findNode("castModalSpinner")
+
     m.picker = m.top.findNode("picker")
     m.pickerTitle = m.top.findNode("pickerTitle")
     m.pickerRowsHost = m.top.findNode("pickerRows")
@@ -35,7 +50,7 @@ sub init()
 
     m.trackWidth = m.track.width
 
-    ' hidden | scrubber | buttons | picker
+    ' hidden | cast | scrubber | buttons | picker | castModal
     m.zone = "hidden"
     m.fadingOut = false
 
@@ -61,6 +76,17 @@ sub init()
     m.pickerIndex = 0
     m.pickerTop = 0
     m.pickerRowNodes = []
+
+    m.cast = []
+    m.castNodes = []
+    m.castIndex = 0
+    m.castResumeOnClose = false
+
+    m.markers = []
+    m.activeMarker = invalid
+
+    m.previewBase = ""
+    m.previewAt = -1
 
     m.pendingSeek = invalid
 
@@ -196,14 +222,15 @@ sub onVideoState()
         paintButtons()
         reportProgress("playing")
         m.reportTimer.control = "start"
-        if m.zone <> "hidden" and m.zone <> "picker" then restartHideTimer()
+        if m.zone <> "hidden" and m.zone <> "picker" and m.zone <> "castModal" then restartHideTimer()
     else if state = "paused" then
         m.paused = true
         paintButtons()
         reportProgress("paused")
-        ' Pausing is the cue to show the panel and leave it up
-        showControls(activeZone())
         m.hideTimer.control = "stop"
+        ' Pausing is the cue to show the panel and leave it up, unless the pause
+        ' came from opening the cast modal, which owns the screen already
+        if m.zone <> "castModal" then showControls(activeZone())
     else if state = "buffering" then
         if not m.started then setStatus("Buffering...")
     else if state = "error" then
@@ -219,6 +246,114 @@ end sub
 sub onPositionChange()
     m.position = Int(m.video.position)
     if m.pendingSeek = invalid and m.controls.visible then paintScrubber(m.position)
+    refreshMarker()
+end sub
+
+'--------------------------------------------------------------------
+' Intro / credits / commercial markers
+'--------------------------------------------------------------------
+
+sub refreshMarker()
+    marker = markerAt(m.position)
+    if marker = invalid and m.activeMarker = invalid then return
+
+    changed = true
+    if marker <> invalid and m.activeMarker <> invalid then
+        changed = (marker.startAt <> m.activeMarker.startAt)
+    end if
+
+    m.activeMarker = marker
+    if marker <> invalid then m.skipLabel.text = marker.label
+    paintSkip()
+    ' The skip sits at the front of the button row, so the row changes shape
+    if changed and m.controls.visible then paintButtons()
+end sub
+
+function markerAt(atSeconds as Integer) as Object
+    if m.markers = invalid or m.markers.count() = 0 then return invalid
+    atMs = atSeconds * 1000
+
+    for each marker in m.markers
+        ' Stop offering the skip right at the boundary, where it would be a no-op
+        if atMs >= marker.startAt and atMs < marker.endAt - 1000 then return marker
+    end for
+    return invalid
+end function
+
+sub paintSkip()
+    ' Hidden whenever the panel is up: the button row carries the skip there,
+    ' and the pill would land on top of the title
+    m.skipPill.visible = (m.activeMarker <> invalid and not m.controls.visible and m.zone = "hidden")
+end sub
+
+sub skipMarker()
+    if m.activeMarker = invalid then return
+
+    target = Int(m.activeMarker.endAt / 1000)
+    if m.duration > 0 and target > m.duration - 2 then target = m.duration - 2
+    if target < 0 then target = 0
+
+    m.activeMarker = invalid
+    paintSkip()
+
+    m.pendingSeek = invalid
+    m.seekTimer.control = "stop"
+    hidePreview()
+    m.video.seek = target
+    m.position = target
+    if m.controls.visible then
+        paintScrubber(target)
+        paintButtons()
+    end if
+end sub
+
+'--------------------------------------------------------------------
+' Scrubbing preview thumbnails
+'--------------------------------------------------------------------
+
+sub showPreview(atSeconds as Integer)
+    if m.previewBase = "" or m.isLive then return
+
+    ' Plex builds the BIF index at a coarse interval, so rounding keeps this to
+    ' one request per bucket instead of one per keypress
+    bucket = Int(atSeconds / 5) * 5
+    if bucket <> m.previewAt then
+        m.previewAt = bucket
+        token = ""
+        if m.top.config <> invalid then token = valueOrEmpty(m.top.config.token)
+        m.previewImage.uri = m.previewBase + StrI(bucket * 1000).Trim() + "?X-Plex-Token=" + token
+    end if
+
+    pct = 0
+    if m.duration > 0 then pct = atSeconds / m.duration
+    if pct < 0 then pct = 0
+    if pct > 1 then pct = 1
+
+    left = m.track.translation[0] + m.trackWidth * pct - m.previewFrame.width / 2
+    minLeft = m.track.translation[0]
+    maxLeft = minLeft + m.trackWidth - m.previewFrame.width
+    if left < minLeft then left = minLeft
+    if left > maxLeft then left = maxLeft
+
+    m.previewFrame.translation = [left, 691]
+    m.previewImage.translation = [left + 3, 694]
+    m.previewFrame.visible = true
+    m.previewImage.visible = true
+
+    ' The preview sits over the title strip and the left end of the cast row,
+    ' so both step aside for as long as it is up
+    m.titleLabel.visible = false
+    m.subtitleLabel.visible = false
+    m.castPanel.visible = false
+end sub
+
+sub hidePreview()
+    if m.previewFrame = invalid then return
+    m.previewFrame.visible = false
+    m.previewImage.visible = false
+    m.titleLabel.visible = true
+    m.subtitleLabel.visible = true
+    m.castPanel.visible = (m.castNodes.count() > 0)
 end sub
 
 sub onReportTimer()
@@ -323,6 +458,12 @@ sub onStreamOptions()
     m.streams = response
     m.audioId = selectedId(response.audio)
     m.subtitleId = selectedId(response.subtitles)
+
+    m.markers = response.markers
+    if m.markers = invalid then m.markers = []
+    m.previewBase = valueOrEmpty(response.previewUrlBase)
+
+    refreshMarker()
     paintButtons()
 end sub
 
@@ -341,6 +482,12 @@ sub applyStreamChoice(kind as String, option as Object)
         if option.mediaIndex = m.mediaIndex then return
         m.mediaIndex = option.mediaIndex
         restartStream("Switching version...")
+        ' A different version is a different file: its part id, track ids and
+        ' preview index all have to be read again
+        m.previewBase = ""
+        m.previewAt = -1
+        hidePreview()
+        loadStreamOptions()
         return
     end if
 
@@ -438,11 +585,20 @@ sub onCastLoaded()
     while m.castRow.getChildCount() > 0
         m.castRow.removeChildIndex(0)
     end while
+    m.cast = []
+    m.castNodes = []
 
     for i = 0 to maxShown - 1
         member = cast[i]
         entry = m.castRow.createChild("Group")
         entry.translation = [i * (posterW + gap), 0]
+
+        ring = entry.createChild("Rectangle")
+        ring.width = posterW + 8
+        ring.height = posterH + 8
+        ring.translation = [-4, -4]
+        ring.color = "0xFFFFFF"
+        ring.visible = false
 
         poster = entry.createChild("Poster")
         poster.width = posterW
@@ -451,6 +607,7 @@ sub onCastLoaded()
         poster.failedBitmapUri = "pkg:/images/poster_placeholder.png"
         poster.uri = valueOrEmpty(member.hdPosterUrl)
         if poster.uri = "" then poster.uri = "pkg:/images/poster_placeholder.png"
+        poster.opacity = 0.78
 
         name = entry.createChild("Label")
         name.width = posterW
@@ -458,15 +615,133 @@ sub onCastLoaded()
         name.translation = [0, posterH + 8]
         name.wrap = true
         name.maxLines = 2
-        name.color = "0xD8D8E0"
+        name.color = "0x9A9AA4"
         name.text = valueOrEmpty(member.shortTitle)
         if name.text = "" then name.text = valueOrEmpty(member.title)
         font = name.createChild("Font")
         font.uri = "pkg:/fonts/Outfit-Medium.ttf"
         font.size = 15
+
+        m.cast.push(member)
+        m.castNodes.push({ ring: ring, poster: poster, label: name })
     end for
 
     m.castPanel.visible = true
+    paintCastFocus()
+end sub
+
+sub paintCastFocus()
+    for i = 0 to m.castNodes.count() - 1
+        node = m.castNodes[i]
+        focused = (m.zone = "cast" and i = m.castIndex)
+        node.ring.visible = focused
+        if focused then
+            node.poster.opacity = 1.0
+            node.label.color = "0xFFFFFF"
+        else
+            node.poster.opacity = 0.78
+            node.label.color = "0x9A9AA4"
+        end if
+    end for
+end sub
+
+sub moveCast(delta as Integer)
+    if m.castNodes.count() = 0 then return
+    target = m.castIndex + delta
+    if target < 0 then target = 0
+    if target > m.castNodes.count() - 1 then target = m.castNodes.count() - 1
+    m.castIndex = target
+    paintCastFocus()
+    restartHideTimer()
+end sub
+
+'--------------------------------------------------------------------
+' Cast detail without leaving playback
+'--------------------------------------------------------------------
+
+sub openCastModal()
+    if m.castIndex >= m.cast.count() then return
+    member = m.cast[m.castIndex]
+
+    ' Remember whether we were the ones who paused, so closing restores it
+    m.castResumeOnClose = not m.paused
+
+    ' Zone first: the pause below comes back as a state change, and that handler
+    ' needs to already know the modal owns the screen
+    m.zone = "castModal"
+    m.hideTimer.control = "stop"
+    if m.castResumeOnClose then m.video.control = "pause"
+
+    m.castModalName.text = valueOrEmpty(member.title)
+    role = valueOrEmpty(member.description)
+    if role <> "" then m.castModalRole.text = "as " + role else m.castModalRole.text = ""
+    m.castModalMeta.text = ""
+    m.castModalBio.text = ""
+    m.castModalKnownFor.text = ""
+    poster = valueOrEmpty(member.hdPosterUrl)
+    if poster = "" then poster = "pkg:/images/poster_placeholder.png"
+    m.castModalPhoto.uri = poster
+
+    m.castModal.visible = true
+    m.castModalSpinner.visible = true
+    m.castModalSpinner.control = "start"
+
+    m.personTask = createObject("roSGNode", "PlexTask")
+    m.personTask.config = m.top.config
+    m.personTask.action = "personDetail"
+    m.personTask.item = member
+    m.personTask.observeField("response", "onPersonDetail")
+    m.personTask.control = "RUN"
+end sub
+
+sub onPersonDetail()
+    m.castModalSpinner.control = "stop"
+    m.castModalSpinner.visible = false
+
+    ' A late reply must not repopulate a panel the viewer already dismissed
+    if m.zone <> "castModal" then return
+
+    response = m.personTask.response
+    if response = invalid or response.ok <> true or response.person = invalid then
+        m.castModalBio.text = "No biography available."
+        return
+    end if
+
+    person = response.person
+    if valueOrEmpty(person.title) <> "" then m.castModalName.text = valueOrEmpty(person.title)
+    m.castModalMeta.text = valueOrEmpty(person.metaLine)
+    m.castModalBio.text = valueOrEmpty(person.description)
+    if m.castModalBio.text = "" then m.castModalBio.text = "No biography available."
+
+    knownFor = valueOrEmpty(person.knownFor)
+    if knownFor = "" then knownFor = creditSummary(response)
+    if knownFor <> "" then m.castModalKnownFor.text = "Known for: " + knownFor
+
+    photo = valueOrEmpty(person.hdPosterUrl)
+    if photo <> "" then m.castModalPhoto.uri = photo
+end sub
+
+function creditSummary(response as Object) as String
+    credits = response.credits
+    if credits = invalid or credits.count() = 0 then return ""
+
+    titles = []
+    limit = 3
+    if credits.count() < limit then limit = credits.count()
+    for i = 0 to limit - 1
+        title = valueOrEmpty(credits[i].title)
+        if title <> "" then titles.push(title)
+    end for
+    return joinWith(titles, ", ")
+end function
+
+sub closeCastModal()
+    m.castModal.visible = false
+    m.castModalSpinner.control = "stop"
+    m.castModalSpinner.visible = false
+    if m.castResumeOnClose then m.video.control = "resume"
+    m.castResumeOnClose = false
+    showControls("cast")
 end sub
 
 '--------------------------------------------------------------------
@@ -568,6 +843,9 @@ end function
 
 sub paintButtons()
     specs = []
+    if m.activeMarker <> invalid then
+        specs.push({ id: "skip", text: m.activeMarker.label })
+    end if
     if m.paused then
         specs.push({ id: "play", text: "Play" })
     else
@@ -586,8 +864,20 @@ sub paintButtons()
         end if
     end if
 
+    ' Markers appear and disappear mid-playback, so keep the highlight on the
+    ' button the user was actually on rather than on whatever index it held
+    focusedId = ""
+    if m.buttonIndex < m.buttons.count() then focusedId = m.buttons[m.buttonIndex].id
+
     rebuildButtons(specs)
-    if m.buttonIndex >= m.buttons.count() then m.buttonIndex = 0
+
+    m.buttonIndex = 0
+    for i = 0 to m.buttons.count() - 1
+        if m.buttons[i].id = focusedId then
+            m.buttonIndex = i
+            exit for
+        end if
+    end for
     paintButtonFocus()
 end sub
 
@@ -665,9 +955,14 @@ end sub
 
 sub showControls(zone as String)
     m.zone = zone
+    ' The preview belongs to an in-flight seek, so it does not follow the viewer
+    ' into a zone that cannot seek — least of all the cast strip it covers
+    if zone <> "scrubber" and zone <> "buttons" then hidePreview()
     paintScrubber(m.position)
     paintButtons()
     paintButtonFocus()
+    paintCastFocus()
+    paintSkip()
 
     if m.controls.opacity < 1.0 or m.fadingOut then
         m.fadingOut = false
@@ -682,6 +977,9 @@ end sub
 sub hideControls()
     m.zone = "hidden"
     m.hideTimer.control = "stop"
+    hidePreview()
+    paintCastFocus()
+    paintSkip()
     if not m.controls.visible then return
     m.fadingOut = true
     m.fadeInterp.keyValue = [m.controls.opacity, 0.0]
@@ -692,6 +990,8 @@ sub onFadeState()
     if m.fade.state = "stopped" and m.fadingOut then
         m.fadingOut = false
         m.controls.visible = false
+        ' The pill waits for the panel to finish fading rather than crossing it
+        paintSkip()
     end if
 end sub
 
@@ -701,7 +1001,7 @@ sub restartHideTimer()
 end sub
 
 sub onHideTimer()
-    if m.paused or m.zone = "picker" then return
+    if m.paused or m.zone = "picker" or m.zone = "castModal" then return
     hideControls()
 end sub
 
@@ -721,6 +1021,7 @@ sub nudgeSeek(deltaSeconds as Integer)
 
     m.pendingSeek = target
     paintScrubber(target)
+    showPreview(target)
 
     ' Let a run of presses settle before asking the transcoder for a new spot
     m.seekTimer.control = "stop"
@@ -731,7 +1032,9 @@ sub onSeekCommit()
     if m.pendingSeek = invalid then return
     target = m.pendingSeek
     m.pendingSeek = invalid
+    hidePreview()
     m.video.seek = target
+    m.position = target
     reportProgress("playing")
 end sub
 
@@ -891,11 +1194,24 @@ function onKeyEvent(key as String, press as Boolean) as Boolean
     if not press then return false
 
     if key = "back" then
+        if m.zone = "castModal" then
+            closeCastModal()
+            return true
+        end if
         if m.zone = "picker" then
             closePicker()
             return true
         end if
         stopAndClose()
+        return true
+    end if
+
+    ' The modal owns everything while it is up, so playback is never disturbed
+    ' by a stray press landing on the panel behind it
+    if m.zone = "castModal" then
+        ' Nothing in here is navigable, so the arrows are swallowed rather than
+        ' leaking through to the scrubber behind
+        if key = "OK" then closeCastModal()
         return true
     end if
 
@@ -933,11 +1249,37 @@ function onKeyEvent(key as String, press as Boolean) as Boolean
     end if
 
     if m.zone = "hidden" then
+        ' While a marker is live, OK belongs to the skip — that is the whole
+        ' point of the pill being on screen without the panel
+        if key = "OK" and m.activeMarker <> invalid then
+            skipMarker()
+            return true
+        end if
         if key = "up" or key = "down" or key = "OK" or key = "left" or key = "right" then
             showControls("scrubber")
             return true
         end if
         return false
+    end if
+
+    if m.zone = "cast" then
+        if key = "left" then
+            moveCast(-1)
+            return true
+        else if key = "right" then
+            moveCast(1)
+            return true
+        else if key = "down" then
+            showControls("scrubber")
+            return true
+        else if key = "up" then
+            hideControls()
+            return true
+        else if key = "OK" then
+            openCastModal()
+            return true
+        end if
+        return true
     end if
 
     if m.zone = "scrubber" then
@@ -953,7 +1295,11 @@ function onKeyEvent(key as String, press as Boolean) as Boolean
             if m.buttons.count() > 0 then showControls("buttons")
             return true
         else if key = "up" then
-            hideControls()
+            if m.castNodes.count() > 0 then
+                showControls("cast")
+            else
+                hideControls()
+            end if
             return true
         else if key = "OK" then
             togglePlayPause()
@@ -1009,6 +1355,8 @@ sub activateButton()
         togglePlayPause()
     else if id = "restart" then
         restart()
+    else if id = "skip" then
+        skipMarker()
     else
         openPicker(id)
     end if

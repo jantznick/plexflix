@@ -72,6 +72,11 @@
                 <Font role="font" uri="pkg:/fonts/Outfit-Medium.ttf" size="24" />
             </Label>
 
+            <!-- After the title labels so it draws over them: the preview wants
+                 the same strip of screen and only appears while scrubbing -->
+            <Rectangle id="previewFrame" width="326" height="186" translation="[96, 691]" color="0xFFFFFF" visible="false" />
+            <Poster id="previewImage" width="320" height="180" translation="[99, 694]" loadDisplayMode="scaleToFill" visible="false" />
+
             <Rectangle id="track" width="1728" height="8" translation="[96, 894]" color="0x45454F" />
             <Rectangle id="fill" width="0" height="8" translation="[96, 894]" color="0xE50914" />
             <Rectangle id="thumb" width="8" height="26" translation="[96, 885]" color="0xFFFFFF" />
@@ -89,6 +94,16 @@
             <Group id="buttonRow" translation="[96, 960]" />
         </Group>
 
+        <!-- Outside the controls group: while a marker is live this is the one
+             thing worth putting on screen without the whole panel -->
+        <Group id="skipPill" translation="[1524, 940]" visible="false">
+            <Rectangle width="300" height="64" color="0x000000" opacity="0.72" />
+            <Rectangle width="300" height="4" color="0xE50914" />
+            <Label id="skipLabel" width="300" height="64" horizAlign="center" vertAlign="center" color="0xFFFFFF">
+                <Font role="font" uri="pkg:/fonts/Outfit-SemiBold.ttf" size="26" />
+            </Label>
+        </Group>
+
         <Group id="picker" visible="false">
             <Rectangle width="1920" height="1080" color="0x000000" opacity="0.6" />
             <Rectangle translation="[600, 230]" width="720" height="620" color="0x14141C" />
@@ -97,6 +112,41 @@
                 <Font role="font" uri="pkg:/fonts/Outfit-Bold.ttf" size="32" />
             </Label>
             <Group id="pickerRows" translation="[620, 320]" />
+        </Group>
+
+        <!-- Cast details without leaving playback: the video pauses behind the
+             panel and resumes on close if it was playing when this opened -->
+        <Group id="castModal" visible="false">
+            <Rectangle width="1920" height="1080" color="0x000000" opacity="0.72" />
+            <Rectangle translation="[300, 250]" width="1320" height="580" color="0x14141C" />
+            <Rectangle translation="[300, 250]" width="1320" height="4" color="0xE50914" />
+
+            <Poster
+                id="castModalPhoto"
+                width="220"
+                height="330"
+                translation="[348, 300]"
+                loadDisplayMode="scaleToZoom"
+                failedBitmapUri="pkg:/images/poster_placeholder.png"
+                uri="pkg:/images/poster_placeholder.png"
+            />
+
+            <Label id="castModalName" translation="[604, 302]" width="968" height="52" color="0xFFFFFF">
+                <Font role="font" uri="pkg:/fonts/Outfit-Bold.ttf" size="40" />
+            </Label>
+            <Label id="castModalRole" translation="[604, 360]" width="968" height="34" color="0xE50914">
+                <Font role="font" uri="pkg:/fonts/Outfit-Medium.ttf" size="24" />
+            </Label>
+            <Label id="castModalMeta" translation="[604, 400]" width="968" height="32" color="0x9A9AA4">
+                <Font role="font" uri="pkg:/fonts/Outfit-Medium.ttf" size="22" />
+            </Label>
+            <Label id="castModalBio" translation="[604, 444]" width="968" height="186" wrap="true" maxLines="6" color="0xD8D8E0">
+                <Font role="font" uri="pkg:/fonts/Outfit-Regular.ttf" size="22" />
+            </Label>
+            <Label id="castModalKnownFor" translation="[604, 642]" width="968" height="32" color="0x9A9AA4">
+                <Font role="font" uri="pkg:/fonts/Outfit-Medium.ttf" size="22" />
+            </Label>
+            <BusySpinner id="castModalSpinner" translation="[940, 520]" uri="pkg:/images/spinner.png" visible="false" />
         </Group>
     </children>
 </component>
