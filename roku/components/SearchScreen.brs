@@ -29,7 +29,7 @@ sub init()
     m.grid.observeField("itemSelected", "onGridSelected")
 
     paintTypeButton()
-    showEmpty("Search Plex Discover for any movie or show — open a result to add it to your Watchlist.")
+    showEmpty("Search Plex Discover for any movie or show.")
     m.searchBtn.setFocus(true)
 end sub
 
@@ -75,7 +75,7 @@ sub onClearButton()
     m.query = ""
     m.items = []
     clearGrid()
-    showEmpty("Search Plex Discover for any movie or show — open a result to add it to your Watchlist.")
+    showEmpty("Search Plex Discover for any movie or show.")
     m.metaLabel.text = "Find any movie or show — even ones not in your library"
     focusToolbar("search")
 end sub
@@ -175,7 +175,7 @@ sub onSearchLoaded()
         focusToolbar("search")
     else
         m.emptyLabel.visible = false
-        m.metaLabel.text = asString(m.items.count()) + " results for “" + m.query + "” · OK to open · add to Watchlist from the detail page"
+        m.metaLabel.text = asString(m.items.count()) + " results for “" + m.query + "”"
         focusGrid()
     end if
 end sub
