@@ -168,10 +168,11 @@ sub startPlayback()
     if m.session = invalid then return
     base = ""
     cfg = m.top.config
-    if cfg <> invalid and cfg.multiviewUrl <> invalid then base = cfg.multiviewUrl
+    if cfg <> invalid and cfg.multiviewUrl <> invalid then base = cfg.multiviewUrl.Trim()
     while Right(base, 1) = "/"
         base = Left(base, Len(base) - 1)
     end while
+    if base <> "" and Instr(1, base, "://") = 0 then base = "http://" + base
 
     node = createObject("roSGNode", "ContentNode")
     node.url = base + asString(m.session.playlistUrl)
