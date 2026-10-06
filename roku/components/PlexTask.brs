@@ -2917,38 +2917,41 @@ function liveSessionFromTune(cfg as Object, result as Object) as Dynamic
     consumerId = safeToStr(cfg.clientId)
     if consumerId = "" then consumerId = "plexflix-roku"
     sessionPath = "/livetv/sessions/" + mediaUuid
-    urls = [
-        buildStreamUrl(cfg, { key: sessionPath, session: transcodeSession }).url,
-        buildStreamUrl(cfg, { key: sessionPath + "/index.m3u8", session: transcodeSession }).url,
-        cfg.baseUrl + sessionPath + "/" + requestEncode(consumerId) + "/index.m3u8?X-Plex-Token=" + cfg.token
+    tokenQuery = "?X-Plex-Token=" + cfg.token
+    ' The grabber's own HLS needs no transcoder; the universal transcoder is
+    ' the fallback, and its start.m3u8 is only a master pointing at the session
+    candidates = [
+        { kind: "direct", url: cfg.baseUrl + sessionPath + "/" + requestEncode(consumerId) + "/index.m3u8" + tokenQuery, dead: false },
+        { kind: "direct", url: cfg.baseUrl + sessionPath + "/index.m3u8" + tokenQuery, dead: false },
+        { kind: "transcode", url: buildStreamUrl(cfg, { key: sessionPath, session: transcodeSession }).url, dead: false },
+        { kind: "transcode", url: buildStreamUrl(cfg, { key: sessionPath + "/index.m3u8", session: transcodeSession }).url, dead: false }
     ]
-    ' Requesting start.m3u8 starts the transcode, so the player must get the
-    ' variant playlist it points at; a second start.m3u8 restarts the session
-    for attemptNo = 1 to 16
-        for each url in urls
-            probe = probePlaylist(cfg, url)
-            print "[plexflix:livetv] probe "; attemptNo; " HTTP "; probe.code; " "; Left(url, 140)
-            if probe.ok then
-                playUrl = url
-                variant = playlistVariantUrl(cfg, url, probe.body)
-                if variant <> "" then
-                    print "[plexflix:livetv] variant "; Left(variant, 160)
-                    playUrl = variant
-                    vprobe = { ok: false, code: 0, body: "" }
-                    for waitNo = 1 to 20
-                        vprobe = probePlaylist(cfg, variant)
-                        if vprobe.ok and Instr(1, vprobe.body, "#EXTINF") > 0 then exit for
-                        sleep(300)
-                    end for
-                    print "[plexflix:livetv] variant HTTP "; vprobe.code; " after "; waitNo; " tries: "; Left(vprobe.body, 500)
-                    logFirstSegment(cfg, variant, vprobe.body)
-                else
-                    print "[plexflix:livetv] playlist: "; Left(probe.body, 500)
+    for attemptNo = 1 to 15
+        alive = 0
+        for each cand in candidates
+            if not cand.dead then
+                alive = alive + 1
+                probe = probePlaylist(cfg, cand.url)
+                print "[plexflix:livetv] probe "; attemptNo; " "; cand.kind; " HTTP "; probe.code; " "; Left(cand.url, 140)
+                if probe.code = 404 or probe.code = 400 or probe.code = 403 then
+                    if cand.kind = "transcode" or attemptNo >= 3 then cand.dead = true
+                else if probe.ok and cand.kind = "direct" then
+                    if Instr(1, probe.body, "#EXTINF") > 0 or Instr(1, probe.body, "#EXT-X-STREAM-INF") > 0 then
+                        print "[plexflix:livetv] direct playlist: "; Left(probe.body, 300)
+                        return { ok: true, url: cand.url, session: "", subscriptionId: subId, liveSession: mediaUuid }
+                    end if
+                else if probe.ok then
+                    playUrl = transcodeVariant(cfg, cand.url, probe.body)
+                    if playUrl <> "" then
+                        return { ok: true, url: playUrl, session: transcodeSession, subscriptionId: subId, liveSession: mediaUuid }
+                    end if
+                    cand.dead = true
+                    logTranscoderState(cfg, probe.body)
+                    stopTranscode(cfg, { session: transcodeSession })
                 end if
-                return { ok: true, url: playUrl, session: transcodeSession, subscriptionId: subId, liveSession: mediaUuid }
             end if
-            if attemptNo > 1 then exit for
         end for
+        if alive = 0 then exit for
         sleep(400)
     end for
     releaseLiveSession(cfg, { subscriptionId: subId, session: transcodeSession })
@@ -2981,6 +2984,39 @@ function probePlaylist(cfg as Object, url as String) as Object
     body = msg.GetString()
     return { ok: (code >= 200 and code < 300 and Instr(1, body, "#EXTM3U") > 0), code: code, body: body }
 end function
+
+' Media playlist behind a transcoder master, once it lists segments; empty
+' when the transcode session never comes up
+function transcodeVariant(cfg as Object, masterUrl as String, body as String) as String
+    variant = playlistVariantUrl(cfg, masterUrl, body)
+    if variant = "" then
+        if Instr(1, body, "#EXTINF") > 0 then return masterUrl
+        return ""
+    end if
+    print "[plexflix:livetv] variant "; Left(variant, 160)
+    vprobe = { ok: false, code: 0, body: "" }
+    tries = 0
+    while tries < 12
+        tries = tries + 1
+        vprobe = probePlaylist(cfg, variant)
+        if vprobe.ok and Instr(1, vprobe.body, "#EXTINF") > 0 then
+            logFirstSegment(cfg, variant, vprobe.body)
+            return variant
+        end if
+        if vprobe.code = 404 and tries >= 4 then exit while
+        sleep(300)
+    end while
+    print "[plexflix:livetv] variant HTTP "; vprobe.code; " after "; tries; " tries"
+    return ""
+end function
+
+' Why a transcode died is only visible server-side; this shows whether Plex
+' still lists it and what it decided
+sub logTranscoderState(cfg as Object, masterBody as String)
+    print "[plexflix:livetv] master playlist: "; Left(masterBody, 400)
+    sessions = probePlaylist(cfg, cfg.baseUrl + "/transcode/sessions?X-Plex-Token=" + cfg.token)
+    print "[plexflix:livetv] /transcode/sessions HTTP "; sessions.code; ": "; Left(sessions.body, 600)
+end sub
 
 sub logFirstSegment(cfg as Object, playlistUrl as String, body as String)
     segment = ""
