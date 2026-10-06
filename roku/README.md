@@ -22,7 +22,7 @@ This is intentionally a **design/UX shell** on top of existing Plex data. Creden
   you were watching returns to the guide with that channel still playing in the preview
 - **DVR**: Upcoming lists scheduled recordings (OK cancels one). Rules lists each show with a rule; OK opens an editor for
   its Plex recording settings (quality, replace lower quality, padding, commercial detection, episodes to keep, …;
-  Left/Right or OK cycles a value), plus Save and Delete. "Edit series rule" is also on the guide and Upcoming menus.
+  OK on a setting opens its choices to pick from), plus Save and Delete. "Edit series rule" is also on the guide and Upcoming menus.
   Programs that will record are tagged **REC** (or **SERIES**) in the grid. Finished recordings land in the Plex
   library the rule targets, like any other episode or movie
 - **Libraries**: mosaic hero + **View all**; full grid with filter, search, order-by and an A–Z rail

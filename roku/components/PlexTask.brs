@@ -2882,8 +2882,29 @@ function tuneLiveChannel(cfg as Object, item as Object) as Object
     end if
     if result.ok <> true then return result
 
-    sessionId = extractLiveSessionId(result.json, result.body)
+    body = safeToStr(result.body)
+    print "[plexflix:livetv] tune "; channelId; " response: "; Left(body, 1500)
+
+    ' The tuned airing sits under MediaSubscription > MediaGrabOperation > Metadata
+    sessionPath = deepFindString(result.json, "/livetv/sessions/", 0)
+    if sessionPath <> "" then
+        cut = Instr(1, sessionPath, "/livetv/sessions/")
+        sessionPath = Mid(sessionPath, cut)
+        if Instr(1, sessionPath, ".m3u8") > 0 then
+            sep = "?"
+            if Instr(1, sessionPath, "?") > 0 then sep = "&"
+            return { ok: true, url: cfg.baseUrl + sessionPath + sep + "X-Plex-Token=" + cfg.token }
+        end if
+    end if
+
+    sessionId = extractLiveSessionId(result.json, body)
+    if sessionId = "" and sessionPath <> "" then sessionId = extractLiveSessionId(invalid, sessionPath)
     if sessionId = "" then
+        metaKey = deepFindMetadataKey(result.json, 0)
+        if metaKey <> "" then
+            print "[plexflix:livetv] no session path; transcoding "; metaKey
+            return buildStreamUrl(cfg, { key: metaKey, session: "plexflix-live-" + safeToStr(CreateObject("roDateTime").AsSeconds()) })
+        end if
         return { ok: false, error: "Tuned, but no Live TV session id was returned" }
     end if
 
@@ -2891,6 +2912,52 @@ function tuneLiveChannel(cfg as Object, item as Object) as Object
     if consumerId = "" then consumerId = "plexflix-roku"
     url = cfg.baseUrl + "/livetv/sessions/" + sessionId + "/" + requestEncode(consumerId) + "/index.m3u8?X-Plex-Token=" + cfg.token
     return { ok: true, url: url, sessionId: sessionId }
+end function
+
+function deepFindString(node as Dynamic, marker as String, depth as Integer) as String
+    if node = invalid or depth > 10 then return ""
+    nodeType = type(node)
+    if nodeType = "String" or nodeType = "roString" then
+        if Instr(1, node, marker) > 0 then return node
+        return ""
+    end if
+    if GetInterface(node, "ifAssociativeArray") <> invalid then
+        for each keyName in node
+            found = deepFindString(node[keyName], marker, depth + 1)
+            if found <> "" then return found
+        end for
+    else if GetInterface(node, "ifArray") <> invalid then
+        for each child in node
+            found = deepFindString(child, marker, depth + 1)
+            if found <> "" then return found
+        end for
+    end if
+    return ""
+end function
+
+function deepFindMetadataKey(node as Dynamic, depth as Integer) as String
+    if node = invalid or depth > 10 then return ""
+    if GetInterface(node, "ifAssociativeArray") <> invalid then
+        for each keyName in ["Metadata", "Video"]
+            for each meta in nodeList(node[keyName])
+                key = safeToStr(meta.key)
+                if Left(key, 1) = "/" then return key
+            end for
+        end for
+        for each keyName in node
+            child = node[keyName]
+            if child <> invalid and (GetInterface(child, "ifAssociativeArray") <> invalid or GetInterface(child, "ifArray") <> invalid) then
+                found = deepFindMetadataKey(child, depth + 1)
+                if found <> "" then return found
+            end if
+        end for
+    else if GetInterface(node, "ifArray") <> invalid then
+        for each child in node
+            found = deepFindMetadataKey(child, depth + 1)
+            if found <> "" then return found
+        end for
+    end if
+    return ""
 end function
 
 function extractLiveSessionId(json as Object, body as String) as String
@@ -3090,8 +3157,7 @@ function airingFrom(cfg as Object, meta as Object, media as Dynamic) as Dynamic
             episodeLabel = "E" + StrI(episode).Trim()
         end if
     else if kind = "movie" then
-        subtitle = "Movie"
-        if safeToStr(meta.year) <> "" then subtitle = "Movie · " + safeToStr(meta.year)
+        subtitle = safeToStr(meta.year)
     end if
     if title = "" then title = "Untitled"
 

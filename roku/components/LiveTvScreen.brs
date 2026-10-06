@@ -674,9 +674,7 @@ sub paintCell(cell as Object, ch as Object, p as Object, x as Integer, w as Inte
     cell.title.text = title
     subText = ""
     if p.placeholder <> true then
-        subText = rangeText(p.beginsAt, p.endsAt)
-        if p.episodeLabel <> invalid and p.episodeLabel <> "" then subText = subText + "  ·  " + p.episodeLabel
-        if p.subtitle <> invalid and p.subtitle <> "" then subText = subText + "  ·  " + p.subtitle
+        subText = joinStrings([valueOr(p.episodeLabel, ""), valueOr(p.subtitle, "")], "  ·  ")
     end if
     cell.subLabel.text = subText
 
@@ -1134,9 +1132,12 @@ sub onDvrSelected()
     actions = []
     if entry.kind = "upcoming" then
         up = entry.data
-        if up.subscriptionType = 2 then
-            actions.push({ label: "Delete series rule", act: "cancel", data: { subscriptionId: up.subscriptionId, done: "Series rule deleted" } })
-        else
+        seriesId = seriesRuleIdForUpcoming(up)
+        if seriesId <> "" then
+            actions.push({ label: "Edit series rule", act: "editRule", data: seriesId })
+            actions.push({ label: "Delete series rule", act: "cancel", data: { subscriptionId: seriesId, done: "Series rule deleted" } })
+        end if
+        if seriesId <> up.subscriptionId then
             actions.push({ label: "Cancel recording", act: "cancel", data: { subscriptionId: up.subscriptionId, done: "Recording cancelled" } })
         end if
         subText = rangeText(up.beginsAt, up.endsAt)
@@ -1148,14 +1149,29 @@ sub onDvrSelected()
     end if
 end sub
 
+function ruleById(id as String) as Dynamic
+    if id = invalid or id = "" then return invalid
+    for each rule in m.schedule.rules
+        if rule.id = id then return rule
+    end for
+    return invalid
+end function
+
+function seriesRuleIdForUpcoming(up as Object) as String
+    if up.subscriptionType = 2 then return up.subscriptionId
+    rule = ruleById(up.subscriptionId)
+    if rule <> invalid and rule.type = 2 then return rule.id
+    return seriesRuleFor(up)
+end function
+
 sub openRuleEditor(rule as Object)
     values = {}
     for each setting in nodeListOf(rule.settings)
         values[setting.id] = setting.value
     end for
-    m.ruleEdit = { rule: rule, values: values, loading: false }
     subParts = [rule.typeLabel]
     if valueOr(rule.library, "") <> "" then subParts.push("Saves to " + rule.library)
+    m.ruleEdit = { rule: rule, values: values, loading: false, picking: -1, title: rule.title, subText: joinStrings(subParts, "  ·  ") }
     if nodeListOf(rule.settings).count() = 0 and valueOr(rule.guid, "") <> "" then
         m.ruleEdit.loading = true
         m.ruleTask = createObject("roSGNode", "PlexTask")
@@ -1171,6 +1187,7 @@ end sub
 sub onRuleSettings()
     if m.ruleEdit = invalid or m.zone <> "menu" then return
     response = m.ruleTask.response
+    if m.ruleEdit.picking >= 0 then return
     m.ruleEdit.loading = false
     if response <> invalid and response.ok = true then
         m.ruleEdit.rule.settings = response.settings
@@ -1210,7 +1227,7 @@ function ruleActions() as Object
     for i = 0 to settings.count() - 1
         setting = settings[i]
         choice = setting.choices[choiceIndex(setting, m.ruleEdit.values[setting.id])]
-        actions.push({ label: setting.label + ":  " + choice.label, act: "cycle", data: i })
+        actions.push({ label: setting.label + ":   " + choice.label + "   ›", act: "pickSetting", data: i })
     end for
     if m.ruleEdit.loading = true then actions.push({ label: "Loading settings…", act: "none" })
     if settings.count() > 0 then actions.push({ label: "Save changes", act: "saveRule" })
@@ -1219,16 +1236,35 @@ function ruleActions() as Object
     return actions
 end function
 
-sub cycleRuleSetting(index as Integer, delta as Integer)
+sub openSettingPicker(index as Integer)
     settings = nodeListOf(m.ruleEdit.rule.settings)
     if index < 0 or index >= settings.count() then return
     setting = settings[index]
-    n = setting.choices.count()
-    nextIdx = (choiceIndex(setting, m.ruleEdit.values[setting.id]) + delta + n) mod n
-    m.ruleEdit.values[setting.id] = setting.choices[nextIdx].value
-    focusIdx = m.menuList.itemFocused
+    m.ruleEdit.picking = index
+    current = choiceIndex(setting, m.ruleEdit.values[setting.id])
+    actions = []
+    for i = 0 to setting.choices.count() - 1
+        mark = "     "
+        if i = current then mark = "•   "
+        actions.push({ label: mark + setting.choices[i].label, act: "choose", data: setting.choices[i].value })
+    end for
+    m.menuTitle.text = setting.label
+    m.menuSub.text = m.ruleEdit.rule.title
+    setMenuActions(actions)
+    m.menuList.jumpToItem = current
+end sub
+
+sub closeSettingPicker(value as Dynamic)
+    index = m.ruleEdit.picking
+    m.ruleEdit.picking = -1
+    settings = nodeListOf(m.ruleEdit.rule.settings)
+    if value <> invalid and index >= 0 and index < settings.count() then
+        m.ruleEdit.values[settings[index].id] = value
+    end if
+    m.menuTitle.text = m.ruleEdit.title
+    m.menuSub.text = m.ruleEdit.subText
     setMenuActions(ruleActions())
-    if focusIdx <> invalid and focusIdx >= 0 then m.menuList.jumpToItem = focusIdx
+    if index >= 0 then m.menuList.jumpToItem = index
 end sub
 
 sub saveRule()
@@ -1237,9 +1273,10 @@ sub saveRule()
         value = m.ruleEdit.values[setting.id]
         if value <> setting.value then changed[setting.id] = value
     end for
+    ruleId = m.ruleEdit.rule.id
     closeActionMenu()
     if changed.count() = 0 then return
-    runDvrCommand("ruleUpdate", { subscriptionId: m.ruleEdit.rule.id, prefs: changed }, "Rule updated")
+    runDvrCommand("ruleUpdate", { subscriptionId: ruleId, prefs: changed }, "Rule updated")
 end sub
 
 sub onDvrEscapeUp()
@@ -1484,6 +1521,7 @@ end sub
 
 sub closeActionMenu()
     m.menu.visible = false
+    m.ruleEdit = invalid
     m.zone = m.menuReturnZone
     if m.zone = "list" and m.dvrItems.count() > 0 then
         m.dvrList.setFocus(true)
@@ -1505,8 +1543,10 @@ sub onMenuSelected()
     if action.act = "none" then return
     if action.act = "close" then
         closeActionMenu()
-    else if action.act = "cycle" then
-        cycleRuleSetting(action.data, 1)
+    else if action.act = "pickSetting" then
+        openSettingPicker(action.data)
+    else if action.act = "choose" then
+        closeSettingPicker(action.data)
     else if action.act = "saveRule" then
         saveRule()
     else if action.act = "watch" then
@@ -1564,13 +1604,10 @@ function onKeyEvent(key as String, press as Boolean) as Boolean
 
     if m.zone = "menu" then
         if key = "back" or key = "options" then
-            closeActionMenu()
-        else if key = "left" or key = "right" then
-            idx = m.menuList.itemFocused
-            if idx <> invalid and idx >= 0 and idx < m.menuActions.count() and m.menuActions[idx].act = "cycle" then
-                delta = 1
-                if key = "left" then delta = -1
-                cycleRuleSetting(m.menuActions[idx].data, delta)
+            if m.ruleEdit <> invalid and m.ruleEdit.picking >= 0 then
+                closeSettingPicker(invalid)
+            else
+                closeActionMenu()
             end if
         end if
         return true
