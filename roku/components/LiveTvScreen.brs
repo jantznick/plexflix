@@ -84,6 +84,9 @@ sub init()
     m.ruleEdit = invalid
     m.menuListY = 412
     m.previewKey = ""
+    m.previewUrl = ""
+    m.watching = invalid
+    m.pendingWatch = invalid
 
     buildTabs()
     buildSlotHeader()
@@ -987,8 +990,14 @@ sub onPreviewReady()
         m.previewKey = ""
         return
     end if
+    playPreview(ch, response.url)
+end sub
+
+sub playPreview(ch as Object, url as String)
+    m.previewKey = ch.key
+    m.previewUrl = url
     contentNode = createObject("roSGNode", "ContentNode")
-    contentNode.url = response.url
+    contentNode.url = url
     contentNode.streamFormat = "hls"
     contentNode.live = true
     m.previewVideo.content = contentNode
@@ -1252,10 +1261,28 @@ sub onRefocus()
         m.top.setFocus(true)
     end if
     paintTabs()
-    if m.tab = 0 then
+    if m.tab <> 0 then return
+    resumed = m.watching
+    m.watching = invalid
+    if resumed <> invalid and m.byKey.DoesExist(resumed.key) then
+        ' Back from full screen keeps the same live session going in the preview
+        for i = 0 to m.channels.count() - 1
+            if m.channels[i].key = resumed.key then
+                if i <> m.focusCh then
+                    m.focusCh = i
+                    if m.focusCh < m.topRow or m.focusCh > m.topRow + m.visibleRows - 1 then m.topRow = m.focusCh
+                    refocusAnchor(nowSeconds())
+                end if
+                exit for
+            end if
+        end for
         renderGrid()
-        schedulePreviewTune()
+        updateGridInfo()
+        playPreview(m.channels[m.focusCh], resumed.url)
+        return
     end if
+    renderGrid()
+    schedulePreviewTune()
 end sub
 
 ' ---------------------------------------------------------------------------
@@ -1264,7 +1291,41 @@ end sub
 
 sub watchChannel(ch as Object, p as Dynamic)
     if ch = invalid or m.ctx = invalid then return
+    url = ""
+    if m.previewKey = ch.key and m.previewVideo.visible and m.previewUrl <> invalid then url = m.previewUrl
     stopPreview()
+    if url = "" then
+        ' Tune here rather than in the player so Back can keep this session in the preview
+        m.pendingWatch = { key: ch.key, program: p }
+        showToast("Tuning " + channelLabel(ch) + "…")
+        m.watchTask = createObject("roSGNode", "PlexTask")
+        m.watchTask.config = m.top.config
+        m.watchTask.action = "tuneLiveChannel"
+        m.watchTask.item = { dvrId: m.ctx.dvrId, channelId: ch.tuneId, tuneAlt: ch.tuneAlt }
+        m.watchTask.observeField("response", "onWatchTuned")
+        m.watchTask.control = "RUN"
+        return
+    end if
+    launchWatch(ch, p, url)
+end sub
+
+sub onWatchTuned()
+    response = m.watchTask.response
+    pending = m.pendingWatch
+    m.pendingWatch = invalid
+    if pending = invalid or not m.byKey.DoesExist(pending.key) then return
+    if response = invalid or response.ok <> true or response.url = invalid or response.url = "" then
+        err = "Could not tune this channel"
+        if response <> invalid and response.error <> invalid then err = response.error
+        showToast(err)
+        return
+    end if
+    onToastDone()
+    launchWatch(m.byKey[pending.key], pending.program, response.url)
+end sub
+
+sub launchWatch(ch as Object, p as Dynamic, url as String)
+    m.watching = { key: ch.key, url: url }
     title = channelLabel(ch)
     description = ""
     art = ""
@@ -1282,6 +1343,8 @@ sub watchChannel(ch as Object, p as Dynamic)
         channelId: ch.tuneId,
         tuneAlt: ch.tuneAlt,
         dvrId: m.ctx.dvrId,
+        streamUrl: url,
+        streamFormat: "hls",
         hdPosterUrl: art,
         hdBackdropUrl: art,
         duration: 0,

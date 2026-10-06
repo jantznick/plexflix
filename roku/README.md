@@ -18,7 +18,8 @@ This is intentionally a **design/UX shell** on top of existing Plex data. Creden
   down the left, half-hour time slots across the top, program blocks sized by duration, a red now-line, and a live
   preview of the focused channel. Up/Down change channel, Left/Right move through programs (time pages in 30-minute
   steps and later hours load as you go), `<<`/`>>` page channels. OK on something airing now watches it; OK on a future
-  show (or `*` on anything) opens **Record this episode / Record series / Cancel recording**
+  show (or `*` on anything) opens **Record this episode / Record series / Cancel recording**. Back from a channel
+  you were watching returns to the guide with that channel still playing in the preview
 - **DVR**: Upcoming lists scheduled recordings (OK cancels one). Rules lists each show with a rule; OK opens an editor for
   its Plex recording settings (Left/Right or OK cycles a value), plus Save and Delete.
   Programs that will record are tagged **REC** (or **SERIES**) in the grid. Finished recordings land in the Plex
