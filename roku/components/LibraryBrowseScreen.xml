@@ -50,17 +50,17 @@
             </Label>
         </Group>
 
-        <ShimmerRow id="shimmer" translation="[96, 480]" />
+        <ShimmerRow id="shimmer" translation="[96, 440]" />
 
         <ShelfRowList
             id="rowList"
-            translation="[96, 480]"
+            translation="[96, 440]"
             itemComponentName="PosterItem"
             numRows="2"
-            rowItemSize="[[150, 225]]"
-            rowItemSpacing="[[22, 0]]"
-            itemSize="[1728, 280]"
-            itemSpacing="[0, 16]"
+            rowItemSize="[[180, 270]]"
+            rowItemSpacing="[[26, 0]]"
+            itemSize="[1728, 320]"
+            itemSpacing="[0, 8]"
             showRowLabel="[true]"
             rowLabelOffset="[[0, 4]]"
             rowFocusAnimationStyle="fixedFocus"

@@ -14,26 +14,26 @@
     <children>
         <Rectangle width="1920" height="1080" color="0x0A0E18" />
 
-        <Rectangle width="1920" height="56" color="0x121A2A" />
-        <Label translation="[96, 12]" width="500" height="36" text="LIVE SPORTS GUIDE" color="0xE50914">
-            <Font role="font" uri="pkg:/fonts/Outfit-Bold.ttf" size="24" />
+        <Rectangle width="1920" height="96" color="0x121A2A" />
+        <Label translation="[96, 20]" width="900" height="56" vertAlign="center" text="LIVE SPORTS GUIDE" color="0xE50914">
+            <Font role="font" uri="pkg:/fonts/Outfit-Bold.ttf" size="44" />
         </Label>
-        <Label id="clockLabel" translation="[1400, 14]" width="420" height="32" horizAlign="right" text="" color="0xA8B0C0">
-            <Font role="font" uri="pkg:/fonts/Outfit-Medium.ttf" size="18" />
+        <Label id="clockLabel" translation="[1224, 20]" width="600" height="56" horizAlign="right" vertAlign="center" text="" color="0xA8B0C0">
+            <Font role="font" uri="pkg:/fonts/Outfit-Medium.ttf" size="36" />
         </Label>
 
-        <Group translation="[96, 72]">
-            <Label id="eventTitle" width="900" height="52" color="0xFFFFFF" wrap="true" maxLines="2" text="Select a game">
-                <Font role="font" uri="pkg:/fonts/Outfit-Bold.ttf" size="34" />
+        <Group translation="[96, 120]">
+            <Label id="eventTitle" width="900" height="60" color="0xFFFFFF" wrap="true" maxLines="1" text="Select a game">
+                <Font role="font" uri="pkg:/fonts/Outfit-Bold.ttf" size="48" />
             </Label>
-            <Label id="eventMeta" translation="[0, 56]" width="900" height="28" color="0x8FA0B8" text="">
-                <Font role="font" uri="pkg:/fonts/Outfit-Medium.ttf" size="18" />
+            <Label id="eventMeta" translation="[0, 66]" width="900" height="40" color="0x8FA0B8" text="">
+                <Font role="font" uri="pkg:/fonts/Outfit-Medium.ttf" size="30" />
             </Label>
-            <Label id="eventSummary" translation="[0, 90]" width="900" height="80" color="0xC5CCD8" wrap="true" maxLines="3" lineSpacing="3" text="">
-                <Font role="font" uri="pkg:/fonts/Outfit-Regular.ttf" size="18" />
+            <Label id="eventSummary" translation="[0, 112]" width="900" height="76" color="0xC5CCD8" wrap="true" maxLines="2" lineSpacing="2" text="">
+                <Font role="font" uri="pkg:/fonts/Outfit-Regular.ttf" size="28" />
             </Label>
-            <Label id="statusLabel" translation="[0, 190]" width="900" height="32" text="" color="0x778099">
-                <Font role="font" uri="pkg:/fonts/Outfit-Regular.ttf" size="16" />
+            <Label id="statusLabel" translation="[0, 196]" width="900" height="36" text="" color="0x778099">
+                <Font role="font" uri="pkg:/fonts/Outfit-Regular.ttf" size="26" />
             </Label>
 
             <!-- height=250, width=250*(16/9)=444 -->
@@ -51,24 +51,24 @@
             />
         </Group>
 
-        <Rectangle translation="[0, 350]" width="1920" height="36" color="0x1A2438" />
-        <Label translation="[120, 356]" width="320" height="28" text="LEAGUE" color="0x8FA0B8">
-            <Font role="font" uri="pkg:/fonts/Outfit-SemiBold.ttf" size="14" />
+        <Rectangle translation="[0, 392]" width="1920" height="56" color="0x1A2438" />
+        <Label translation="[96, 400]" width="300" height="40" vertAlign="center" text="LEAGUE" color="0x8FA0B8">
+            <Font role="font" uri="pkg:/fonts/Outfit-SemiBold.ttf" size="32" />
         </Label>
-        <Label translation="[392, 356]" width="780" height="28" text="EVENT" color="0xE8EEF8">
-            <Font role="font" uri="pkg:/fonts/Outfit-SemiBold.ttf" size="14" />
+        <Label translation="[412, 400]" width="900" height="40" vertAlign="center" text="EVENT" color="0xE8EEF8">
+            <Font role="font" uri="pkg:/fonts/Outfit-SemiBold.ttf" size="32" />
         </Label>
-        <Label translation="[1212, 356]" width="400" height="28" text="STREAMS" color="0x8FA0B8">
-            <Font role="font" uri="pkg:/fonts/Outfit-SemiBold.ttf" size="14" />
+        <Label translation="[1332, 400]" width="500" height="40" vertAlign="center" text="STREAMS" color="0x8FA0B8">
+            <Font role="font" uri="pkg:/fonts/Outfit-SemiBold.ttf" size="32" />
         </Label>
 
         <EscapeMarkupList
             id="guideList"
-            translation="[72, 392]"
+            translation="[72, 456]"
             itemComponentName="GuideRowItem"
-            itemSize="[1776, 40]"
-            itemSpacing="[0, 2]"
-            numRows="15"
+            itemSize="[1776, 84]"
+            itemSpacing="[0, 4]"
+            numRows="7"
             vertFocusAnimationStyle="floatingFocus"
             drawFocusFeedback="false"
         />
