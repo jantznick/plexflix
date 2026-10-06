@@ -13,18 +13,20 @@
     <script type="text/brightscript" uri="EpisodeItem.brs" />
 
     <children>
+        <!-- Focus chrome stays inside the RowList cell — negative offsets clip on device -->
         <Rectangle
             id="shadow"
-            width="336"
-            height="192"
-            translation="[10, 10]"
+            width="304"
+            height="160"
+            translation="[14, 14]"
             color="0x000000"
             opacity="0.4"
         />
         <Poster
             id="still"
-            width="320"
-            height="180"
+            width="304"
+            height="164"
+            translation="[8, 8]"
             loadDisplayMode="scaleToZoom"
             failedBitmapUri="pkg:/images/poster_placeholder.png"
             loadingBitmapUri="pkg:/images/poster_placeholder.png"
@@ -33,16 +35,16 @@
         />
         <Rectangle
             id="titleScrim"
-            width="320"
+            width="304"
             height="52"
-            translation="[0, 128]"
+            translation="[8, 120]"
             color="0x000000"
             opacity="0.7"
         />
         <Label
             id="titleLabel"
-            translation="[12, 136]"
-            width="296"
+            translation="[20, 128]"
+            width="280"
             height="40"
             color="0xFFFFFF"
             wrap="true"
@@ -51,33 +53,11 @@
             <Font role="font" uri="pkg:/fonts/Outfit-Medium.ttf" size="18" />
         </Label>
 
-        <Rectangle id="focusGlow" width="336" height="196" translation="[-8, -8]" color="0x3B82F6" opacity="0.35" visible="false" />
-        <Rectangle id="ringT" width="336" height="4" translation="[-8, -8]" color="0xFFFFFF" visible="false" />
-        <Rectangle id="ringB" width="336" height="4" translation="[-8, 184]" color="0xFFFFFF" visible="false" />
-        <Rectangle id="ringL" width="4" height="196" translation="[-8, -8]" color="0xFFFFFF" visible="false" />
-        <Rectangle id="ringR" width="4" height="196" translation="[324, -8]" color="0xFFFFFF" visible="false" />
-        <Poster
-            id="focusRing"
-            width="336"
-            height="196"
-            translation="[-8, -8]"
-            loadDisplayMode="scaleToFill"
-            uri="pkg:/images/focus_ring_wide.png"
-            visible="false"
-        />
-        <Rectangle
-            id="focusAccent"
-            width="336"
-            height="5"
-            translation="[-8, 180]"
-            color="0xE50914"
-            visible="false"
-        />
         <Rectangle
             id="progressBg"
-            width="320"
+            width="304"
             height="8"
-            translation="[0, 172]"
+            translation="[8, 164]"
             color="0x000000"
             opacity="0.65"
             visible="false"
@@ -86,7 +66,7 @@
             id="progressFg"
             width="0"
             height="8"
-            translation="[0, 172]"
+            translation="[8, 164]"
             color="0xE50914"
             visible="false"
         />
@@ -94,9 +74,17 @@
             id="watchedBadge"
             width="34"
             height="34"
-            translation="[278, 8]"
+            translation="[270, 16]"
             uri="pkg:/images/watched_check.png"
             visible="false"
         />
+
+        <Group id="focusChrome" visible="false">
+            <Rectangle id="ringT" width="320" height="4" translation="[0, 0]" color="0xFFFFFF" />
+            <Rectangle id="ringB" width="320" height="4" translation="[0, 176]" color="0xFFFFFF" />
+            <Rectangle id="ringL" width="4" height="180" translation="[0, 0]" color="0xFFFFFF" />
+            <Rectangle id="ringR" width="4" height="180" translation="[316, 0]" color="0xFFFFFF" />
+            <Rectangle id="focusAccent" width="320" height="4" translation="[0, 172]" color="0xE50914" />
+        </Group>
     </children>
 </component>
