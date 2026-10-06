@@ -28,9 +28,9 @@ sub init()
     m.panelTitle = m.top.findNode("panelTitle")
     m.panelHint = m.top.findNode("panelHint")
 
-    m.numColumns = 7
-    m.pageSize = 70          ' ten grid rows per Plex request (7 × 10)
-    m.maxWindowPages = 15    ' hard cap on live content nodes (15 * 70 = 1050)
+    m.numColumns = 6
+    m.pageSize = 60          ' ten grid rows per Plex request (6 × 10)
+    m.maxWindowPages = 15    ' hard cap on live content nodes (15 * 60 = 900)
     m.prefetchRows = 4
 
     m.libraryTitle = "Library"

@@ -34,27 +34,27 @@
             <Label id="titleLabel" translation="[460, 8]" width="1180" height="72" color="0xFFFFFF" wrap="true" maxLines="2">
                 <Font role="font" uri="pkg:/fonts/Outfit-Bold.ttf" size="44" />
             </Label>
-            <Label id="metaLabel" translation="[460, 88]" width="1180" height="36" color="0xA8A8B0">
-                <Font role="font" uri="pkg:/fonts/Outfit-Medium.ttf" size="22" />
+            <Label id="metaLabel" translation="[460, 88]" width="1180" height="40" color="0xA8A8B0">
+                <Font role="font" uri="pkg:/fonts/Outfit-Medium.ttf" size="30" />
             </Label>
-            <Label id="summaryLabel" translation="[460, 132]" width="1160" height="70" color="0xC8C8D0" wrap="true" maxLines="2">
-                <Font role="font" uri="pkg:/fonts/Outfit-Regular.ttf" size="22" />
+            <Label id="summaryLabel" translation="[460, 134]" width="1160" height="76" color="0xC8C8D0" wrap="true" maxLines="2">
+                <Font role="font" uri="pkg:/fonts/Outfit-Regular.ttf" size="28" />
             </Label>
-            <Label id="streamCountLabel" translation="[460, 220]" width="600" height="36" color="0x777780" text="">
-                <Font role="font" uri="pkg:/fonts/Outfit-Regular.ttf" size="20" />
+            <Label id="streamCountLabel" translation="[460, 216]" width="600" height="36" color="0x777780" text="">
+                <Font role="font" uri="pkg:/fonts/Outfit-Regular.ttf" size="26" />
             </Label>
 
-            <Label translation="[0, 320]" width="600" height="40" text="Available streams" color="0xFFFFFF">
-                <Font role="font" uri="pkg:/fonts/Outfit-SemiBold.ttf" size="28" />
+            <Label translation="[0, 296]" width="600" height="48" text="Available streams" color="0xFFFFFF">
+                <Font role="font" uri="pkg:/fonts/Outfit-SemiBold.ttf" size="36" />
             </Label>
 
             <EscapeMarkupList
                 id="streamList"
-                translation="[0, 372]"
+                translation="[0, 360]"
                 itemComponentName="GuideRowItem"
-                itemSize="[1728, 52]"
-                itemSpacing="[0, 8]"
-                numRows="10"
+                itemSize="[1728, 84]"
+                itemSpacing="[0, 6]"
+                numRows="7"
                 vertFocusAnimationStyle="floatingFocus"
                 drawFocusFeedback="false"
             />

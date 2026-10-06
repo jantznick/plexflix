@@ -277,8 +277,8 @@ sub showUnavailableMode(item as Object)
     if m.randomBtn <> invalid then m.randomBtn.visible = false
     if m.backBtn <> invalid then m.backBtn.translation = [0, 0]
     m.movieActions.translation = [248, 348]
-    if m.softStatus <> invalid then m.softStatus.translation = [248, 420]
-    if m.relatedPanel <> invalid then m.relatedPanel.translation = [0, 450]
+    if m.softStatus <> invalid then m.softStatus.translation = [248, 412]
+    if m.relatedPanel <> invalid then m.relatedPanel.translation = [0, 440]
     if m.unavailablePanel <> invalid then m.unavailablePanel.visible = true
 
     if m.unavailableBody <> invalid then m.unavailableBody.text = unavailableMessage(item)

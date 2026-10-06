@@ -6,7 +6,7 @@ sub init()
     m.col2 = m.top.findNode("col2")
     m.col3 = m.top.findNode("col3")
     m.itemWidth = 1776
-    m.itemHeight = 40
+    m.itemHeight = 84
 end sub
 
 sub onSizeChange()
@@ -17,12 +17,12 @@ sub onSizeChange()
         m.bg.height = m.itemHeight
     end if
     if m.focusBar <> invalid then m.focusBar.height = m.itemHeight
-    cy = Int((m.itemHeight - 32) / 2)
+    cy = Int((m.itemHeight - 52) / 2)
     if cy < 0 then cy = 0
     if m.col0 <> invalid then m.col0.translation = [24, cy]
-    if m.col1 <> invalid then m.col1.translation = [320, cy]
-    if m.col2 <> invalid then m.col2.translation = [900, cy]
-    if m.col3 <> invalid then m.col3.translation = [1140, cy]
+    if m.col1 <> invalid then m.col1.translation = [340, cy]
+    if m.col2 <> invalid then m.col2.translation = [980, cy]
+    if m.col3 <> invalid then m.col3.translation = [1260, cy]
 end sub
 
 sub onContentChange()
@@ -32,6 +32,10 @@ sub onContentChange()
     if m.col1 <> invalid then m.col1.text = fieldStr(item, "col1")
     if m.col2 <> invalid then m.col2.text = fieldStr(item, "col2")
     if m.col3 <> invalid then m.col3.text = fieldStr(item, "col3")
+    ' Sports rows leave the time column blank, so the event title gets its room
+    if m.col1 <> invalid and m.col2 <> invalid then
+        if m.col2.text = "" then m.col1.width = 900 else m.col1.width = 620
+    end if
 end sub
 
 function fieldStr(item as Object, name as String) as String

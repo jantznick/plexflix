@@ -81,6 +81,8 @@ sub playStreamAt(idx as Integer)
     if stream = invalid then return
     url = asString(stream.streamUrl)
     if url = "" then return
+    format = asString(stream.streamFormat)
+    if format = "" and idx = 0 then format = asString(m.eventItem.streamFormat)
 
     m.top.streamError = ""
     m.top.playRequested = {
@@ -89,6 +91,7 @@ sub playStreamAt(idx as Integer)
         mediaType: "sport",
         key: url,
         streamUrl: url,
+        streamFormat: format,
         hdPosterUrl: m.eventItem.hdPosterUrl,
         ratingKey: "",
         duration: 0,

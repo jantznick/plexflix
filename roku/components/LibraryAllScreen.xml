@@ -34,15 +34,15 @@
             <FocusButton id="sortBtn" translation="[1260, 0]" text="Order by: Title A–Z" buttonWidth="300" fontSize="20" />
         </Group>
 
-        <!-- 7 across × 4 visible rows — posters sized to fill left margin → A–Z rail -->
+        <!-- 6 across × 3 visible rows — posters sized to fill left margin → A–Z rail -->
         <MarkupGrid
             id="grid"
             translation="[96, 108]"
             itemComponentName="PosterItem"
-            itemSize="[200, 230]"
+            itemSize="[240, 276]"
             itemSpacing="[30, 18]"
-            numColumns="7"
-            numRows="4"
+            numColumns="6"
+            numRows="3"
             vertFocusAnimationStyle="floatingFocus"
             drawFocusFeedback="true"
             drawFocusFeedbackOnTop="true"
