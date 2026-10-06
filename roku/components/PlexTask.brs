@@ -2885,7 +2885,16 @@ function tuneLiveChannel(cfg as Object, item as Object) as Object
     body = safeToStr(result.body)
     print "[plexflix:livetv] tune "; channelId; " response: "; Left(body, 1500)
 
-    ' The tuned airing sits under MediaSubscription > MediaGrabOperation > Metadata
+    ' The session is the tuned airing's Media uuid, usually at
+    ' MediaSubscription > MediaGrabOperation > Video > Media; Plex plays it via
+    ' the universal transcoder at /livetv/sessions/<uuid>
+    mediaUuid = deepFindMediaUuid(result.json, 0)
+    if mediaUuid = "" then mediaUuid = scrapeAttr(body, "uuid")
+    if mediaUuid <> "" then
+        print "[plexflix:livetv] tuned session "; mediaUuid
+        return buildStreamUrl(cfg, { key: "/livetv/sessions/" + mediaUuid, session: "plexflix-live-" + mediaUuid })
+    end if
+
     sessionPath = deepFindString(result.json, "/livetv/sessions/", 0)
     if sessionPath <> "" then
         cut = Instr(1, sessionPath, "/livetv/sessions/")
@@ -2929,6 +2938,42 @@ function deepFindString(node as Dynamic, marker as String, depth as Integer) as 
     else if GetInterface(node, "ifArray") <> invalid then
         for each child in node
             found = deepFindString(child, marker, depth + 1)
+            if found <> "" then return found
+        end for
+    end if
+    return ""
+end function
+
+' Pulls name="value" (XML) or "name":"value" (JSON) out of a raw body
+function scrapeAttr(body as String, name as String) as String
+    for each marker in [name + "=" + Chr(34), Chr(34) + name + Chr(34) + ":" + Chr(34)]
+        at = Instr(1, body, marker)
+        if at > 0 then
+            rest = Mid(body, at + Len(marker))
+            closeAt = Instr(1, rest, Chr(34))
+            if closeAt > 1 then return Left(rest, closeAt - 1)
+        end if
+    end for
+    return ""
+end function
+
+function deepFindMediaUuid(node as Dynamic, depth as Integer) as String
+    if node = invalid or depth > 10 then return ""
+    if GetInterface(node, "ifAssociativeArray") <> invalid then
+        for each media in nodeList(node.Media)
+            uuid = safeToStr(media.uuid)
+            if uuid <> "" then return uuid
+        end for
+        for each keyName in node
+            child = node[keyName]
+            if child <> invalid and (GetInterface(child, "ifAssociativeArray") <> invalid or GetInterface(child, "ifArray") <> invalid) then
+                found = deepFindMediaUuid(child, depth + 1)
+                if found <> "" then return found
+            end if
+        end for
+    else if GetInterface(node, "ifArray") <> invalid then
+        for each child in node
+            found = deepFindMediaUuid(child, depth + 1)
             if found <> "" then return found
         end for
     end if
