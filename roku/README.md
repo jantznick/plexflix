@@ -7,9 +7,14 @@ This is intentionally a **design/UX shell** on top of existing Plex data. Creden
 ## What you get
 
 - Dark Netflix-like home: billboard hero + horizontal shelves
-- **Collapsible sidebar** (Left to open): Home, your **Libraries**, **Live TV**, Live Sports.
+- **Collapsible sidebar** (Left to open): Home, **Search**, **Watchlist**, your
+  **Libraries**, **Live TV**, Live Sports.
   Collapsed, a 72px icon rail stays on browse screens with the current section
   lit; it is hidden on detail pages, in the player and over the launch splash
+- **Search**: Plex Discover catalog search for any movie/show (not just what’s
+  already in your libraries), with Movies / TV filters
+- **Watchlist**: your personal Plex Watchlist (same list as official Plex apps),
+  with **Add to Watchlist** / **Remove** on Discover title detail pages
 - **Home stays loaded**: switching sections parks it instead of discarding it,
   so returning is instant and the hubs refresh in the background (also after
   playback), updating only the rows whose items changed
@@ -42,7 +47,7 @@ This is intentionally a **design/UX shell** on top of existing Plex data. Creden
   stay in sync with every other Plex client
 - Live sports from a configurable JSON feed URL (event detail + stream picker)
 - Optional **TMDB** enrichment for cast pages and Discover titles missing from your library (`tmdbApiKey` in config)
-- Discover titles not in Plex open a **Not in your library** detail view (no Play) with synopsis + similar local picks
+- Discover titles not in Plex open a **Not in your library** detail view (no Play) with synopsis, similar local picks, and Watchlist actions
 
 ## Configure before sideload
 
@@ -90,6 +95,22 @@ Optional CLI (if `ROKU_IP` / `ROKU_PASSWORD` are set):
 ```bash
 ./roku/package.sh --deploy
 ```
+
+## Discover Search & Watchlist
+
+Sidebar **Search** hits Plex Discover (`discover.provider.plex.tv/library/search`),
+so results include titles that are not in your local libraries. Pick a result to
+open the detail page.
+
+Sidebar **Watchlist** loads your personal Plex Watchlist
+(`/library/sections/watchlist/all`) — the same list the official Plex apps use.
+
+On any Discover title that is not in your library, the detail page offers
+**Add to Watchlist** / **Remove Watchlist** (`/actions/addToWatchlist` and
+`removeFromWatchlist`). If the same `plex://` GUID is already on your server,
+detail promotes to a normal Play page instead.
+
+Uses the same `token` from `PlexConfig.brs` as the rest of Discover.
 
 ## Library pages
 
@@ -252,7 +273,7 @@ Outfit (Google Fonts / OFL) ships under `roku/fonts/`. Swap TTFs there and updat
 ## Out of scope for this MVP
 
 - Account login / PIN pairing UI
-- Global (cross-library) search, profiles, downloads
+- Profiles, downloads
 - Direct Play codec negotiation beyond HLS transcode
 - Settings screen (edit `PlexConfig.brs` and republish)
 

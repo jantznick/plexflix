@@ -20,6 +20,8 @@ sub init()
     m.sportsDetailScreen = invalid
     m.castDetailScreen = invalid
     m.liveTvScreen = invalid
+    m.searchScreen = invalid
+    m.watchlistScreen = invalid
     m.section = "home"
     m.navExpanded = false
     m.activeLibraryId = ""
@@ -98,6 +100,8 @@ sub clearScreens()
     m.sportsDetailScreen = invalid
     m.castDetailScreen = invalid
     m.liveTvScreen = invalid
+    m.searchScreen = invalid
+    m.watchlistScreen = invalid
     updateNavRail()
 end sub
 
@@ -108,6 +112,9 @@ sub onNavSelected()
 
     if section = m.section and sectionScreenExists(section) then
         setNavExpanded(false)
+        if section = "watchlist" and m.watchlistScreen <> invalid then
+            m.watchlistScreen.refresh = true
+        end if
         return
     end if
 
@@ -116,6 +123,10 @@ sub onNavSelected()
     setNavExpanded(false)
     if section = "home" then
         showHome()
+    else if section = "search" then
+        showSearch()
+    else if section = "watchlist" then
+        showWatchlist()
     else if section = "livetv" then
         showLiveTv()
     else if section = "sports" then
@@ -127,6 +138,8 @@ end sub
 ' the menu instead of tearing the screen down and loading it again
 function sectionScreenExists(section as String) as Boolean
     if section = "home" then return m.homeScreen <> invalid
+    if section = "search" then return m.searchScreen <> invalid
+    if section = "watchlist" then return m.watchlistScreen <> invalid
     if section = "livetv" then return m.liveTvScreen <> invalid
     if section = "sports" then return m.sportsScreen <> invalid
     return false
@@ -263,6 +276,32 @@ sub showLiveTv()
     m.liveTvScreen.setFocus(true)
 end sub
 
+sub showSearch()
+    clearScreens()
+    m.sideNav.active = "search"
+    m.searchScreen = createObject("roSGNode", "SearchScreen")
+    m.searchScreen.config = m.config
+    m.searchScreen.observeField("selectedItem", "onBrowseSelected")
+    m.searchScreen.observeField("loadingMessage", "onSoftLoading")
+    m.searchScreen.observeField("openMenu", "onOpenMenu")
+    m.screens.appendChild(m.searchScreen)
+    m.searchScreen.setFocus(true)
+    updateNavRail()
+end sub
+
+sub showWatchlist()
+    clearScreens()
+    m.sideNav.active = "watchlist"
+    m.watchlistScreen = createObject("roSGNode", "WatchlistScreen")
+    m.watchlistScreen.config = m.config
+    m.watchlistScreen.observeField("selectedItem", "onBrowseSelected")
+    m.watchlistScreen.observeField("loadingMessage", "onSoftLoading")
+    m.watchlistScreen.observeField("openMenu", "onOpenMenu")
+    m.screens.appendChild(m.watchlistScreen)
+    m.watchlistScreen.setFocus(true)
+    updateNavRail()
+end sub
+
 sub onLiveTvSelected()
     item = m.liveTvScreen.selectedItem
     if item = invalid then return
@@ -295,6 +334,10 @@ sub onSoftLoading()
         msg = m.libraryAllScreen.loadingMessage
     else if m.libraryBrowseScreen <> invalid then
         msg = m.libraryBrowseScreen.loadingMessage
+    else if m.searchScreen <> invalid then
+        msg = m.searchScreen.loadingMessage
+    else if m.watchlistScreen <> invalid then
+        msg = m.watchlistScreen.loadingMessage
     else if m.liveTvScreen <> invalid then
         msg = m.liveTvScreen.loadingMessage
     else if m.sportsScreen <> invalid then
@@ -462,6 +505,14 @@ sub parkLibrarySurfaces(parked as Boolean)
         m.libraryAllScreen.visible = not parked
         return
     end if
+    if m.searchScreen <> invalid then
+        m.searchScreen.visible = not parked
+        return
+    end if
+    if m.watchlistScreen <> invalid then
+        m.watchlistScreen.visible = not parked
+        return
+    end if
     if m.libraryBrowseScreen <> invalid then
         m.libraryBrowseScreen.suspended = parked
         m.libraryBrowseScreen.visible = not parked
@@ -493,6 +544,10 @@ sub onDetailClosed()
     end if
     updateNavRail()
     parkLibrarySurfaces(false)
+    ' Watchlist may have changed while the detail page was open
+    if m.section = "watchlist" and m.watchlistScreen <> invalid then
+        m.watchlistScreen.refresh = true
+    end if
     ' Explicitly restore focus so the remote never goes dead after Back
     restoreSectionFocus()
 end sub
@@ -589,6 +644,12 @@ sub restoreSectionFocus()
     else if m.section = "library" and m.libraryBrowseScreen <> invalid then
         m.libraryBrowseScreen.setFocus(true)
         m.libraryBrowseScreen.refocus = true
+    else if m.section = "search" and m.searchScreen <> invalid then
+        m.searchScreen.setFocus(true)
+        m.searchScreen.refocus = true
+    else if m.section = "watchlist" and m.watchlistScreen <> invalid then
+        m.watchlistScreen.setFocus(true)
+        m.watchlistScreen.refocus = true
     else if m.section = "livetv" and m.liveTvScreen <> invalid then
         m.liveTvScreen.setFocus(true)
         m.liveTvScreen.refocus = true

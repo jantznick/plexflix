@@ -32,6 +32,8 @@ end sub
 sub buildStaticEntries()
     m.entries = [
         { id: "home", kind: "nav", title: "Home" },
+        { id: "search", kind: "nav", title: "Search" },
+        { id: "watchlist", kind: "nav", title: "Watchlist" },
         { id: "livetv", kind: "nav", title: "Live TV" },
         { id: "sports", kind: "nav", title: "Live Sports" }
     ]
@@ -55,6 +57,8 @@ sub onLibrariesLoaded()
 
     m.entries = []
     m.entries.push({ id: "home", kind: "nav", title: "Home" })
+    m.entries.push({ id: "search", kind: "nav", title: "Search" })
+    m.entries.push({ id: "watchlist", kind: "nav", title: "Watchlist" })
     for each lib in m.libraries
         m.entries.push({
             id: "lib:" + asString(lib.sectionId),
@@ -139,6 +143,8 @@ end sub
 
 function iconFor(entry as Object) as String
     if entry.id = "home" then return "pkg:/images/nav_home.png"
+    if entry.id = "search" then return "pkg:/images/nav_search.png"
+    if entry.id = "watchlist" then return "pkg:/images/nav_watchlist.png"
     if entry.id = "livetv" then return "pkg:/images/nav_live.png"
     if entry.id = "sports" then return "pkg:/images/nav_sports.png"
     if entry.library <> invalid and asString(entry.library.sectionType) = "show" then
