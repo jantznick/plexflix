@@ -134,7 +134,87 @@ def make_focus_ring(size=32, thick=4, corner=8):
     write_png(os.path.join(IMAGES, "focus_ring.9.png"), full, full, pixels)
 
 
+def rect_strokes(x0, y0, x1, y1):
+    return [((x0, y0), (x1, y0)), ((x1, y0), (x1, y1)), ((x1, y1), (x0, y1)), ((x0, y1), (x0, y0))]
+
+
+def ring_hit(u, v, cx, cy, radius, half):
+    return abs(((u - cx) ** 2 + (v - cy) ** 2) ** 0.5 - radius) <= half
+
+
+def nav_icon_shapes():
+    """Unit-space hit tests for the collapsed side nav's outline icons."""
+    half = 0.045
+
+    def strokes_hit(strokes):
+        def hit(u, v):
+            for (ax, ay), (bx, by) in strokes:
+                if segment_distance(u, v, ax, ay, bx, by) <= half:
+                    return True
+            return False
+        return hit
+
+    home = strokes_hit([
+        ((0.12, 0.50), (0.50, 0.16)), ((0.50, 0.16), (0.88, 0.50)),
+        ((0.24, 0.42), (0.24, 0.86)), ((0.76, 0.42), (0.76, 0.86)),
+        ((0.24, 0.86), (0.76, 0.86)),
+        ((0.42, 0.86), (0.42, 0.62)), ((0.42, 0.62), (0.58, 0.62)), ((0.58, 0.62), (0.58, 0.86)),
+    ])
+
+    tv = strokes_hit(rect_strokes(0.12, 0.20, 0.88, 0.72) + [
+        ((0.50, 0.72), (0.50, 0.85)), ((0.34, 0.86), (0.66, 0.86)),
+    ])
+
+    film_strokes = rect_strokes(0.20, 0.12, 0.80, 0.88) + [
+        ((0.35, 0.12), (0.35, 0.88)), ((0.65, 0.12), (0.65, 0.88)),
+    ]
+    for y in (0.31, 0.50, 0.69):
+        film_strokes.append(((0.20, y), (0.35, y)))
+        film_strokes.append(((0.65, y), (0.80, y)))
+    film = strokes_hit(film_strokes)
+
+    def live(u, v):
+        if (u - 0.5) ** 2 + (v - 0.5) ** 2 <= 0.075 ** 2:
+            return True
+        # Broadcast arcs, kept to the left and right of the dot
+        if abs(u - 0.5) < abs(v - 0.5) * 1.1:
+            return False
+        return ring_hit(u, v, 0.5, 0.5, 0.22, half) or ring_hit(u, v, 0.5, 0.5, 0.37, half)
+
+    def sports(u, v):
+        inside = (u - 0.5) ** 2 + (v - 0.5) ** 2 <= 0.37 ** 2
+        if ring_hit(u, v, 0.5, 0.5, 0.37, half):
+            return True
+        if not inside:
+            return False
+        if abs(u - 0.5) <= half or abs(v - 0.5) <= half:
+            return True
+        return ring_hit(u, v, 0.08, 0.5, 0.30, half) or ring_hit(u, v, 0.92, 0.5, 0.30, half)
+
+    return {"home": home, "tv": tv, "movie": film, "live": live, "sports": sports}
+
+
+def make_nav_icons(size=48):
+    """White outline icons; the nav tints them with Poster.blendColor."""
+    hi = size * SUPERSAMPLE
+    total = SUPERSAMPLE * SUPERSAMPLE
+    for name, hit in nav_icon_shapes().items():
+        pixels = []
+        for y in range(size):
+            for x in range(size):
+                covered = 0
+                for sy in range(SUPERSAMPLE):
+                    for sx in range(SUPERSAMPLE):
+                        u = (x * SUPERSAMPLE + sx + 0.5) / hi
+                        v = (y * SUPERSAMPLE + sy + 0.5) / hi
+                        if hit(u, v):
+                            covered += 1
+                pixels.append((255, 255, 255, int(round(255 * covered / total))))
+        write_png(os.path.join(IMAGES, "nav_%s.png" % name), size, size, pixels)
+
+
 if __name__ == "__main__":
     make_watched_check()
     make_player_scrim()
     make_focus_ring()
+    make_nav_icons()

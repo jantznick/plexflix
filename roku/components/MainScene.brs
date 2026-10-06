@@ -31,6 +31,15 @@ sub init()
     ' The nav can collapse itself (Back); keep the scrim and focus in sync when it does
     m.sideNav.observeField("expanded", "onNavExpandedChanged")
     showHome()
+    ' Start with the menu open; Home loads behind it
+    setNavExpanded(true)
+end sub
+
+' The icon rail belongs to browse surfaces: detail pages and the player use
+' the full width and can't open the menu anyway
+sub updateNavRail()
+    overlay = (m.videoScreen <> invalid or m.detailScreen <> invalid or m.castDetailScreen <> invalid or m.sportsDetailScreen <> invalid)
+    m.sideNav.railVisible = not overlay
 end sub
 
 sub onNavExpandedChanged(event as Object)
@@ -73,12 +82,18 @@ sub clearScreens()
     m.sportsDetailScreen = invalid
     m.castDetailScreen = invalid
     m.liveTvScreen = invalid
+    updateNavRail()
 end sub
 
 sub onNavSelected()
     section = m.sideNav.selected
     if section = invalid or section = "" then return
     if section = "library" then return ' handled by onLibrarySelected
+
+    if section = m.section and sectionScreenExists(section) then
+        setNavExpanded(false)
+        return
+    end if
 
     m.section = section
     m.activeLibraryId = ""
@@ -91,6 +106,15 @@ sub onNavSelected()
         showSports()
     end if
 end sub
+
+' Re-picking where you already are (Home on launch, most often) just closes
+' the menu instead of tearing the screen down and loading it again
+function sectionScreenExists(section as String) as Boolean
+    if section = "home" then return m.homeScreen <> invalid
+    if section = "livetv" then return m.liveTvScreen <> invalid
+    if section = "sports" then return m.sportsScreen <> invalid
+    return false
+end function
 
 sub onLibrarySelected(event as Object)
     lib = event.getData()
@@ -278,6 +302,7 @@ sub showSportsDetail(item as Object)
     m.screens.appendChild(m.sportsDetailScreen)
     m.sportsDetailScreen.setFocus(true)
     m.sportsDetailScreen.refocus = true
+    updateNavRail()
 end sub
 
 sub onSportsDetailClosed()
@@ -285,6 +310,7 @@ sub onSportsDetailClosed()
         m.screens.removeChild(m.sportsDetailScreen)
         m.sportsDetailScreen = invalid
     end if
+    updateNavRail()
     if m.sportsScreen <> invalid then m.sportsScreen.setFocus(true)
 end sub
 
@@ -326,6 +352,7 @@ sub showCastDetail(item as Object)
     m.castDetailScreen.observeField("closed", "onCastDetailClosed")
     m.screens.appendChild(m.castDetailScreen)
     m.castDetailScreen.setFocus(true)
+    updateNavRail()
 end sub
 
 sub onCastOpenDetails()
@@ -339,6 +366,7 @@ sub onCastDetailClosed()
         m.screens.removeChild(m.castDetailScreen)
         m.castDetailScreen = invalid
     end if
+    updateNavRail()
     if m.detailScreen <> invalid then
         m.detailScreen.setFocus(true)
     else
@@ -425,6 +453,7 @@ sub openDetailScreen(item as Object)
     m.detailScreen.observeField("closed", "onDetailClosed")
     m.screens.appendChild(m.detailScreen)
     m.detailScreen.setFocus(true)
+    updateNavRail()
 end sub
 
 sub onDetailClosed()
@@ -432,6 +461,7 @@ sub onDetailClosed()
         m.screens.removeChild(m.detailScreen)
         m.detailScreen = invalid
     end if
+    updateNavRail()
     parkLibrarySurfaces(false)
     ' Explicitly restore focus so the remote never goes dead after Back
     restoreSectionFocus()
@@ -467,6 +497,7 @@ sub showVideo(item as Object)
     m.screens.appendChild(m.videoScreen)
     m.videoScreen.content = item
     m.videoScreen.setFocus(true)
+    updateNavRail()
 end sub
 
 sub onPlaybackReport(event as Object)
@@ -505,6 +536,7 @@ sub onVideoClosed()
         m.screens.removeChild(m.videoScreen)
         m.videoScreen = invalid
     end if
+    updateNavRail()
     if m.detailScreen <> invalid then
         m.detailScreen.setFocus(true)
     else if m.sportsDetailScreen <> invalid then
