@@ -164,6 +164,7 @@ sub requestStream(startAt as Integer)
 end sub
 
 sub playDirect(url as String, item as Object)
+    logPlayback("direct url " + url)
     contentNode = createObject("roSGNode", "ContentNode")
     contentNode.url = url
     contentNode.title = valueOrEmpty(item.title)
@@ -191,6 +192,7 @@ sub onStreamReady()
     end if
 
     item = m.top.content
+    logPlayback("stream url " + response.url)
     contentNode = createObject("roSGNode", "ContentNode")
     contentNode.url = response.url
     contentNode.title = valueOrEmpty(item.title)
@@ -214,6 +216,7 @@ end sub
 
 sub onVideoState()
     state = m.video.state
+    logPlayback("state=" + state + " position=" + StrI(m.position).Trim() + " duration=" + StrI(m.duration).Trim())
 
     if state = "playing" then
         m.started = true
@@ -235,12 +238,74 @@ sub onVideoState()
         if not m.started then setStatus("Buffering...")
     else if state = "error" then
         m.reportTimer.control = "stop"
-        setStatus("Video error — try another title or check Plex transcoder")
+        sendPlaybackActions([releaseAction()])
+        showPlaybackError("Playback failed")
     else if state = "finished" then
         m.reportTimer.control = "stop"
-        sendPlaybackActions([scrobbleAction(), releaseAction()])
-        m.top.closed = true
+        if playedToEnd() then
+            sendPlaybackActions([scrobbleAction(), releaseAction()])
+            m.top.closed = true
+        else
+            ' Finishing without having played is a failure, not a completed
+            ' title. Closing here would hide the reason, and scrobbling would
+            ' mark something watched that never rendered a frame.
+            sendPlaybackActions([releaseAction()])
+            showPlaybackError("Stream ended before it played")
+        end if
     end if
+end sub
+
+' Plex's own clients treat the last tenth as "watched", and anything short of
+' that as a stream that stopped early
+function playedToEnd() as Boolean
+    if not m.started then return false
+    if m.duration <= 0 then return true
+    return m.position >= Int(m.duration * 0.9)
+end function
+
+sub showPlaybackError(reason as String)
+    detail = videoErrorDetail()
+    message = reason
+    if detail <> "" then message = message + Chr(10) + detail
+    logPlayback("ERROR " + reason + " " + detail)
+
+    hideControls()
+    m.spinner.control = "stop"
+    m.spinner.visible = false
+    m.statusLabel.visible = true
+    m.statusLabel.text = message + Chr(10) + "Press Back to return"
+end sub
+
+' Whatever the firmware is willing to tell us about why a stream died. Worth
+' having on screen: without it a failure is indistinguishable from a title that
+' simply ended.
+function videoErrorDetail() as String
+    bits = []
+
+    code = m.video.errorCode
+    if code <> invalid and code <> 0 then bits.push("code " + StrI(code).Trim())
+
+    msg = valueOrEmpty(m.video.errorMsg)
+    if msg <> "" then bits.push(msg)
+
+    detail = valueOrEmpty(m.video.errorStr)
+    if detail <> "" and detail <> msg then bits.push(detail)
+
+    info = m.video.errorInfo
+    if info <> invalid then
+        status = valueOrEmpty(info.httpStatus)
+        if status <> "" and status <> "0" then bits.push("HTTP " + status)
+        dbg = valueOrEmpty(info.dbgmsg)
+        if dbg <> "" and dbg <> detail then bits.push(dbg)
+    end if
+
+    if bits.count() = 0 then return ""
+    return joinWith(bits, " · ")
+end function
+
+' Tagged so it can be picked out of the debug console on port 8085
+sub logPlayback(message as String)
+    print "[plexflix:player] " + message
 end sub
 
 sub onPositionChange()

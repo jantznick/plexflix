@@ -457,10 +457,14 @@ sub showVideo(item as Object)
 
     m.videoScreen = createObject("roSGNode", "VideoScreen")
     m.videoScreen.config = m.config
-    m.videoScreen.content = item
     m.videoScreen.observeField("closed", "onVideoClosed")
     m.videoScreen.observeField("playbackReport", "onPlaybackReport")
+
+    ' In the tree before the content lands: setting content is what starts
+    ' playback, and for a direct URL that happens synchronously, so the Video
+    ' node would otherwise be told to play while it is still detached
     m.screens.appendChild(m.videoScreen)
+    m.videoScreen.content = item
     m.videoScreen.setFocus(true)
 end sub
 
