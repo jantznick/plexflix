@@ -5,6 +5,10 @@
         <field id="playRequested" type="assocarray" />
         <field id="closed" type="boolean" alwaysNotify="true" />
         <field id="close" type="boolean" alwaysNotify="true" onChange="onCloseRequested" />
+        <!-- Set after the player closes: focusing the screen Group alone leaves
+             the stream list without focus, so no row is lit and OK does nothing -->
+        <field id="refocus" type="boolean" alwaysNotify="true" onChange="onRefocus" />
+        <field id="streamError" type="string" alwaysNotify="true" onChange="onStreamError" />
     </interface>
 
     <script type="text/brightscript" uri="SportsDetailScreen.brs" />

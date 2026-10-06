@@ -138,6 +138,13 @@ swallows the remote).
 - **Left / Right** on the scrubber seeks 10s, the transport keys seek 30s; a run
   of presses commits a single seek once it settles
 - **Up** from the scrubber reaches the **cast strip** above the title
+- while buffering, the player shows the buffer fill as **Buffering 42%** with a
+  bar, read from `Video.bufferingStatus` (the number Roku's stock UI shows)
+
+A live sports stream that errors, ends before playing, or makes no buffer
+progress for 30 seconds closes the player and returns to the game page. The
+stream you tried stays highlighted, and the page says why it failed so you can
+pick another.
 
 Switching audio, subtitles or version writes the choice to Plex
 (`PUT /library/parts/{id}`) and restarts the transcode at the current position,

@@ -277,6 +277,7 @@ sub showSportsDetail(item as Object)
     m.sportsDetailScreen.observeField("closed", "onSportsDetailClosed")
     m.screens.appendChild(m.sportsDetailScreen)
     m.sportsDetailScreen.setFocus(true)
+    m.sportsDetailScreen.refocus = true
 end sub
 
 sub onSportsDetailClosed()
@@ -498,7 +499,9 @@ sub onPlaybackReport(event as Object)
 end sub
 
 sub onVideoClosed()
+    failure = ""
     if m.videoScreen <> invalid then
+        failure = asString(m.videoScreen.failure)
         m.screens.removeChild(m.videoScreen)
         m.videoScreen = invalid
     end if
@@ -506,6 +509,8 @@ sub onVideoClosed()
         m.detailScreen.setFocus(true)
     else if m.sportsDetailScreen <> invalid then
         m.sportsDetailScreen.setFocus(true)
+        m.sportsDetailScreen.refocus = true
+        if failure <> "" then m.sportsDetailScreen.streamError = failure
     else
         restoreSectionFocus()
     end if
