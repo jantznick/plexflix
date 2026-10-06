@@ -2914,10 +2914,55 @@ function liveSessionFromTune(cfg as Object, result as Object) as Dynamic
     if mediaUuid = "" then return invalid
     print "[plexflix:livetv] tuned session "; mediaUuid; " subscription "; subId
     transcodeSession = "plexflix-live-" + mediaUuid
-    stream = buildStreamUrl(cfg, { key: "/livetv/sessions/" + mediaUuid, session: transcodeSession })
-    stream.subscriptionId = subId
-    stream.liveSession = mediaUuid
-    return stream
+    consumerId = safeToStr(cfg.clientId)
+    if consumerId = "" then consumerId = "plexflix-roku"
+    sessionPath = "/livetv/sessions/" + mediaUuid
+    urls = [
+        buildStreamUrl(cfg, { key: sessionPath, session: transcodeSession }).url,
+        buildStreamUrl(cfg, { key: sessionPath + "/index.m3u8", session: transcodeSession }).url,
+        cfg.baseUrl + sessionPath + "/" + requestEncode(consumerId) + "/index.m3u8?X-Plex-Token=" + cfg.token
+    ]
+    ' The tuner takes a few seconds to deliver the first segment; until then
+    ' Plex answers the playlist with an error, which the Video node won't retry
+    for attemptNo = 1 to 6
+        for each url in urls
+            probe = probePlaylist(cfg, url)
+            print "[plexflix:livetv] probe "; attemptNo; " HTTP "; probe.code; " "; Left(url, 140)
+            if probe.ok then
+                return { ok: true, url: url, session: transcodeSession, subscriptionId: subId, liveSession: mediaUuid }
+            end if
+        end for
+        sleep(1500)
+    end for
+    releaseLiveSession(cfg, { subscriptionId: subId, session: transcodeSession })
+    return { ok: false, error: "Tuned, but Plex never served the live stream" }
+end function
+
+function probePlaylist(cfg as Object, url as String) as Object
+    request = CreateObject("roUrlTransfer")
+    port = CreateObject("roMessagePort")
+    request.SetMessagePort(port)
+    request.SetUrl(url)
+    request.RetainBodyOnError(true)
+    request.AddHeader("X-Plex-Token", cfg.token)
+    request.AddHeader("X-Plex-Product", cfg.product)
+    request.AddHeader("X-Plex-Version", cfg.version)
+    request.AddHeader("X-Plex-Client-Identifier", cfg.clientId)
+    request.AddHeader("X-Plex-Platform", "Roku")
+    request.AddHeader("X-Plex-Device", "Roku")
+    if Left(cfg.baseUrl, 8) = "https://" then
+        request.SetCertificatesFile("common:/certs/ca-bundle.crt")
+        request.InitClientCertificates()
+    end if
+    if not request.AsyncGetToString() then return { ok: false, code: 0 }
+    msg = wait(10000, port)
+    if msg = invalid then
+        request.AsyncCancel()
+        return { ok: false, code: 0 }
+    end if
+    code = msg.GetResponseCode()
+    body = msg.GetString()
+    return { ok: (code >= 200 and code < 300 and Instr(1, body, "#EXTM3U") > 0), code: code }
 end function
 
 ' Ends a live preview/watch: stops its transcode and drops the temporary

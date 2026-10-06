@@ -101,7 +101,7 @@ sub init()
 
     m.tuneTimer = createObject("roSGNode", "Timer")
     m.tuneTimer.repeat = false
-    m.tuneTimer.duration = 1.2
+    m.tuneTimer.duration = 0.85
     m.tuneTimer.observeField("fire", "onTunePreview")
 
     m.clockTimer = createObject("roSGNode", "Timer")
