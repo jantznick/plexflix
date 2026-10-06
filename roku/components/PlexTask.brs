@@ -19,6 +19,14 @@ sub exec()
         m.top.response = fetchExtras(cfg, m.top.item)
     else if action = "unavailableDetail" then
         m.top.response = fetchUnavailableDetail(cfg, m.top.item)
+    else if action = "discoverSearch" then
+        m.top.response = fetchDiscoverSearch(cfg, m.top.item)
+    else if action = "watchlist" then
+        m.top.response = fetchWatchlist(cfg, m.top.item)
+    else if action = "addToWatchlist" then
+        m.top.response = mutateWatchlist(cfg, m.top.item, true)
+    else if action = "removeFromWatchlist" then
+        m.top.response = mutateWatchlist(cfg, m.top.item, false)
     else if action = "pinnedSources" then
         m.top.response = fetchPinnedSources(cfg)
     else if action = "sectionBrowse" then
@@ -521,6 +529,18 @@ function viewedLeaves(item as Object) as Integer
     return item.viewedLeafCount
 end function
 
+' Guid children arrive as plain strings ("plex://movie/…") or { id: "…" } AAs
+function guidEntryId(entry as Dynamic) as String
+    if entry = invalid then return ""
+    entryType = type(entry)
+    if entryType = "String" or entryType = "roString" then return entry
+    if entryType = "roAssociativeArray" then
+        if entry.id <> invalid then return safeToStr(entry.id)
+        if entry.DoesExist("id") then return safeToStr(entry.id)
+    end if
+    return safeToStr(entry)
+end function
+
 function metadataToItem(cfg as Object, meta as Object) as Object
     if meta = invalid then return invalid
 
@@ -625,6 +645,30 @@ function metadataToItem(cfg as Object, meta as Object) as Object
     showPosterUrl = ""
     if showThumb <> "" then showPosterUrl = imageUrl(cfg, showThumb, 360, 540)
 
+    guid = ""
+    if meta.guid <> invalid then guid = safeToStr(meta.guid)
+    ' Prefer a plex:// GUID when agents also expose tmdb/imdb Guids.
+    ' Discover payloads may send Guid as strings or as { id: "…" } objects.
+    if Left(guid, 7) <> "plex://" and meta.Guid <> invalid then
+        guidList = meta.Guid
+        if GetInterface(guidList, "ifArray") = invalid then guidList = [guidList]
+        for each g in guidList
+            id = guidEntryId(g)
+            if Left(id, 7) = "plex://" then
+                guid = id
+                exit for
+            end if
+        end for
+    end if
+
+    discoverRatingKey = ""
+    if Left(guid, 7) = "plex://" then
+        parts = guid.Tokenize("/")
+        if parts.count() > 0 then discoverRatingKey = safeToStr(parts[parts.count() - 1])
+    else if Len(ratingKey) >= 16 then
+        discoverRatingKey = ratingKey
+    end if
+
     return {
         title: title,
         shortTitle: rawTitle,
@@ -635,6 +679,8 @@ function metadataToItem(cfg as Object, meta as Object) as Object
         mediaType: mediaType,
         ratingKey: ratingKey,
         key: key,
+        guid: guid,
+        discoverRatingKey: discoverRatingKey,
         hdPosterUrl: imageUrl(cfg, thumb, posterW, posterH),
         thumbPath: thumb,
         hdShowPosterUrl: showPosterUrl,
@@ -988,6 +1034,15 @@ sub appendDiscoverRows(root as Object, seenTitles as Object, cfg as Object)
 end sub
 
 function discoverGet(cfg as Object, path as String) as Object
+    return discoverRequest(cfg, path, "GET")
+end function
+
+' Watchlist add/remove are PUT with an empty body on discover.provider.plex.tv
+function discoverPut(cfg as Object, path as String) as Object
+    return discoverRequest(cfg, path, "PUT")
+end function
+
+function discoverRequest(cfg as Object, path as String, method as String) as Object
     url = "https://discover.provider.plex.tv" + path
     if path.Instr("?") > 0 then
         url = url + "&X-Plex-Token=" + cfg.token
@@ -1000,7 +1055,7 @@ function discoverGet(cfg as Object, path as String) as Object
     port = CreateObject("roMessagePort")
     request.SetMessagePort(port)
     request.SetUrl(url)
-    request.SetRequest("GET")
+    request.SetRequest(method)
     request.EnableEncodings(true)
     request.RetainBodyOnError(true)
     request.AddHeader("Accept", "application/json")
@@ -1012,8 +1067,14 @@ function discoverGet(cfg as Object, path as String) as Object
     request.SetCertificatesFile("common:/certs/ca-bundle.crt")
     request.InitClientCertificates()
 
-    if not request.AsyncGetToString() then
-        return { ok: false, error: "Failed discover request" }
+    started = false
+    if method = "GET" then
+        started = request.AsyncGetToString()
+    else
+        started = request.AsyncPostFromString("")
+    end if
+    if not started then
+        return { ok: false, error: "Failed discover " + method }
     end if
 
     while true
@@ -1028,12 +1089,213 @@ function discoverGet(cfg as Object, path as String) as Object
             if code < 200 or code >= 300 then
                 return { ok: false, error: "Discover HTTP " + safeToStr(code) }
             end if
+            if method <> "GET" then
+                ' addToWatchlist / removeFromWatchlist often return an empty body
+                return { ok: true, body: body }
+            end if
             parsed = ParseJson(body)
             if parsed = invalid then return { ok: false, error: "Discover parse error" }
             return { ok: true, json: parsed }
         end if
     end while
 end function
+
+function discoverRatingKeyFromItem(item as Object) as String
+    if item = invalid then return ""
+    explicit = ""
+    if item.DoesExist("discoverRatingKey") then explicit = safeToStr(item.discoverRatingKey)
+    if explicit <> "" then return explicit
+
+    guid = ""
+    if item.DoesExist("guid") then guid = safeToStr(item.guid)
+    if Left(guid, 7) = "plex://" then
+        parts = guid.Tokenize("/")
+        if parts.count() > 0 then return safeToStr(parts[parts.count() - 1])
+    end if
+
+    ' Discover catalog keys are hex ids; local PMS keys are usually short integers
+    rk = safeToStr(item.ratingKey)
+    if Len(rk) >= 16 then return rk
+    return ""
+end function
+
+function fetchDiscoverSearch(cfg as Object, item as Object) as Object
+    query = ""
+    searchTypes = "movies,tv"
+    limit = "40"
+    if item <> invalid then
+        query = safeToStr(item.query)
+        if safeToStr(item.searchTypes) <> "" then searchTypes = safeToStr(item.searchTypes)
+        if safeToStr(item.limit) <> "" then limit = safeToStr(item.limit)
+    end if
+    if query = "" then return { ok: false, error: "Enter a title to search" }
+
+    path = "/library/search?query=" + requestEncode(query)
+    path = path + "&limit=" + limit
+    path = path + "&searchTypes=" + searchTypes
+    path = path + "&searchProviders=discover&includeMetadata=1"
+
+    result = discoverGet(cfg, path)
+    if result.ok <> true then return result
+
+    items = collectDiscoverSearchResults(cfg, result.json)
+    return { ok: true, items: items, query: query }
+end function
+
+function collectDiscoverSearchResults(cfg as Object, container as Object) as Object
+    items = []
+    if container = invalid or container.MediaContainer = invalid then return items
+
+    groups = container.MediaContainer.SearchResults
+    if groups = invalid then
+        ' Some payloads nest Metadata directly
+        return collectDiscoverMetadata(cfg, container)
+    end if
+    if GetInterface(groups, "ifArray") = invalid then groups = [groups]
+
+    ' Prefer the global catalog ("external"); fall back to the first non-empty group
+    preferred = invalid
+    fallback = invalid
+    for each group in groups
+        if group <> invalid then
+            groupId = safeToStr(group.id)
+            hits = group.SearchResult
+            if hits <> invalid then
+                if groupId = "external" or groupId = "meta" then
+                    preferred = hits
+                else if fallback = invalid then
+                    fallback = hits
+                end if
+            end if
+        end if
+    end for
+
+    hits = preferred
+    if hits = invalid then hits = fallback
+    if hits = invalid then return items
+    if GetInterface(hits, "ifArray") = invalid then hits = [hits]
+
+    for each hit in hits
+        meta = invalid
+        if hit <> invalid then meta = hit.Metadata
+        if meta = invalid and hit <> invalid then meta = hit
+        mapped = metadataToItem(cfg, meta)
+        if mapped <> invalid then
+            mapped.isDiscover = true
+            mapped.unavailable = true
+            stampDiscoverIdentity(mapped, meta)
+            items.push(mapped)
+        end if
+        if items.count() >= 60 then exit for
+    end for
+    return items
+end function
+
+function fetchWatchlist(cfg as Object, item as Object) as Object
+    filter = "all"
+    if item <> invalid and safeToStr(item.filter) <> "" then filter = safeToStr(item.filter)
+
+    path = "/library/sections/watchlist/" + filter
+    path = path + "?includeCollections=1&includeExternalMedia=1"
+    path = path + "&X-Plex-Container-Start=0&X-Plex-Container-Size=100"
+
+    result = discoverGet(cfg, path)
+    if result.ok <> true then return result
+
+    items = collectDiscoverMetadata(cfg, result.json)
+    for each it in items
+        it.onWatchlist = true
+        it.unavailable = true
+        stampDiscoverIdentity(it, invalid)
+    end for
+    return { ok: true, items: items }
+end function
+
+function mutateWatchlist(cfg as Object, item as Object, add as Boolean) as Object
+    rk = discoverRatingKeyFromItem(item)
+    if rk = "" then return { ok: false, error: "Missing Discover rating key" }
+
+    verb = "/actions/removeFromWatchlist"
+    if add = true then verb = "/actions/addToWatchlist"
+    result = discoverPut(cfg, verb + "?ratingKey=" + requestEncode(rk))
+    if result.ok <> true then return result
+    return { ok: true, onWatchlist: add, discoverRatingKey: rk }
+end function
+
+function fetchWatchlistState(cfg as Object, discoverRk as String) as Boolean
+    if discoverRk = "" then return false
+
+    ' Prefer Discover; fall back to the legacy metadata host plexapi still uses
+    paths = [
+        "https://discover.provider.plex.tv/library/metadata/" + discoverRk + "/userState",
+        "https://metadata.provider.plex.tv/library/metadata/" + discoverRk + "/userState"
+    ]
+    for each base in paths
+        url = base + "?X-Plex-Token=" + cfg.token
+        json = httpGetJson(url)
+        if json <> invalid then
+            if userStateIsWatchlisted(json) then return true
+        end if
+    end for
+    return false
+end function
+
+function userStateIsWatchlisted(json as Object) as Boolean
+    if json = invalid then return false
+    candidates = []
+    candidates.push(json)
+    if json.MediaContainer <> invalid then
+        candidates.push(json.MediaContainer)
+        us = json.MediaContainer.UserState
+        if us <> invalid then
+            if GetInterface(us, "ifArray") <> invalid then
+                for each entry in us
+                    candidates.push(entry)
+                end for
+            else
+                candidates.push(us)
+            end if
+        end if
+    end if
+    if json.UserState <> invalid then candidates.push(json.UserState)
+
+    for each state in candidates
+        if state <> invalid and state.watchlistedAt <> invalid then
+            raw = state.watchlistedAt
+            if type(raw) = "String" or type(raw) = "roString" then
+                if raw <> "" and raw <> "0" then return true
+            else if raw > 0 then
+                return true
+            end if
+        end if
+    end for
+    return false
+end function
+
+function findLocalByGuid(cfg as Object, guid as String) as Object
+    if guid = "" then return invalid
+    result = plexGet(cfg, "/library/all?guid=" + requestEncode(guid))
+    if result.ok <> true then return invalid
+    mapped = collectMetadata(cfg, result.json)
+    if mapped.count() = 0 then return invalid
+    hit = mapped[0]
+    hit.isDiscover = false
+    hit.unavailable = false
+    return hit
+end function
+
+sub stampDiscoverIdentity(item as Object, meta as Object)
+    if item = invalid then return
+    guid = ""
+    if item.DoesExist("guid") then guid = safeToStr(item.guid)
+    if guid = "" and meta <> invalid and meta.guid <> invalid then guid = safeToStr(meta.guid)
+    if guid <> "" then item.guid = guid
+
+    rk = discoverRatingKeyFromItem(item)
+    if rk = "" and meta <> invalid then rk = safeToStr(meta.ratingKey)
+    if rk <> "" then item.discoverRatingKey = rk
+    item.isDiscover = true
+end sub
 
 function collectDiscoverMetadata(cfg as Object, container as Object) as Object
     items = collectMetadata(cfg, container)
@@ -1053,6 +1315,7 @@ function collectDiscoverMetadata(cfg as Object, container as Object) as Object
     end if
     for each it in items
         it.isDiscover = true
+        stampDiscoverIdentity(it, invalid)
         ' Discover items may lack a local ratingKey playable path — still browsable
         if safeToStr(it.mediaType) = "" then it.mediaType = "movie"
     end for
@@ -1378,6 +1641,41 @@ function fetchUnavailableDetail(cfg as Object, item as Object) as Object
     mediaType = safeToStr(item.mediaType)
     if mediaType = "" then mediaType = "movie"
 
+    guid = ""
+    if item.DoesExist("guid") then guid = safeToStr(item.guid)
+    discoverRk = discoverRatingKeyFromItem(item)
+
+    ' Prefer playing the local copy when the same plex:// guid is in the library
+    localItem = invalid
+    if guid <> "" then localItem = findLocalByGuid(cfg, guid)
+
+    onWatchlist = false
+    if item.DoesExist("onWatchlist") and item.onWatchlist = true then
+        onWatchlist = true
+    else if discoverRk <> "" then
+        onWatchlist = fetchWatchlistState(cfg, discoverRk)
+    end if
+
+    if localItem <> invalid then
+        stampDiscoverIdentity(localItem, invalid)
+        if guid <> "" then localItem.guid = guid
+        if discoverRk <> "" then localItem.discoverRatingKey = discoverRk
+        localItem.onWatchlist = onWatchlist
+        localItem.isDiscover = false
+        localItem.unavailable = false
+        return {
+            ok: true,
+            unavailable: false,
+            localItem: localItem,
+            detail: localItem,
+            cast: [],
+            similar: [],
+            onWatchlist: onWatchlist,
+            discoverRatingKey: discoverRk,
+            guid: guid
+        }
+    end if
+
     tmdbKey = ""
     if cfg.tmdbApiKey <> invalid then tmdbKey = safeToStr(cfg.tmdbApiKey)
 
@@ -1392,6 +1690,9 @@ function fetchUnavailableDetail(cfg as Object, item as Object) as Object
         hdBackdropUrl: safeToStr(item.hdBackdropUrl),
         ratingKey: safeToStr(item.ratingKey),
         key: safeToStr(item.key),
+        guid: guid,
+        discoverRatingKey: discoverRk,
+        onWatchlist: onWatchlist,
         isDiscover: true,
         unavailable: true
     }
@@ -1424,7 +1725,10 @@ function fetchUnavailableDetail(cfg as Object, item as Object) as Object
         detail: detail,
         cast: castItems,
         similar: similarItems,
-        tmdbId: tmdbId
+        tmdbId: tmdbId,
+        onWatchlist: onWatchlist,
+        discoverRatingKey: discoverRk,
+        guid: guid
     }
 end function
 
