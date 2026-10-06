@@ -15,6 +15,8 @@ sub exec()
         m.top.response = fetchChildren(cfg, m.top.item)
     else if action = "extras" then
         m.top.response = fetchExtras(cfg, m.top.item)
+    else if action = "unavailableDetail" then
+        m.top.response = fetchUnavailableDetail(cfg, m.top.item)
     else if action = "pinnedSources" then
         m.top.response = fetchPinnedSources(cfg)
     else if action = "sectionBrowse" then
@@ -619,6 +621,7 @@ function metadataToItem(cfg as Object, meta as Object) as Object
         thumbPath: thumb,
         hdShowPosterUrl: showPosterUrl,
         hdBackdropUrl: imageUrl(cfg, art, 1920, 1080),
+        showDescription: "",
         duration: duration,
         viewOffset: viewOffset,
         viewedLeafCount: viewedLeafCount,
@@ -644,6 +647,37 @@ function preferShowPosters(items as Object) as Object
             if item.DoesExist("hdShowPosterUrl") then showPoster = safeToStr(item.hdShowPosterUrl)
             if showPoster <> "" then item.hdPosterUrl = showPoster
             if safeToStr(item.grandparentTitle) <> "" then item.shortTitle = safeToStr(item.grandparentTitle)
+        end if
+    end for
+    return items
+end function
+
+function enrichEpisodeShowDescriptions(cfg as Object, items as Object) as Object
+    ' Hub/on-deck episodes only carry the episode synopsis. Home billboard should
+    ' show the *show* synopsis — fetch each unique grandparent once and stamp it.
+    if items = invalid then return []
+    cache = {}
+    for each item in items
+        if item <> invalid and safeToStr(item.mediaType) = "episode" then
+            showKey = safeToStr(item.grandparentRatingKey)
+            if showKey <> "" then
+                showSummary = ""
+                if cache.DoesExist(showKey) then
+                    showSummary = safeToStr(cache[showKey])
+                else
+                    result = plexGet(cfg, "/library/metadata/" + showKey)
+                    if result.ok = true and result.json <> invalid and result.json.MediaContainer <> invalid then
+                        meta = result.json.MediaContainer.Metadata
+                        if meta = invalid then meta = result.json.MediaContainer.Directory
+                        if meta <> invalid then
+                            if GetInterface(meta, "ifArray") <> invalid and meta.count() > 0 then meta = meta[0]
+                            if meta.summary <> invalid then showSummary = safeToStr(meta.summary)
+                        end if
+                    end if
+                    cache[showKey] = showSummary
+                end if
+                item.showDescription = showSummary
+            end if
         end if
     end for
     return items
@@ -706,7 +740,8 @@ function appendRowNodes(root as Object, title as String, items as Object) as Boo
             isDiscover: isDiscover,
             hdShowPosterUrl: item.hdShowPosterUrl,
             ' Custom field — must be in addFields or RowList drops it
-            hdBackdropUrl: item.hdBackdropUrl
+            hdBackdropUrl: item.hdBackdropUrl,
+            showDescription: item.showDescription
         })
     end for
     return true
@@ -753,7 +788,7 @@ function buildHome(cfg as Object) as Object
     ' Continue Watching / On Deck — exempt from 15-min (always useful)
     onDeck = plexGet(cfg, "/library/onDeck")
     if onDeck.ok = true then
-        addUniqueRowLoose(root, seenTitles, "Continue Watching", preferShowPosters(collectMetadata(cfg, onDeck.json)))
+        addUniqueRowLoose(root, seenTitles, "Continue Watching", enrichEpisodeShowDescriptions(cfg, preferShowPosters(collectMetadata(cfg, onDeck.json))))
     end if
 
     ' Recently Added (global)
@@ -1058,6 +1093,8 @@ sub addUniqueRowLoose(root as Object, seenTitles as Object, title as String, ite
         child.description = item.description
         child.hdPosterUrl = item.hdPosterUrl
         child.hdBackgroundImageUrl = item.hdBackdropUrl
+        isDiscover = false
+        if item.DoesExist("isDiscover") and item.isDiscover = true then isDiscover = true
         child.addFields({
             year: item.year,
             rating: item.rating,
@@ -1078,9 +1115,10 @@ sub addUniqueRowLoose(root as Object, seenTitles as Object, title as String, ite
             index: item.index,
             shortTitle: item.shortTitle,
             parentIndex: item.parentIndex,
-            isDiscover: item.isDiscover,
+            isDiscover: isDiscover,
             hdShowPosterUrl: item.hdShowPosterUrl,
-            hdBackdropUrl: item.hdBackdropUrl
+            hdBackdropUrl: item.hdBackdropUrl,
+            showDescription: item.showDescription
         })
     end for
     seenTitles[key] = true
@@ -1287,6 +1325,313 @@ function fetchExtras(cfg as Object, item as Object) as Object
     }
 end function
 
+function fetchUnavailableDetail(cfg as Object, item as Object) as Object
+    ' Titles from Plex Discover that aren't in the local library.
+    if item = invalid then return { ok: false, error: "No item" }
+
+    title = safeToStr(item.title)
+    year = safeToStr(item.year)
+    mediaType = safeToStr(item.mediaType)
+    if mediaType = "" then mediaType = "movie"
+
+    tmdbKey = ""
+    if cfg.tmdbApiKey <> invalid then tmdbKey = safeToStr(cfg.tmdbApiKey)
+
+    detail = {
+        title: title,
+        description: safeToStr(item.description),
+        year: year,
+        rating: safeToStr(item.rating),
+        contentRating: safeToStr(item.contentRating),
+        mediaType: mediaType,
+        hdPosterUrl: safeToStr(item.hdPosterUrl),
+        hdBackdropUrl: safeToStr(item.hdBackdropUrl),
+        ratingKey: safeToStr(item.ratingKey),
+        key: safeToStr(item.key),
+        isDiscover: true,
+        unavailable: true
+    }
+
+    castItems = []
+    genreName = ""
+    tmdbId = ""
+
+    if tmdbKey <> "" and tmdbKey <> "REPLACE_WITH_TMDB_API_KEY" and title <> "" then
+        tmdb = fetchTmdbTitle(tmdbKey, title, year, mediaType)
+        if tmdb <> invalid then
+            if tmdb.description <> "" then detail.description = tmdb.description
+            if tmdb.hdPosterUrl <> "" then detail.hdPosterUrl = tmdb.hdPosterUrl
+            if tmdb.hdBackdropUrl <> "" then detail.hdBackdropUrl = tmdb.hdBackdropUrl
+            if tmdb.rating <> "" then detail.rating = tmdb.rating
+            if tmdb.year <> "" then detail.year = tmdb.year
+            if tmdb.contentRating <> "" then detail.contentRating = tmdb.contentRating
+            if tmdb.mediaType <> "" then detail.mediaType = tmdb.mediaType
+            if tmdb.genreName <> "" then genreName = tmdb.genreName
+            if tmdb.tmdbId <> "" then tmdbId = tmdb.tmdbId
+            if tmdb.cast <> invalid then castItems = tmdb.cast
+        end if
+    end if
+
+    similarItems = searchLocalSimilar(cfg, title, genreName, mediaType)
+
+    return {
+        ok: true,
+        unavailable: true,
+        detail: detail,
+        cast: castItems,
+        similar: similarItems,
+        tmdbId: tmdbId
+    }
+end function
+
+function fetchTmdbTitle(apiKey as String, title as String, year as String, mediaType as String) as Object
+    isShow = (mediaType = "show" or mediaType = "tv" or mediaType = "series")
+    kind = "movie"
+    if isShow then kind = "tv"
+
+    searchUrl = "https://api.themoviedb.org/3/search/" + kind + "?api_key=" + apiKey + "&query=" + requestEncode(title)
+    if year <> "" then
+        if isShow then
+            searchUrl = searchUrl + "&first_air_date_year=" + year
+        else
+            searchUrl = searchUrl + "&year=" + year
+        end if
+    end if
+
+    search = httpGetJson(searchUrl)
+    if search = invalid or search.results = invalid or search.results.count() = 0 then
+        ' Retry without year if the first pass missed
+        if year <> "" then
+            searchUrl = "https://api.themoviedb.org/3/search/" + kind + "?api_key=" + apiKey + "&query=" + requestEncode(title)
+            search = httpGetJson(searchUrl)
+        end if
+    end if
+    if search = invalid or search.results = invalid or search.results.count() = 0 then
+        ' Flip movie/tv once if type was wrong
+        other = "tv"
+        if isShow then other = "movie"
+        searchUrl = "https://api.themoviedb.org/3/search/" + other + "?api_key=" + apiKey + "&query=" + requestEncode(title)
+        search = httpGetJson(searchUrl)
+        if search <> invalid and search.results <> invalid and search.results.count() > 0 then
+            kind = other
+            isShow = (kind = "tv")
+        end if
+    end if
+    if search = invalid or search.results = invalid or search.results.count() = 0 then return invalid
+
+    hit = search.results[0]
+    tmdbId = safeToStr(hit.id)
+    if tmdbId = "" then return invalid
+
+    detailUrl = "https://api.themoviedb.org/3/" + kind + "/" + tmdbId + "?api_key=" + apiKey + "&append_to_response=credits,content_ratings,release_dates"
+    detail = httpGetJson(detailUrl)
+    if detail = invalid then return invalid
+
+    overview = safeToStr(detail.overview)
+    rating = ""
+    if detail.vote_average <> invalid then
+        rating = Left(safeToStr(detail.vote_average), 3)
+    end if
+    outYear = year
+    if isShow then
+        outYear = Left(safeToStr(detail.first_air_date), 4)
+    else
+        outYear = Left(safeToStr(detail.release_date), 4)
+    end if
+
+    poster = ""
+    backdrop = ""
+    if detail.poster_path <> invalid and safeToStr(detail.poster_path) <> "" then
+        poster = "https://image.tmdb.org/t/p/w500" + safeToStr(detail.poster_path)
+    end if
+    if detail.backdrop_path <> invalid and safeToStr(detail.backdrop_path) <> "" then
+        backdrop = "https://image.tmdb.org/t/p/w1280" + safeToStr(detail.backdrop_path)
+    end if
+
+    genreName = ""
+    if detail.genres <> invalid and detail.genres.count() > 0 then
+        genreName = safeToStr(detail.genres[0].name)
+    end if
+
+    contentRating = ""
+    ' Best-effort US rating
+    if isShow and detail.content_ratings <> invalid and detail.content_ratings.results <> invalid then
+        for each r in detail.content_ratings.results
+            if safeToStr(r.iso_3166_1) = "US" and r.rating <> invalid then
+                contentRating = safeToStr(r.rating)
+                exit for
+            end if
+        end for
+    else if detail.release_dates <> invalid and detail.release_dates.results <> invalid then
+        for each r in detail.release_dates.results
+            if safeToStr(r.iso_3166_1) = "US" and r.release_dates <> invalid then
+                for each d in r.release_dates
+                    if d.certification <> invalid and safeToStr(d.certification) <> "" then
+                        contentRating = safeToStr(d.certification)
+                        exit for
+                    end if
+                end for
+            end if
+            if contentRating <> "" then exit for
+        end for
+    end if
+
+    castItems = []
+    if detail.credits <> invalid and detail.credits.cast <> invalid then
+        castList = detail.credits.cast
+        if GetInterface(castList, "ifArray") = invalid then castList = [castList]
+        maxN = castList.count()
+        if maxN > 16 then maxN = 16
+        for i = 0 to maxN - 1
+            c = castList[i]
+            if c <> invalid then
+                name = safeToStr(c.name)
+                if name <> "" then
+                    thumb = ""
+                    if c.profile_path <> invalid and safeToStr(c.profile_path) <> "" then
+                        thumb = "https://image.tmdb.org/t/p/w342" + safeToStr(c.profile_path)
+                    end if
+                    castItems.push({
+                        title: name,
+                        shortTitle: name,
+                        description: safeToStr(c.character),
+                        mediaType: "actor",
+                        ratingKey: "",
+                        key: "",
+                        personId: "",
+                        hdPosterUrl: thumb,
+                        hdBackdropUrl: "",
+                        duration: 0,
+                        viewOffset: 0,
+                        year: "",
+                        rating: "",
+                        contentRating: "",
+                        index: "",
+                        parentIndex: ""
+                    })
+                end if
+            end if
+        end for
+    end if
+
+    outType = "movie"
+    if isShow then outType = "show"
+
+    return {
+        title: title,
+        description: overview,
+        year: outYear,
+        rating: rating,
+        contentRating: contentRating,
+        mediaType: outType,
+        hdPosterUrl: poster,
+        hdBackdropUrl: backdrop,
+        genreName: genreName,
+        tmdbId: tmdbId,
+        cast: castItems
+    }
+end function
+
+function searchLocalSimilar(cfg as Object, title as String, genreName as String, mediaType as String) as Object
+    ' Pull in-library titles that feel related — genre search first, then fuzzy title.
+    out = []
+    seen = {}
+    preferType = safeToStr(mediaType)
+    if preferType = "series" or preferType = "tv" then preferType = "show"
+
+    queries = []
+    if genreName <> "" then queries.push(genreName)
+    ' Use a significant word from the title as a soft related search
+    word = firstSearchWord(title)
+    if word <> "" then queries.push(word)
+    if title <> "" then queries.push(title)
+
+    for each q in queries
+        if out.count() >= 24 then exit for
+        result = plexGet(cfg, "/hubs/search?query=" + requestEncode(q) + "&limit=25")
+        if result.ok = true then
+            bucket = []
+            for each it in collectSearchLibraryItems(cfg, result.json)
+                rk = safeToStr(it.ratingKey)
+                if rk = "" then rk = safeToStr(it.title)
+                if seen.DoesExist(rk) = false then
+                    if LCase(safeToStr(it.title)) <> LCase(title) then
+                        seen[rk] = true
+                        bucket.push(it)
+                    end if
+                end if
+            end for
+            ' Prefer same media type first so movie shelves don't drown in shows (and vice versa)
+            if preferType <> "" then
+                for each it in bucket
+                    if safeToStr(it.mediaType) = preferType then
+                        out.push(it)
+                        if out.count() >= 24 then exit for
+                    end if
+                end for
+            end if
+            for each it in bucket
+                if out.count() >= 24 then exit for
+                already = false
+                for each existing in out
+                    if safeToStr(existing.ratingKey) = safeToStr(it.ratingKey) then
+                        already = true
+                        exit for
+                    end if
+                end for
+                if already = false then out.push(it)
+            end for
+        end if
+    end for
+    return out
+end function
+
+function firstSearchWord(title as String) as String
+    if title = "" then return ""
+    parts = title.Tokenize(" ")
+    if parts = invalid or parts.count() = 0 then return ""
+    for each p in parts
+        w = LCase(safeToStr(p))
+        if Len(w) >= 4 then
+            if w <> "the" and w <> "and" and w <> "with" and w <> "from" then
+                return safeToStr(p)
+            end if
+        end if
+    end for
+    return safeToStr(parts[0])
+end function
+
+function collectSearchLibraryItems(cfg as Object, json as Object) as Object
+    items = []
+    if json = invalid or json.MediaContainer = invalid then return items
+    hubs = json.MediaContainer.Hub
+    if hubs = invalid then
+        return collectMetadata(cfg, json)
+    end if
+    if GetInterface(hubs, "ifArray") = invalid then hubs = [hubs]
+    for each hub in hubs
+        hubType = safeToStr(hub.type)
+        hubTitle = LCase(safeToStr(hub.title))
+        keep = false
+        if hubType = "movie" or hubType = "show" then keep = true
+        if Instr(1, hubTitle, "movie") > 0 then keep = true
+        if Instr(1, hubTitle, "show") > 0 then keep = true
+        if Instr(1, hubTitle, "tv") > 0 then keep = true
+        if keep then
+            for each it in collectMetadata(cfg, hub)
+                mt = safeToStr(it.mediaType)
+                if mt = "movie" or mt = "show" then
+                    it.isDiscover = false
+                    items.push(it)
+                end if
+                if items.count() >= 30 then exit for
+            end for
+        end if
+        if items.count() >= 30 then exit for
+    end for
+    return items
+end function
+
 function sectionIdFromKey(key as String) as String
     if key = "" then return ""
     marker = "/library/sections/"
@@ -1372,7 +1717,7 @@ function fetchSectionHub(cfg as Object, item as Object) as Object
     ' Continue Watching is always the first shelf under View all
     onDeck = plexGet(cfg, "/library/sections/" + sectionId + "/onDeck")
     if onDeck.ok = true then
-        addUniqueRowLoose(root, seenTitles, "Continue Watching", preferShowPosters(collectMetadata(cfg, onDeck.json)))
+        addUniqueRowLoose(root, seenTitles, "Continue Watching", enrichEpisodeShowDescriptions(cfg, preferShowPosters(collectMetadata(cfg, onDeck.json))))
     end if
 
     recent = plexGet(cfg, "/library/sections/" + sectionId + "/recentlyAdded")

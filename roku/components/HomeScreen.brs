@@ -206,7 +206,25 @@ sub updateHeroContent(item as Object)
     end if
     if m.heroArt <> invalid and uri <> "" then m.heroArt.uri = uri
 
-    m.heroTitle.text = asString(item.title)
+    mediaType = asString(item.mediaType)
+    isEpisode = (mediaType = "episode")
+
+    ' Home billboard always presents show/movie level copy. Episode synopses
+    ' are reserved for the detail page when an episode tile is focused.
+    headline = asString(item.title)
+    summary = asString(item.description)
+    metaTypeLabel = titleCaseType(mediaType)
+    if isEpisode then
+        showName = asString(item.grandparentTitle)
+        if showName = "" then showName = asString(item.shortTitle)
+        if showName <> "" then headline = showName
+        showSummary = ""
+        if item.showDescription <> invalid then showSummary = asString(item.showDescription)
+        summary = showSummary
+        metaTypeLabel = "Series"
+    end if
+
+    m.heroTitle.text = headline
 
     metaBits = []
     year = asString(item.year)
@@ -215,10 +233,9 @@ sub updateHeroContent(item as Object)
     if contentRating <> "" then metaBits.push(contentRating)
     rating = asString(item.rating)
     if rating <> "" then metaBits.push(rating + " ★")
-    mediaType = asString(item.mediaType)
-    if mediaType <> "" then metaBits.push(titleCaseType(mediaType))
+    if metaTypeLabel <> "" then metaBits.push(metaTypeLabel)
     m.heroMeta.text = joinStrings(metaBits, "  ·  ")
-    m.heroSummary.text = asString(item.description)
+    m.heroSummary.text = summary
 end sub
 
 function titleCaseType(mediaType as String) as String

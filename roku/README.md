@@ -25,7 +25,8 @@ This is intentionally a **design/UX shell** on top of existing Plex data. Creden
 - **Progress is written back to Plex**, so resume points and Continue Watching
   stay in sync with every other Plex client
 - Live sports from a configurable JSON feed URL (event detail + stream picker)
-- Optional **TMDB** enrichment for cast pages (`tmdbApiKey` in config)
+- Optional **TMDB** enrichment for cast pages and Discover titles missing from your library (`tmdbApiKey` in config)
+- Discover titles not in Plex open a **Not in your library** detail view (no Play) with synopsis + similar local picks
 
 ## Configure before sideload
 
@@ -39,7 +40,7 @@ tmdbApiKey: "YOUR_TMDB_API_KEY"
 ```
 
 Optional keys:
-- `tmdbApiKey` — cast bios / photos / known-for (https://www.themoviedb.org/settings/api)
+- `tmdbApiKey` — cast bios / photos / known-for, plus synopsis art for Discover titles not in your library (https://www.themoviedb.org/settings/api)
 - Leave as `REPLACE_WITH_TMDB_API_KEY` to skip TMDB (Plex people data still used when available)
 `sportsFeedUrl` can point at any JSON feed. Category maps like `{ "FOOTBALL": [ { title, thumbnail, content.videos[].url } ] }` are supported.
 

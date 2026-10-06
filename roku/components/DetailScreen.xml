@@ -25,8 +25,10 @@
             loadHeight="1080"
             opacity="1"
         />
-        <!-- Soft washes only — no hard vertical panel -->
-        <Rectangle width="1920" height="680" color="0x07070B" opacity="0.14" />
+        <!-- Soft washes — stronger left panel so title/summary stay readable on busy art -->
+        <Rectangle width="1920" height="680" color="0x07070B" opacity="0.18" />
+        <Rectangle width="1100" height="680" color="0x07070B" opacity="0.52" />
+        <Rectangle width="780" height="680" color="0x07070B" opacity="0.28" />
         <Rectangle width="1920" height="240" translation="[0, 440]" color="0x07070B" opacity="0.55" />
         <Rectangle width="1920" height="160" translation="[0, 560]" color="0x07070B" opacity="0.82" />
 
@@ -41,15 +43,29 @@
                 uri="pkg:/images/poster_placeholder.png"
             />
 
-            <Label id="titleLabel" translation="[248, 12]" width="1450" height="70" color="0xFFFFFF" wrap="true" maxLines="2">
+            <Label id="titleLabel" translation="[248, 12]" width="1100" height="70" color="0xFFFFFF" wrap="true" maxLines="2">
                 <Font role="font" uri="pkg:/fonts/Outfit-Bold.ttf" size="50" />
             </Label>
-            <Label id="metaLabel" translation="[248, 92]" width="1450" height="32" color="0xA8A8B0">
+            <Label id="metaLabel" translation="[248, 92]" width="1100" height="32" color="0xD0D0D6">
                 <Font role="font" uri="pkg:/fonts/Outfit-Medium.ttf" size="22" />
             </Label>
-            <Label id="summaryLabel" translation="[248, 136]" width="1400" height="80" color="0xD0D0D6" wrap="true" maxLines="2" lineSpacing="5">
+            <Label id="summaryLabel" translation="[248, 136]" width="1000" height="88" color="0xFFFFFF" wrap="true" maxLines="3" lineSpacing="5">
                 <Font role="font" uri="pkg:/fonts/Outfit-Regular.ttf" size="22" />
             </Label>
+
+            <!-- Shown for Discover titles that aren't in the local Plex library -->
+            <Group id="unavailablePanel" translation="[248, 232]" visible="false">
+                <Rectangle width="980" height="102" color="0x000000" opacity="0.35" translation="[4, 5]" />
+                <Rectangle width="980" height="102" color="0x12121A" opacity="0.98" />
+                <Rectangle width="6" height="102" color="0xE5A00D" />
+                <Rectangle width="980" height="2" translation="[0, 0]" color="0xE5A00D" opacity="0.35" />
+                <Label translation="[28, 16]" width="920" height="28" text="Not in your library" color="0xE5A00D">
+                    <Font role="font" uri="pkg:/fonts/Outfit-SemiBold.ttf" size="18" />
+                </Label>
+                <Label id="unavailableBody" translation="[28, 48]" width="920" height="40" text="We don't have this one yet — but we can get it soon." color="0xF0F0F4" wrap="true" maxLines="1">
+                    <Font role="font" uri="pkg:/fonts/Outfit-Regular.ttf" size="24" />
+                </Label>
+            </Group>
 
             <Group id="movieActions" translation="[248, 240]" visible="true">
                 <Group id="playBtn" translation="[0, 0]">
@@ -68,7 +84,7 @@
                 </Group>
             </Group>
 
-            <Label id="softStatus" translation="[248, 316]" width="1200" height="28" text="" color="0x666670">
+            <Label id="softStatus" translation="[248, 346]" width="1200" height="28" text="" color="0x666670">
                 <Font role="font" uri="pkg:/fonts/Outfit-Regular.ttf" size="18" />
             </Label>
 

@@ -15,9 +15,14 @@
         <Rectangle id="rail" width="300" height="1080" color="0x121218" />
         <Rectangle width="1" height="1080" translation="[299, 0]" color="0xFFFFFF" opacity="0.12" />
 
-        <Label translation="[36, 48]" width="228" height="48" text="PLEXFLIX" color="0xE50914">
-            <Font role="font" uri="pkg:/fonts/Outfit-Bold.ttf" size="34" />
-        </Label>
+        <Poster
+            id="brandLogo"
+            translation="[28, 40]"
+            width="244"
+            height="68"
+            loadDisplayMode="scaleToFit"
+            uri="pkg:/images/loading-logo.png"
+        />
 
         <Group id="navItems" translation="[20, 130]" />
 
