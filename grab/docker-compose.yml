@@ -6,36 +6,40 @@ services:
     container_name: plexflix-grab
     restart: unless-stopped
     ports:
+      # Non-arr / non-8080 port so it stays clear of the rest of the stack
       - "8096:8096"
     environment:
       PORT: "8096"
-      # Optional shared secret; set the same value as grabToken in PlexConfig.brs later
+      # Optional shared secret; same value as grabToken in PlexConfig.brs later
       GRAB_TOKEN: ""
 
-      # NZBFinder (Newznab). API key from your NZBFinder account.
+      # NZBFinder
       NZBFINDER_URL: "https://nzbfinder.ws"
       NZBFINDER_API_KEY: ""
 
-      # NZBGet JSON-RPC as reachable FROM this container.
-      # In a shared docker network that is often http://nzbget:6789
-      NZBGET_URL: "http://nzbget:6789"
+      # Everything else on the home server shares one LAN IP. Use that IP from
+      # inside this container too (not localhost, not docker DNS names).
+      # Example: http://192.168.1.50:6789
+      NZBGET_URL: "http://192.168.1.50:6789"
+      # Same ControlUsername / ControlPassword as the NZBGet web GUI login
       NZBGET_USERNAME: ""
       NZBGET_PASSWORD: ""
-      # Force priority (900) jumps the queue and downloads even if NZBGet is paused.
+      # Force (900): jumps the queue; downloads even if NZBGet is paused
       NZBGET_PRIORITY: "900"
-      NZBGET_CATEGORY_MOVIE: "plexflix-movie"
-      NZBGET_CATEGORY_TV: "plexflix-tv"
+      # Prefer dedicated PlexFlix-* categories (same DestDir as Movies/Series).
+      # Until those exist you can set these to "Movies" / "Series".
+      NZBGET_CATEGORY_MOVIE: "PlexFlix-Movies"
+      NZBGET_CATEGORY_TV: "PlexFlix-Series"
 
-      # Release filters for the fast path
       MAX_SIZE_BYTES: "5368709120"   # 5 GiB
       PREFER_RESOLUTION: "1080p"
 
-      # Plex, as reachable FROM this container
-      PLEX_URL: "http://plex:32400"
+      # Plex as a host service on the same LAN IP
+      PLEX_URL: "http://192.168.1.50:32400"
       PLEX_TOKEN: ""
       PLEX_MOVIE_SECTION_ID: ""
       PLEX_TV_SECTION_ID: ""
 
-      # Sonarr (used later for "queue next N episodes"; unused for movie MVP)
-      SONARR_URL: "http://sonarr:8989"
+      # Later: Sonarr queue-next for Start fresh (unused in v1)
+      SONARR_URL: "http://192.168.1.50:8989"
       SONARR_API_KEY: ""

@@ -7,6 +7,9 @@ title you want *right now*.
 Same spirit as `multiview/`: stdlib Python, tiny HTTP API, env-configured, own
 Docker Compose service you can drop into your homelab stack.
 
+**v1 focus:** get a **movie**, or get a **specific TV episode** (including S01E01).
+Sonarr “Start fresh → queue E02–E05” comes later.
+
 ## API
 
 | Method | Path | Purpose |
@@ -21,9 +24,17 @@ Optional auth: set `GRAB_TOKEN` and send header `X-Grab-Token: <token>`.
 ### Start a movie
 
 ```bash
-curl -s -X POST http://127.0.0.1:8096/jobs \
+curl -s -X POST http://192.168.1.50:8096/jobs \
   -H 'Content-Type: application/json' \
   -d '{"mediaType":"movie","title":"Example","year":"2020","tmdbId":"123","imdbId":"tt0000001","guid":"plex://movie/..."}'
+```
+
+### Start a specific episode (or S01E01)
+
+```bash
+curl -s -X POST http://192.168.1.50:8096/jobs \
+  -H 'Content-Type: application/json' \
+  -d '{"mediaType":"episode","title":"Some Show","tmdbId":"456","season":1,"episode":1}'
 ```
 
 ### Status shape
@@ -42,20 +53,6 @@ curl -s -X POST http://127.0.0.1:8096/jobs \
 }
 ```
 
-### Episode (immediate grab only for now)
-
-```json
-{
-  "mediaType": "episode",
-  "title": "Some Show",
-  "tmdbId": "456",
-  "season": 1,
-  "episode": 1
-}
-```
-
-Sonarr “queue next N” / Start fresh wiring is intentionally not in v1.
-
 ## Behaviour
 
 1. Search NZBFinder (IMDB/TMDB preferred).
@@ -65,48 +62,122 @@ Sonarr “queue next N” / Start fresh wiring is intentionally not in v1.
 4. Poll NZBGet groups/history for %.
 5. On success, refresh the configured Plex library section.
 
+## Homelab networking
+
+- Roku is its own IP; **Plex + all Docker containers share one host LAN IP**.
+- Configure grab with that LAN IP for NZBGet / Plex / (later) Sonarr — **not**
+  `localhost`, **not** docker service DNS names.
+- Roku will call `http://<host-lan-ip>:8096` (same idea as `multiviewUrl`).
+- Port **8096** is intentional so it stays off the busy 7878/8989/8080/3000 range.
+
 ## Configure
 
-Copy the env block from `docker-compose.yml`. The important ones:
+1. Copy `.env.example` → `.env` (or edit `docker-compose.yml` env block).
+2. Fill the values below.
 
 | Variable | Meaning |
 |----------|---------|
-| `NZBFINDER_URL` / `NZBFINDER_API_KEY` | Indexer |
-| `NZBGET_URL` / `NZBGET_USERNAME` / `NZBGET_PASSWORD` | As seen **from this container** |
+| `NZBFINDER_URL` / `NZBFINDER_API_KEY` | `https://nzbfinder.ws` + your API key |
+| `NZBGET_URL` | `http://<host-lan-ip>:6789` |
+| `NZBGET_USERNAME` / `NZBGET_PASSWORD` | NZBGet **Control** user/pass (web GUI login) |
 | `NZBGET_PRIORITY` | Default `900` (Force) |
-| `NZBGET_CATEGORY_MOVIE` / `_TV` | Categories whose DestDir lands in your Plex libraries |
-| `MAX_SIZE_BYTES` | Default `5368709120` (5 GiB) |
-| `PLEX_URL` / `PLEX_TOKEN` / `PLEX_MOVIE_SECTION_ID` | Scan trigger |
+| `NZBGET_CATEGORY_MOVIE` / `_TV` | See categories below |
+| `PLEX_URL` / `PLEX_TOKEN` / section IDs | Scan trigger after download |
 | `GRAB_TOKEN` | Optional shared secret for the Roku |
 
-**Do not use `localhost` for NZBGet/Plex from inside Docker** unless they share
-host networking. Prefer the compose service name (`http://nzbget:6789`) on a
-shared network, or the host LAN IP.
+### NZBGet username / password
+
+The JSON-RPC API uses the same **ControlUsername / ControlPassword** as the web UI.
+
+1. Open NZBGet in the browser (`http://<host-lan-ip>:6789`).
+2. Log in with the credentials you already use.
+3. **Settings → Security** (wording varies slightly by NZBGet version):
+   - Note **ControlUsername** and **ControlPassword**
+   - Those go into `NZBGET_USERNAME` / `NZBGET_PASSWORD`
+4. Smoke-test from any machine on the LAN:
+
+```bash
+curl -s -u 'USER:PASS' \
+  -H 'Content-Type: application/json' \
+  --data '{"jsonrpc":"2.0","id":1,"method":"version","params":[]}' \
+  http://192.168.1.50:6789/jsonrpc
+```
+
+You should get a JSON result with the NZBGet version. If that works, grab can auth.
+
+### NZBGet categories (recommended)
+
+You already have **Movies** and **Series** for Radarr/Sonarr. For PlexFlix Force
+grabs, create two more categories that unpack into the **same DestDir** as those:
+
+| Category | DestDir | Why |
+|----------|---------|-----|
+| `PlexFlix-Movies` | same as `Movies` | Same Plex path; visible as a Force grab in NZBGet |
+| `PlexFlix-Series` | same as `Series` | Same for TV episodes |
+
+In NZBGet: **Settings → Categories → Add**, copy DestDir/unpack settings from
+Movies/Series, name them as above.
+
+If you’d rather not add categories yet, set:
+
+```env
+NZBGET_CATEGORY_MOVIE=Movies
+NZBGET_CATEGORY_TV=Series
+```
+
+### Plex section IDs
+
+With your Plex token (same one as the Roku channel is fine):
+
+```bash
+curl -s "http://192.168.1.50:32400/library/sections?X-Plex-Token=YOUR_TOKEN" \
+  | grep -E 'key=|title='
+```
+
+Each `<Directory …>` has a `key` (the section id) and `title` (library name).
+Put the movie library’s `key` in `PLEX_MOVIE_SECTION_ID` and the TV library’s in
+`PLEX_TV_SECTION_ID`.
 
 ## Run on the home server
 
-From the repo root (or merge this service into your existing stack):
-
 ```bash
 cd grab
-# fill env in docker-compose.yml or an .env file
+cp .env.example .env   # then edit
 docker compose up -d --build
+curl -s http://192.168.1.50:8096/healthz
 ```
 
-Roku will eventually call the **host LAN IP** on port `8096` (same pattern as
-`multiviewUrl`), never `localhost`.
+Compose reads `.env` for variable substitution when you reference them; this
+compose file currently inlines env under `environment:` — either paste values
+there or change entries to `${NZBGET_URL}` style once you prefer `.env`-driven
+deploys.
 
 ## Dev / tests
 
 ```bash
 cd grab
-python3 -m unittest discover -s tests -v
+PYTHONPATH=. python3 -m unittest discover -s tests -v
 python3 -m grab.server   # after exporting the env vars
 ```
 
 ## Out of scope (v1)
 
-- Roku UI wiring (`grabUrl` in `PlexConfig.brs`)
-- Sonarr queue-next / Start fresh
+- Roku UI wiring (`grabUrl` / **Grab Now** button in `PlexConfig.brs`)
+- Sonarr Start fresh → queue E02–E05 (and “grab all episodes” signal from Roku)
 - Automatic Filebot-style renaming (rely on NZBGet category DestDir + your
   existing post-processing for now)
+
+## Planned Roku UX (not built yet)
+
+Keep **Add to Watchlist** as-is. On unavailable Discover titles, add a second
+primary action:
+
+| Button | Role |
+|--------|------|
+| **Grab Now** | `POST /jobs` → poll progress on softStatus → flip to Play when `ready` |
+| **Add to Watchlist** | Existing Plex Discover watchlist (save for later, no download) |
+| **Back** | Unchanged |
+
+So watchlist stays the slow/passive path; Grab Now is the fast path. For TV,
+Grab Now can later open a small choice (this episode / start at S01E01) without
+removing watchlist.
