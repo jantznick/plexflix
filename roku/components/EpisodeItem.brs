@@ -3,8 +3,7 @@ sub init()
     m.titleLabel = m.top.findNode("titleLabel")
     m.titleScrim = m.top.findNode("titleScrim")
     m.shadow = m.top.findNode("shadow")
-    m.focusGlow = m.top.findNode("focusGlow")
-    m.focusRing = m.top.findNode("focusRing")
+    m.focusChrome = m.top.findNode("focusChrome")
     m.focusAccent = m.top.findNode("focusAccent")
     m.ringT = m.top.findNode("ringT")
     m.ringB = m.top.findNode("ringB")
@@ -15,6 +14,8 @@ sub init()
     m.watchedBadge = m.top.findNode("watchedBadge")
     m.itemWidth = 320
     m.itemHeight = 180
+    m.focusPad = 8
+    m.ringThick = 4
     setFocused(false)
 end sub
 
@@ -22,65 +23,61 @@ sub onSizeChange()
     if m.top.width > 0 then m.itemWidth = m.top.width
     if m.top.height > 0 then m.itemHeight = m.top.height
 
-    m.still.width = m.itemWidth
-    m.still.height = m.itemHeight
-    m.titleScrim.width = m.itemWidth
-    m.titleScrim.translation = [0, m.itemHeight - 52]
-    m.titleLabel.width = m.itemWidth - 24
-    m.titleLabel.translation = [12, m.itemHeight - 44]
+    pad = m.focusPad
+    thick = m.ringThick
+    contentW = m.itemWidth - pad * 2
+    contentH = m.itemHeight - pad * 2
+    if contentW < 40 then contentW = 40
+    if contentH < 40 then contentH = 40
+
+    m.still.width = contentW
+    m.still.height = contentH
+    m.still.translation = [pad, pad]
+    m.titleScrim.width = contentW
+    m.titleScrim.translation = [pad, pad + contentH - 52]
+    m.titleLabel.width = contentW - 24
+    m.titleLabel.translation = [pad + 12, pad + contentH - 44]
 
     if m.shadow <> invalid then
-        m.shadow.width = m.itemWidth + 16
-        m.shadow.height = m.itemHeight + 12
-        m.shadow.translation = [10, 10]
+        m.shadow.width = contentW
+        m.shadow.height = contentH
+        m.shadow.translation = [pad + 6, pad + 6]
     end if
 
-    pad = 8
-    ringW = m.itemWidth + pad * 2
-    ringH = m.itemHeight + pad * 2
-    if m.focusGlow <> invalid then
-        m.focusGlow.width = ringW
-        m.focusGlow.height = ringH
-        m.focusGlow.translation = [-pad, -pad]
-    end if
-    if m.focusRing <> invalid then
-        m.focusRing.width = ringW
-        m.focusRing.height = ringH
-        m.focusRing.translation = [-pad, -pad]
-    end if
-    if m.focusAccent <> invalid then
-        m.focusAccent.width = ringW
-        m.focusAccent.translation = [-pad, m.itemHeight]
-    end if
     if m.ringT <> invalid then
-        m.ringT.width = ringW
-        m.ringT.height = 4
-        m.ringT.translation = [-pad, -pad]
+        m.ringT.width = m.itemWidth
+        m.ringT.height = thick
+        m.ringT.translation = [0, 0]
     end if
     if m.ringB <> invalid then
-        m.ringB.width = ringW
-        m.ringB.height = 4
-        m.ringB.translation = [-pad, m.itemHeight + pad - 4]
+        m.ringB.width = m.itemWidth
+        m.ringB.height = thick
+        m.ringB.translation = [0, m.itemHeight - thick]
     end if
     if m.ringL <> invalid then
-        m.ringL.width = 4
-        m.ringL.height = ringH
-        m.ringL.translation = [-pad, -pad]
+        m.ringL.width = thick
+        m.ringL.height = m.itemHeight
+        m.ringL.translation = [0, 0]
     end if
     if m.ringR <> invalid then
-        m.ringR.width = 4
-        m.ringR.height = ringH
-        m.ringR.translation = [m.itemWidth + pad - 4, -pad]
+        m.ringR.width = thick
+        m.ringR.height = m.itemHeight
+        m.ringR.translation = [m.itemWidth - thick, 0]
+    end if
+    if m.focusAccent <> invalid then
+        m.focusAccent.width = m.itemWidth
+        m.focusAccent.height = thick
+        m.focusAccent.translation = [0, m.itemHeight - thick * 2]
     end if
 
     barHeight = 8
-    m.progressBg.width = m.itemWidth
-    m.progressBg.translation = [0, m.itemHeight - barHeight]
-    m.progressFg.translation = [0, m.itemHeight - barHeight]
+    m.progressBg.width = contentW
+    m.progressBg.translation = [pad, pad + contentH - barHeight]
+    m.progressFg.translation = [pad, pad + contentH - barHeight]
 
     if m.watchedBadge <> invalid then
         badge = 34
-        m.watchedBadge.translation = [m.itemWidth - badge - 8, 8]
+        m.watchedBadge.translation = [pad + contentW - badge - 8, pad + 8]
     end if
     refreshProgress()
 end sub
@@ -118,9 +115,10 @@ sub refreshProgress()
     if duration > 0 and offset > 0 then
         pct = offset / duration
         if pct > 1 then pct = 1
+        contentW = m.itemWidth - m.focusPad * 2
         m.progressBg.visible = true
         m.progressFg.visible = true
-        m.progressFg.width = m.itemWidth * pct
+        m.progressFg.width = contentW * pct
     else
         m.progressBg.visible = false
         m.progressFg.visible = false
@@ -142,24 +140,18 @@ sub refreshFocusVisual()
 end sub
 
 sub setFocused(focused as Boolean)
-    if m.focusGlow <> invalid then m.focusGlow.visible = focused
-    if m.focusRing <> invalid then m.focusRing.visible = focused
-    if m.focusAccent <> invalid then m.focusAccent.visible = focused
-    if m.ringT <> invalid then m.ringT.visible = focused
-    if m.ringB <> invalid then m.ringB.visible = focused
-    if m.ringL <> invalid then m.ringL.visible = focused
-    if m.ringR <> invalid then m.ringR.visible = focused
+    if m.focusChrome <> invalid then m.focusChrome.visible = focused
     if focused then
         m.still.opacity = 1.0
         if m.shadow <> invalid then
             m.shadow.opacity = 0.7
-            m.shadow.translation = [14, 14]
+            m.shadow.translation = [m.focusPad + 8, m.focusPad + 8]
         end if
     else
         m.still.opacity = 0.78
         if m.shadow <> invalid then
             m.shadow.opacity = 0.4
-            m.shadow.translation = [10, 10]
+            m.shadow.translation = [m.focusPad + 6, m.focusPad + 6]
         end if
     end if
 end sub
