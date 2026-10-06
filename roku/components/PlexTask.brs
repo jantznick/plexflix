@@ -2876,38 +2876,18 @@ function tuneLiveChannel(cfg as Object, item as Object) as Object
     if channelId = "" then return { ok: false, error: "Missing channel id" }
     if item.releaseFirst <> invalid then releaseLiveSession(cfg, item.releaseFirst)
 
-    ' Which id /tune accepts depends on the tuner (guide number, EPG channel
-    ' key, lineup id or the device's own id), so try each until one tunes
-    candidates = [channelId]
-    if item.tuneIds <> invalid and GetInterface(item.tuneIds, "ifArray") <> invalid then
-        for each extraId in item.tuneIds
-            candidates.push(safeToStr(extraId))
-        end for
+    attempt = plexPost(cfg, "/livetv/dvrs/" + dvrId + "/channels/" + requestEncode(channelId) + "/tune", "")
+    failure = tuneFailure(attempt)
+    if failure = "" then
+        live = liveSessionFromTune(cfg, attempt)
+        if live <> invalid then return live
+        ' A subscription with no grab means no free tuner; don't leave it holding one
+        print "[plexflix:livetv] tune "; channelId; " response: "; Left(safeToStr(attempt.body), 600)
+        releaseLiveSession(cfg, { subscriptionId: tunedSubscriptionId(attempt.json) })
+        failure = "No free tuner — another preview or recording is using it"
     end if
-    candidates.push(safeToStr(item.tuneAlt))
-    tried = {}
-    lastError = "Could not tune channel"
-    for each candidate in candidates
-        if candidate <> "" and not tried.DoesExist(candidate) then
-            tried[candidate] = true
-            attempt = plexPost(cfg, "/livetv/dvrs/" + dvrId + "/channels/" + requestEncode(candidate) + "/tune", "")
-            failure = tuneFailure(attempt)
-            if failure = "" then
-                print "[plexflix:livetv] tune "; candidate; " response: "; Left(safeToStr(attempt.body), 600)
-                live = liveSessionFromTune(cfg, attempt)
-                if live <> invalid then
-                    live.tunedAs = candidate
-                    return live
-                end if
-                ' A subscription with no grab means no free tuner; don't leave it holding one
-                releaseLiveSession(cfg, { subscriptionId: tunedSubscriptionId(attempt.json) })
-                failure = "No free tuner — another preview or recording is using it"
-            end if
-            print "[plexflix:livetv] tune "; candidate; " failed: "; failure
-            lastError = failure
-        end if
-    end for
-    return { ok: false, error: lastError }
+    print "[plexflix:livetv] tune "; channelId; " failed: "; failure
+    return { ok: false, error: failure }
 end function
 
 function tunedSubscriptionId(json as Dynamic) as String
@@ -3169,7 +3149,7 @@ function epgProviderId(cfg as Object) as String
 end function
 
 function liveTvContext(cfg as Object) as Object
-    ctx = { dvrId: "", epgId: "", tuneMap: {}, lineupMap: {}, enabled: {}, error: "" }
+    ctx = { dvrId: "", epgId: "", enabled: {}, error: "" }
     dvrs = plexGet(cfg, "/livetv/dvrs")
     if dvrs.ok <> true then
         ctx.error = safeToStr(dvrs.error)
@@ -3179,23 +3159,18 @@ function liveTvContext(cfg as Object) as Object
     dvr = firstDvrNode(dvrs.json)
     if dvr <> invalid then
         ctx.epgId = safeToStr(dvr.epgIdentifier)
-        ' ChannelMapping ties an EPG channel (channelKey) to the tuner's own
-        ' channel number (deviceIdentifier), which is what /tune expects
+        ' ChannelMapping.enabled says which EPG channels (channelKey) the user kept
         for each dev in nodeList(dvr.Device)
             for each mapping in nodeList(dev.ChannelMapping)
                 epgKey = safeToStr(mapping.channelKey)
-                deviceId = safeToStr(mapping.deviceIdentifier)
                 if epgKey <> "" then
-                    if deviceId <> "" then ctx.tuneMap[epgKey] = deviceId
-                    lineupId = safeToStr(mapping.lineupIdentifier)
-                    if lineupId <> "" then ctx.lineupMap[epgKey] = lineupId
                     if mapping.enabled = invalid or truthy(mapping.enabled) then ctx.enabled[epgKey] = true
                 end if
             end for
         end for
     end if
     if ctx.epgId = "" then ctx.epgId = epgProviderId(cfg)
-    print "[plexflix:livetv] dvr="; ctx.dvrId; " epg="; ctx.epgId; " mapped="; ctx.tuneMap.count()
+    print "[plexflix:livetv] dvr="; ctx.dvrId; " epg="; ctx.epgId; " enabled="; ctx.enabled.count()
     return ctx
 end function
 
@@ -3368,8 +3343,6 @@ function fetchLiveTvGrid(cfg as Object, params as Dynamic) as Object
     if params = invalid then params = {}
     dvrId = safeToStr(params.dvrId)
     epgId = safeToStr(params.epgId)
-    tuneMap = params.tuneMap
-    lineupMap = params.lineupMap
     enabled = params.enabled
     fresh = truthy(params.fresh) or dvrId = ""
 
@@ -3377,8 +3350,6 @@ function fetchLiveTvGrid(cfg as Object, params as Dynamic) as Object
         ctx = liveTvContext(cfg)
         dvrId = ctx.dvrId
         epgId = ctx.epgId
-        tuneMap = ctx.tuneMap
-        lineupMap = ctx.lineupMap
         enabled = ctx.enabled
         if dvrId = "" then
             err = "No DVR configured on this Plex server"
@@ -3386,8 +3357,6 @@ function fetchLiveTvGrid(cfg as Object, params as Dynamic) as Object
             return { ok: false, error: err }
         end if
     end if
-    if tuneMap = invalid then tuneMap = {}
-    if lineupMap = invalid then lineupMap = {}
     if enabled = invalid then enabled = {}
 
     nowSec = CreateObject("roDateTime").AsSeconds()
@@ -3420,9 +3389,8 @@ function fetchLiveTvGrid(cfg as Object, params as Dynamic) as Object
         if ck <> "" then
             if not byKey.DoesExist(ck) then
                 number = air.channelVcn
-                tuneIds = [air.channelId, number]
-                if air.channelId <> "" and lineupMap.DoesExist(air.channelId) then tuneIds.push(lineupMap[air.channelId])
-                if air.channelId <> "" and tuneMap.DoesExist(air.channelId) then tuneIds.push(tuneMap[air.channelId])
+                ' /tune takes the EPG channel identifier, not the guide number
+                ' or the tuner's own id from ChannelMapping
                 tuneId = air.channelId
                 if tuneId = "" then tuneId = number
                 name = air.channelTitle
@@ -3438,7 +3406,6 @@ function fetchLiveTvGrid(cfg as Object, params as Dynamic) as Object
                     logo: imageUrl(cfg, air.channelThumb, 160, 90),
                     tuneId: tuneId,
                     tuneAlt: air.channelId,
-                    tuneIds: tuneIds,
                     programs: []
                 }
                 order.push(ck)
@@ -3528,8 +3495,6 @@ function fetchLiveTvGrid(cfg as Object, params as Dynamic) as Object
         source: source,
         dvrId: dvrId,
         epgId: epgId,
-        tuneMap: tuneMap,
-        lineupMap: lineupMap,
         enabled: enabled,
         startAt: startAt,
         endAt: endAt,

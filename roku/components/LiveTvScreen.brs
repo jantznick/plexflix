@@ -370,7 +370,7 @@ sub onGuideLoaded()
         return
     end if
 
-    m.ctx = { dvrId: response.dvrId, epgId: response.epgId, tuneMap: response.tuneMap, lineupMap: response.lineupMap, enabled: response.enabled }
+    m.ctx = { dvrId: response.dvrId, epgId: response.epgId, enabled: response.enabled }
     m.loadedStart = response.startAt
     m.loadedEnd = response.endAt
     m.channels = []
@@ -411,8 +411,6 @@ sub maybeLoadMore()
     m.moreTask.item = {
         dvrId: m.ctx.dvrId,
         epgId: m.ctx.epgId,
-        tuneMap: m.ctx.tuneMap,
-        lineupMap: m.ctx.lineupMap,
         enabled: m.ctx.enabled,
         startAt: m.loadedEnd,
         endAt: m.loadedEnd + m.chunkLen
@@ -973,7 +971,7 @@ sub onTunePreview()
     m.previewTask = createObject("roSGNode", "PlexTask")
     m.previewTask.config = m.top.config
     m.previewTask.action = "tuneLiveChannel"
-    m.previewTask.item = { dvrId: m.ctx.dvrId, channelId: ch.tuneId, tuneAlt: ch.tuneAlt, tuneIds: ch.tuneIds, releaseFirst: takeOwnedLive(ch.key) }
+    m.previewTask.item = { dvrId: m.ctx.dvrId, channelId: ch.tuneId, tuneAlt: ch.tuneAlt, releaseFirst: takeOwnedLive(ch.key) }
     m.previewTask.observeField("response", "onPreviewReady")
     m.previewTask.control = "RUN"
 end sub
@@ -1428,7 +1426,7 @@ sub watchChannel(ch as Object, p as Dynamic)
         m.watchTask = createObject("roSGNode", "PlexTask")
         m.watchTask.config = m.top.config
         m.watchTask.action = "tuneLiveChannel"
-        m.watchTask.item = { dvrId: m.ctx.dvrId, channelId: ch.tuneId, tuneAlt: ch.tuneAlt, tuneIds: ch.tuneIds, releaseFirst: takeOwnedLive(ch.key) }
+        m.watchTask.item = { dvrId: m.ctx.dvrId, channelId: ch.tuneId, tuneAlt: ch.tuneAlt, releaseFirst: takeOwnedLive(ch.key) }
         m.watchTask.observeField("response", "onWatchTuned")
         m.watchTask.control = "RUN"
         return
@@ -1470,7 +1468,6 @@ sub launchWatch(ch as Object, p as Dynamic, url as String)
         key: "",
         channelId: ch.tuneId,
         tuneAlt: ch.tuneAlt,
-        tuneIds: ch.tuneIds,
         dvrId: m.ctx.dvrId,
         streamUrl: url,
         streamFormat: "hls",
