@@ -36,17 +36,22 @@
             notificationInterval="1"
         />
 
+        <!-- Grows downward into the spinner's space, which is only ever used for
+             error detail, and by then the spinner has been stopped -->
         <Label
             id="statusLabel"
             width="1920"
-            height="60"
+            height="200"
             translation="[0, 500]"
             horizAlign="center"
+            wrap="true"
+            maxLines="5"
             color="0xFFFFFF"
             font="font:MediumSystemFont"
             text="Starting playback..."
         />
-        <BusySpinner id="spinner" translation="[920, 580]" uri="pkg:/images/spinner.png" visible="false" />
+        <!-- 912 = (1920 - 96) / 2, so the spinner shares the status label's axis -->
+        <BusySpinner id="spinner" translation="[912, 580]" uri="pkg:/images/spinner.png" visible="false" />
 
         <Group id="controls" visible="false" opacity="0">
             <Poster
@@ -146,7 +151,7 @@
             <Label id="castModalKnownFor" translation="[604, 642]" width="968" height="32" color="0x9A9AA4">
                 <Font role="font" uri="pkg:/fonts/Outfit-Medium.ttf" size="22" />
             </Label>
-            <BusySpinner id="castModalSpinner" translation="[940, 520]" uri="pkg:/images/spinner.png" visible="false" />
+            <BusySpinner id="castModalSpinner" translation="[912, 520]" uri="pkg:/images/spinner.png" visible="false" />
         </Group>
     </children>
 </component>

@@ -52,7 +52,7 @@
             <Font role="font" uri="pkg:/fonts/Outfit-Medium.ttf" size="28" />
         </Label>
 
-        <BusySpinner id="spinner" translation="[920, 520]" uri="pkg:/images/spinner.png" visible="false" />
+        <BusySpinner id="spinner" translation="[912, 520]" uri="pkg:/images/spinner.png" visible="false" />
 
         <Group id="filterPanel" visible="false">
             <Rectangle width="1920" height="1080" color="0x000000" opacity="0.72" />
