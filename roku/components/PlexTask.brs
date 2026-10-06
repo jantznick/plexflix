@@ -11,6 +11,8 @@ sub exec()
         m.top.response = buildHome(cfg)
     else if action = "resolvePlayable" then
         m.top.response = resolvePlayable(cfg, m.top.item)
+    else if action = "randomEpisode" then
+        m.top.response = fetchRandomEpisode(cfg, m.top.item)
     else if action = "children" then
         m.top.response = fetchChildren(cfg, m.top.item)
     else if action = "extras" then
@@ -1166,6 +1168,32 @@ function resolvePlayable(cfg as Object, item as Object) as Object
     end if
 
     return { ok: false, error: "Could not find a playable episode" }
+end function
+
+function fetchRandomEpisode(cfg as Object, item as Object) as Object
+    if item = invalid then return { ok: false, error: "No item" }
+
+    ratingKey = safeToStr(item.ratingKey)
+    if ratingKey = "" then return { ok: false, error: "Missing show key" }
+
+    mediaType = safeToStr(item.mediaType)
+    path = "/library/metadata/" + ratingKey + "/allLeaves"
+    if mediaType = "season" then path = "/library/metadata/" + ratingKey + "/children"
+
+    result = plexGet(cfg, path)
+    if result.ok <> true then
+        err = "Could not load episodes"
+        if result.error <> invalid then err = result.error
+        return { ok: false, error: err }
+    end if
+
+    episodes = collectMetadata(cfg, result.json)
+    if episodes.count() = 0 then return { ok: false, error: "No episodes to shuffle" }
+
+    ' Seed once, then pick 1..count
+    seed = Rnd(0)
+    pick = episodes[Rnd(episodes.count()) - 1]
+    return { ok: true, item: pick }
 end function
 
 ' includeOnDeck makes the server pick the next episode: the part-watched one if

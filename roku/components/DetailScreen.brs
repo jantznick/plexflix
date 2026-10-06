@@ -8,8 +8,10 @@ sub init()
     m.movieActions = m.top.findNode("movieActions")
     m.playBtn = m.top.findNode("playBtn")
     m.backBtn = m.top.findNode("backBtn")
+    m.randomBtn = m.top.findNode("randomBtn")
     m.playBg = m.top.findNode("playBg")
     m.backBg = m.top.findNode("backBg")
+    m.randomBg = m.top.findNode("randomBg")
     m.playLabel = m.top.findNode("playLabel")
     m.unavailablePanel = m.top.findNode("unavailablePanel")
     m.unavailableBody = m.top.findNode("unavailableBody")
@@ -220,6 +222,7 @@ sub showTvMode()
     if m.unavailablePanel <> invalid then m.unavailablePanel.visible = false
     if m.playBtn <> invalid then m.playBtn.visible = true
     if m.backBtn <> invalid then m.backBtn.translation = [248, 0]
+    if m.randomBtn <> invalid then m.randomBtn.visible = true
     m.movieActions.translation = [248, 240]
     if m.softStatus <> invalid then m.softStatus.translation = [248, 346]
     if m.relatedPanel <> invalid then m.relatedPanel.translation = [0, 400]
@@ -243,6 +246,7 @@ sub showMovieMode()
     if m.unavailablePanel <> invalid then m.unavailablePanel.visible = false
     if m.playBtn <> invalid then m.playBtn.visible = true
     if m.backBtn <> invalid then m.backBtn.translation = [248, 0]
+    if m.randomBtn <> invalid then m.randomBtn.visible = false
     m.movieActions.translation = [248, 240]
     if m.softStatus <> invalid then m.softStatus.translation = [248, 346]
     if m.relatedPanel <> invalid then m.relatedPanel.translation = [0, 400]
@@ -270,6 +274,7 @@ sub showUnavailableMode(item as Object)
     m.relatedPanel.visible = false
     m.movieActions.visible = true
     if m.playBtn <> invalid then m.playBtn.visible = false
+    if m.randomBtn <> invalid then m.randomBtn.visible = false
     if m.backBtn <> invalid then m.backBtn.translation = [0, 0]
     m.movieActions.translation = [248, 348]
     if m.softStatus <> invalid then m.softStatus.translation = [248, 420]
@@ -780,22 +785,39 @@ sub updateMovieButtonFocus()
     if m.isUnavailable = true then
         ' Only Back is actionable
         m.focusIndex = 1
-        m.backBg.color = "0xE50914"
-        if m.top.findNode("backShadow") <> invalid then m.top.findNode("backShadow").opacity = 0.5
-        return
-    end if
-    if m.focusIndex = 0 then
-        m.playBg.color = "0xE50914"
-        m.backBg.color = "0x2A2A32"
-        if m.top.findNode("playShadow") <> invalid then m.top.findNode("playShadow").opacity = 0.5
-        if m.top.findNode("backShadow") <> invalid then m.top.findNode("backShadow").opacity = 0.0
-    else
         m.playBg.color = "0x2A2A32"
         m.backBg.color = "0xE50914"
+        if m.randomBg <> invalid then m.randomBg.color = "0x2A2A32"
         if m.top.findNode("playShadow") <> invalid then m.top.findNode("playShadow").opacity = 0.0
         if m.top.findNode("backShadow") <> invalid then m.top.findNode("backShadow").opacity = 0.5
+        if m.top.findNode("randomShadow") <> invalid then m.top.findNode("randomShadow").opacity = 0.0
+        return
+    end if
+
+    m.playBg.color = "0x2A2A32"
+    m.backBg.color = "0x2A2A32"
+    if m.randomBg <> invalid then m.randomBg.color = "0x2A2A32"
+    if m.top.findNode("playShadow") <> invalid then m.top.findNode("playShadow").opacity = 0.0
+    if m.top.findNode("backShadow") <> invalid then m.top.findNode("backShadow").opacity = 0.0
+    if m.top.findNode("randomShadow") <> invalid then m.top.findNode("randomShadow").opacity = 0.0
+
+    if m.focusIndex = 0 then
+        m.playBg.color = "0xE50914"
+        if m.top.findNode("playShadow") <> invalid then m.top.findNode("playShadow").opacity = 0.5
+    else if m.focusIndex = 1 then
+        m.backBg.color = "0xE50914"
+        if m.top.findNode("backShadow") <> invalid then m.top.findNode("backShadow").opacity = 0.5
+    else
+        if m.randomBg <> invalid then m.randomBg.color = "0xE50914"
+        if m.top.findNode("randomShadow") <> invalid then m.top.findNode("randomShadow").opacity = 0.5
     end if
 end sub
+
+function actionButtonCount() as Integer
+    if m.isUnavailable = true then return 2
+    if m.isShow = true and m.randomBtn <> invalid and m.randomBtn.visible = true then return 3
+    return 2
+end function
 
 sub focusActionButtons()
     m.focusIndex = 0
@@ -848,6 +870,33 @@ sub requestMoviePlay()
     m.top.playRequested = item
 end sub
 
+sub requestRandomEpisode()
+    if m.isUnavailable = true then return
+    if m.isShow <> true then return
+    item = m.top.content
+    if item = invalid then return
+
+    if m.softStatus <> invalid then m.softStatus.text = "Picking a random episode…"
+    m.randomTask = createObject("roSGNode", "PlexTask")
+    m.randomTask.config = m.top.config
+    m.randomTask.action = "randomEpisode"
+    m.randomTask.item = item
+    m.randomTask.observeField("response", "onRandomEpisodeReady")
+    m.randomTask.control = "RUN"
+end sub
+
+sub onRandomEpisodeReady()
+    response = m.randomTask.response
+    if m.softStatus <> invalid then m.softStatus.text = ""
+    if response = invalid or response.ok <> true or response.item = invalid then
+        err = "Couldn't pick a random episode"
+        if response <> invalid and response.error <> invalid then err = response.error
+        if m.softStatus <> invalid then m.softStatus.text = err
+        return
+    end if
+    m.top.playRequested = response.item
+end sub
+
 function onKeyEvent(key as String, press as Boolean) as Boolean
     if not press then return false
 
@@ -856,17 +905,20 @@ function onKeyEvent(key as String, press as Boolean) as Boolean
         return true
     end if
 
-    ' Shared Play / Back button row (movies + shows)
+    ' Shared Play / Back / Random button row (movies + shows)
     if m.relatedRows.hasFocus() or m.seasonRows.hasFocus() then
         return false
     end if
 
     if key = "left" or key = "right"
         if m.isUnavailable = true then return true
-        if m.focusIndex = 0 then
-            m.focusIndex = 1
+        count = actionButtonCount()
+        if key = "right" then
+            m.focusIndex = m.focusIndex + 1
+            if m.focusIndex >= count then m.focusIndex = 0
         else
-            m.focusIndex = 0
+            m.focusIndex = m.focusIndex - 1
+            if m.focusIndex < 0 then m.focusIndex = count - 1
         end if
         updateMovieButtonFocus()
         return true
@@ -887,8 +939,10 @@ function onKeyEvent(key as String, press as Boolean) as Boolean
         end if
         if m.focusIndex = 0 then
             requestMoviePlay()
-        else
+        else if m.focusIndex = 1 then
             m.top.closed = true
+        else
+            requestRandomEpisode()
         end if
         return true
     else if key = "play"

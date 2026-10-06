@@ -15,6 +15,7 @@ This is intentionally a **design/UX shell** on top of existing Plex data. Creden
 - Home shelves require **15–30** items (except Continue Watching) and **loop** horizontally
 - Continue Watching episodes open the parent show with that episode focused
 - Title detail screen (Cast + More Like This) with larger hero art
+- **Random** on TV show detail picks a random episode (hidden for movies)
 - Cast pages: bio, birthday/place, Movies + TV filmography (TMDB when configured)
 - **Watched state from Plex**: a tick on finished titles, a remaining-episode count
   on part-watched shows, and a resume bar on anything started
