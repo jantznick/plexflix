@@ -34,7 +34,6 @@ sub init()
     m.menuAccent = m.top.findNode("menuAccent")
     m.menuTitle = m.top.findNode("menuTitle")
     m.menuSub = m.top.findNode("menuSub")
-    m.menuFocus = m.top.findNode("menuFocus")
     m.menuList = m.top.findNode("menuList")
     m.toast = m.top.findNode("toast")
     m.toastLabel = m.top.findNode("toastLabel")
@@ -97,7 +96,6 @@ sub init()
     m.dvrList.observeField("escapeUp", "onDvrEscapeUp")
     m.dvrList.observeField("escapeLeft", "onEscapeToMenu")
     m.dvrList.observeField("escapeBack", "onEscapeToMenu")
-    m.menuList.observeField("itemFocused", "onMenuFocused")
     m.menuList.observeField("itemSelected", "onMenuSelected")
 
     m.tuneTimer = createObject("roSGNode", "Timer")
@@ -1155,10 +1153,42 @@ sub openRuleEditor(rule as Object)
     for each setting in nodeListOf(rule.settings)
         values[setting.id] = setting.value
     end for
-    m.ruleEdit = { rule: rule, values: values }
+    m.ruleEdit = { rule: rule, values: values, loading: false }
     subParts = [rule.typeLabel]
     if valueOr(rule.library, "") <> "" then subParts.push("Saves to " + rule.library)
+    if nodeListOf(rule.settings).count() = 0 and valueOr(rule.guid, "") <> "" then
+        m.ruleEdit.loading = true
+        m.ruleTask = createObject("roSGNode", "PlexTask")
+        m.ruleTask.config = m.top.config
+        m.ruleTask.action = "ruleSettings"
+        m.ruleTask.item = { guid: rule.guid, type: rule.type, subscriptionId: rule.id }
+        m.ruleTask.observeField("response", "onRuleSettings")
+        m.ruleTask.control = "RUN"
+    end if
     openActionMenu(rule.title, joinStrings(subParts, "  ·  "), ruleActions())
+end sub
+
+sub onRuleSettings()
+    if m.ruleEdit = invalid or m.zone <> "menu" then return
+    response = m.ruleTask.response
+    m.ruleEdit.loading = false
+    if response <> invalid and response.ok = true then
+        m.ruleEdit.rule.settings = response.settings
+        for each setting in nodeListOf(response.settings)
+            m.ruleEdit.values[setting.id] = setting.value
+        end for
+    end if
+    setMenuActions(ruleActions())
+end sub
+
+sub editRuleById(id as String)
+    for each rule in m.schedule.rules
+        if rule.id = id then
+            openRuleEditor(rule)
+            return
+        end if
+    end for
+    showToast("Rule not found — try again in a moment")
 end sub
 
 function nodeListOf(value as Dynamic) as Object
@@ -1182,6 +1212,7 @@ function ruleActions() as Object
         choice = setting.choices[choiceIndex(setting, m.ruleEdit.values[setting.id])]
         actions.push({ label: setting.label + ":  " + choice.label, act: "cycle", data: i })
     end for
+    if m.ruleEdit.loading = true then actions.push({ label: "Loading settings…", act: "none" })
     if settings.count() > 0 then actions.push({ label: "Save changes", act: "saveRule" })
     actions.push({ label: "Delete rule", act: "cancel", data: { subscriptionId: m.ruleEdit.rule.id, done: "Rule deleted" } })
     actions.push({ label: "Close", act: "close" })
@@ -1435,7 +1466,7 @@ sub setMenuActions(actions as Object)
     root = createObject("roSGNode", "ContentNode")
     for each action in actions
         item = root.createChild("ContentNode")
-        item.title = action.label
+        item.title = "   " + action.label
     end for
     m.menuList.content = root
     rows = actions.count()
@@ -1448,15 +1479,7 @@ sub setMenuActions(actions as Object)
     m.menuTitle.translation = [608, y + 36]
     m.menuSub.translation = [608, y + 92]
     m.menuListY = y + 152
-    m.menuList.translation = [608, m.menuListY]
-    onMenuFocused()
-end sub
-
-sub onMenuFocused()
-    idx = m.menuList.itemFocused
-    if idx = invalid or idx < 0 then idx = 0
-    if m.menuListY = invalid then m.menuListY = 412
-    m.menuFocus.translation = [592, m.menuListY + idx * 72]
+    m.menuList.translation = [592, m.menuListY]
 end sub
 
 sub closeActionMenu()

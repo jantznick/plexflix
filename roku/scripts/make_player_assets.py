@@ -155,6 +155,28 @@ def make_focus_ring(size=32, thick=4, corner=8):
     write_png(os.path.join(IMAGES, "focus_ring.9.png"), full, full, pixels)
 
 
+def make_menu_focus(size=16, inset=4):
+    """Solid 9-patch fill for LabelList focus, so the highlight follows scrolling."""
+    full = size + 2
+    clear = (0, 0, 0, 0)
+    marker = (0, 0, 0, 255)
+    fill = (237, 240, 245, 255)
+    pixels = []
+    for y in range(full):
+        for x in range(full):
+            edge_x = x in (0, full - 1)
+            edge_y = y in (0, full - 1)
+            if edge_x and edge_y:
+                pixels.append(clear)
+            elif edge_y:
+                pixels.append(marker if inset < x <= size - inset else clear)
+            elif edge_x:
+                pixels.append(marker if inset < y <= size - inset else clear)
+            else:
+                pixels.append(fill)
+    write_png(os.path.join(IMAGES, "menu_focus.9.png"), full, full, pixels)
+
+
 def rect_strokes(x0, y0, x1, y1):
     return [((x0, y0), (x1, y0)), ((x1, y0), (x1, y1)), ((x1, y1), (x0, y1)), ((x0, y1), (x0, y0))]
 
@@ -240,3 +262,4 @@ if __name__ == "__main__":
     make_focus_ring()
     make_nav_icons()
     make_guide_fades()
+    make_menu_focus()

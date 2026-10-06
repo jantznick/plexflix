@@ -45,6 +45,8 @@ sub exec()
         m.top.response = createRecording(cfg, m.top.item)
     else if action = "recordCancel" then
         m.top.response = cancelRecording(cfg, m.top.item)
+    else if action = "ruleSettings" then
+        m.top.response = fetchRuleSettings(cfg, m.top.item)
     else if action = "ruleUpdate" then
         m.top.response = updateRecordingRule(cfg, m.top.item)
     else if action = "tuneLiveChannel" then
@@ -3445,6 +3447,7 @@ function fetchDvrSchedule(cfg as Object) as Object
                 summary: summary,
                 settings: ruleSettings(subNode)
             })
+            logSettings(id, subNode)
             for each grab in grabs
                 item = grabToUpcoming(cfg, grab, id, subType)
                 if item <> invalid then upcoming.push(item)
@@ -3499,12 +3502,59 @@ function ruleSettings(subNode as Object) as Object
                 else
                     choices = [{ value: "true", label: "Yes" }, { value: "false", label: "No" }]
                 end if
+            else if LCase(safeToStr(setting.type)) = "int" then
+                lowerId = LCase(prefId)
+                ' Padding prefs (startOffsetMinutes / endOffsetMinutes) ship without enumValues
+                if Instr(1, lowerId, "offset") > 0 or Instr(1, lowerId, "minutes") > 0 then
+                    hasCurrent = false
+                    for each n in [0, 1, 2, 3, 5, 10, 15, 20, 30, 45, 60]
+                        text = StrI(n).Trim()
+                        if text = value then hasCurrent = true
+                        choices.push({ value: text, label: text + " min" })
+                    end for
+                    if not hasCurrent and value <> "" then choices.push({ value: value, label: value + " min" })
+                end if
             end if
             if choices.count() > 1 then out.push({ id: prefId, label: label, value: value, choices: choices })
         end if
     end for
     return out
 end function
+
+' Rules listed without their prefs: the subscription template for the same
+' guid carries the full Setting list (labels, enums, defaults)
+function fetchRuleSettings(cfg as Object, item as Object) as Object
+    guid = ""
+    if item <> invalid then guid = safeToStr(item.guid)
+    if guid = "" then return { ok: false, error: "This rule has no editable settings" }
+    res = plexGet(cfg, "/media/subscriptions/template?guid=" + requestEncode(guid))
+    if res.ok <> true then return res
+    if res.json = invalid or res.json.MediaContainer = invalid then return { ok: false, error: "Plex returned no rule settings" }
+    wanted = intOrZero(item.type)
+    best = invalid
+    for each tpl in nodeList(res.json.MediaContainer.SubscriptionTemplate)
+        for each subNode in nodeList(tpl.MediaSubscription)
+            if best = invalid or intOrZero(subNode.type) = wanted then best = subNode
+        end for
+    end for
+    if best = invalid then return { ok: false, error: "Plex returned no rule settings" }
+    settings = ruleSettings(best)
+    logSettings(safeToStr(item.subscriptionId) + " (template)", best)
+    return { ok: true, settings: settings }
+end function
+
+sub logSettings(label as String, subNode as Object)
+    ids = []
+    for each setting in nodeList(subNode.Setting)
+        ids.push(safeToStr(setting.id) + "=" + safeToStr(setting.value) + "[" + safeToStr(setting.type) + "]")
+    end for
+    text = ""
+    for each part in ids
+        if text <> "" then text = text + ", "
+        text = text + part
+    end for
+    print "[plexflix:dvr] rule "; label; " settings: "; text
+end sub
 
 function updateRecordingRule(cfg as Object, item as Object) as Object
     id = ""

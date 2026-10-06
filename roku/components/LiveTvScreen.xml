@@ -118,15 +118,14 @@
             <Label id="menuSub" translation="[608, 352]" width="704" height="36" color="0x8FA0B8" wrap="false" text="">
                 <Font role="font" uri="pkg:/fonts/Outfit-Medium.ttf" size="26" />
             </Label>
-            <Rectangle id="menuFocus" translation="[592, 412]" width="736" height="64" color="0xEDF0F5" />
             <LabelList
                 id="menuList"
-                translation="[608, 412]"
-                itemSize="[704, 64]"
+                translation="[592, 412]"
+                itemSize="[736, 64]"
                 itemSpacing="[0, 8]"
                 numRows="9"
                 vertFocusAnimationStyle="floatingFocus"
-                drawFocusFeedback="false"
+                focusBitmapUri="pkg:/images/menu_focus.9.png"
                 color="0xC5CCD8"
                 focusedColor="0x0A0E18"
             >
