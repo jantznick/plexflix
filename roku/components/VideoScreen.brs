@@ -3,6 +3,9 @@ sub init()
     m.statusLabel = m.top.findNode("statusLabel")
     m.spinner = m.top.findNode("spinner")
     PinSpinner(m.spinner)
+    m.bufferTrack = m.top.findNode("bufferTrack")
+    m.bufferFill = m.top.findNode("bufferFill")
+    m.lastBufferPct = -1
 
     m.controls = m.top.findNode("controls")
     m.scrim = m.top.findNode("scrim")
@@ -49,6 +52,8 @@ sub init()
     m.seekTimer.observeField("fire", "onSeekCommit")
     m.reportTimer = m.top.findNode("reportTimer")
     m.reportTimer.observeField("fire", "onReportTimer")
+    m.stallTimer = m.top.findNode("stallTimer")
+    m.stallTimer.observeField("fire", "onStallTimer")
 
     m.trackWidth = m.track.width
 
@@ -58,6 +63,7 @@ sub init()
 
     m.item = invalid
     m.isLive = false
+    m.isSport = false
     m.duration = 0
     m.position = 0
     m.resumeAt = 0
@@ -99,6 +105,7 @@ sub init()
     m.video.focusable = false
     m.video.observeField("state", "onVideoState")
     m.video.observeField("position", "onPositionChange")
+    m.video.observeField("bufferingStatus", "onBufferingStatus")
     m.top.observeField("focusedChild", "onFocusedChild")
 end sub
 
@@ -122,6 +129,7 @@ sub onContentSet()
     if item.streamUrl <> invalid then directUrl = valueOrEmpty(item.streamUrl)
     if directUrl = "" and mediaType = "sport" then directUrl = valueOrEmpty(item.key)
     m.isLive = (mediaType = "livetv" or (directUrl <> "" and Left(directUrl, 4) = "http"))
+    m.isSport = (mediaType = "sport")
 
     paintMeta()
     setStatus("Preparing " + valueOrEmpty(item.title) + "...")
@@ -185,6 +193,7 @@ sub playDirect(url as String, item as Object)
     m.video.content = contentNode
     m.video.control = "play"
     clearStatus()
+    restartStallTimer()
     ensurePlayerFocus()
 end sub
 
@@ -214,6 +223,7 @@ sub onStreamReady()
     m.video.content = contentNode
     m.video.control = "play"
     clearStatus()
+    restartStallTimer()
     ensurePlayerFocus()
 end sub
 
@@ -248,6 +258,8 @@ sub onVideoState()
         ensurePlayerFocus()
     end if
 
+    if state = "playing" or state = "paused" then m.stallTimer.control = "stop"
+
     if state = "playing" then
         m.started = true
         m.paused = false
@@ -258,6 +270,7 @@ sub onVideoState()
         if m.zone <> "hidden" and m.zone <> "picker" and m.zone <> "castModal" then restartHideTimer()
     else if state = "paused" then
         m.paused = true
+        clearStatus()
         paintButtons()
         reportProgress("paused")
         m.hideTimer.control = "stop"
@@ -265,12 +278,14 @@ sub onVideoState()
         ' came from opening the cast modal, which owns the screen already
         if m.zone <> "castModal" then showControls(activeZone())
     else if state = "buffering" then
-        if not m.started then setStatus("Buffering...")
+        m.lastBufferPct = -1
+        showBuffering(bufferPercent())
+        restartStallTimer()
     else if state = "error" then
         m.reportTimer.control = "stop"
+        m.stallTimer.control = "stop"
         sendPlaybackActions([releaseAction()])
-        showPlaybackError("Playback failed")
-        ensurePlayerFocus()
+        failStream("Playback failed")
     else if state = "finished" then
         m.reportTimer.control = "stop"
         if playedToEnd() then
@@ -280,11 +295,97 @@ sub onVideoState()
             ' Finishing without having played is a failure, not a completed
             ' title. Closing here would hide the reason, and scrobbling would
             ' mark something watched that never rendered a frame.
+            m.stallTimer.control = "stop"
             sendPlaybackActions([releaseAction()])
-            showPlaybackError("Stream ended before it played")
-            ensurePlayerFocus()
+            failStream("Stream ended before it played")
         end if
     end if
+end sub
+
+' The same 0-100 figure Roku's stock player shows as "Loading X%"
+function bufferPercent() as Integer
+    status = m.video.bufferingStatus
+    if status = invalid or status.percentage = invalid then return -1
+    return numberOf(status.percentage)
+end function
+
+sub onBufferingStatus()
+    if m.video.state <> "buffering" then return
+    pct = bufferPercent()
+    if pct = m.lastBufferPct then return
+    m.lastBufferPct = pct
+    showBuffering(pct)
+    ' Progress, however slow, means the stream is alive
+    restartStallTimer()
+end sub
+
+sub showBuffering(pct as Integer)
+    text = "Buffering..."
+    if pct >= 0 then text = "Buffering " + StrI(pct).Trim() + "%"
+
+    if m.spinner.visible then
+        m.statusLabel.visible = true
+        m.statusLabel.text = text
+    else
+        setStatus(text)
+    end if
+
+    if pct < 0 then pct = 0
+    if pct > 100 then pct = 100
+    m.bufferFill.width = m.bufferTrack.width * pct / 100
+    m.bufferTrack.visible = true
+    m.bufferFill.visible = true
+end sub
+
+sub hideBuffer()
+    m.bufferTrack.visible = false
+    m.bufferFill.visible = false
+    m.bufferFill.width = 0
+end sub
+
+' On-demand titles can legitimately take a while to transcode, so only live
+' streams are given up on
+sub restartStallTimer()
+    if not m.isLive then return
+    m.stallTimer.control = "stop"
+    m.stallTimer.control = "start"
+end sub
+
+sub onStallTimer()
+    state = m.video.state
+    if state = "playing" or state = "paused" then return
+    m.reportTimer.control = "stop"
+    if m.started then
+        failStream("Stream stopped responding")
+    else
+        failStream("Stream didn't start")
+    end if
+end sub
+
+' Sports have a game page with other streams to try, so a dead stream goes
+' straight back there; everything else explains itself in place
+sub failStream(reason as String)
+    if not m.isSport then
+        showPlaybackError(reason)
+        ensurePlayerFocus()
+        return
+    end if
+
+    ' The stop below fires its own state change, and an error is often followed
+    ' by "finished" too; only the first failure gets to close the screen
+    if m.top.failure <> "" then return
+
+    detail = videoErrorDetail()
+    message = reason
+    if detail <> "" then message = message + " (" + detail + ")"
+    logPlayback("ERROR " + message)
+
+    m.stallTimer.control = "stop"
+    m.hideTimer.control = "stop"
+    m.seekTimer.control = "stop"
+    m.video.control = "stop"
+    m.top.failure = message
+    m.top.closed = true
 end sub
 
 ' Plex's own clients treat the last tenth as "watched", and anything short of
@@ -304,6 +405,7 @@ sub showPlaybackError(reason as String)
     hideControls()
     m.spinner.control = "stop"
     m.spinner.visible = false
+    hideBuffer()
     m.statusLabel.visible = true
     m.statusLabel.text = message + Chr(10) + "Press Back to return"
 end sub
@@ -1475,6 +1577,7 @@ sub stopAndClose()
     m.reportTimer.control = "stop"
     m.hideTimer.control = "stop"
     m.seekTimer.control = "stop"
+    m.stallTimer.control = "stop"
     sendPlaybackActions([timelineAction("stopped"), releaseAction()])
     if m.video <> invalid then m.video.control = "stop"
     m.top.closed = true
@@ -1497,6 +1600,7 @@ sub clearStatus()
     m.statusLabel.visible = false
     m.spinner.control = "stop"
     m.spinner.visible = false
+    hideBuffer()
 end sub
 
 function newSessionId() as String

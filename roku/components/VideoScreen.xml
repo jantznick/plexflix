@@ -9,6 +9,9 @@
              ones fire as this screen is torn down and a Task owned by a node
              that is going away can be collected before it finishes -->
         <field id="playbackReport" type="assocarray" alwaysNotify="true" />
+        <!-- Why a sports stream gave up, set just before closed so the game
+             page can say so instead of the player stranding the viewer -->
+        <field id="failure" type="string" />
     </interface>
 
     <script type="text/brightscript" uri="VideoScreen.brs" />
@@ -18,6 +21,9 @@
         <Timer id="hideTimer" duration="5" repeat="false" />
         <Timer id="seekTimer" duration="0.7" repeat="false" />
         <Timer id="reportTimer" duration="10" repeat="true" />
+        <!-- Live streams that never start usually sit in buffering forever
+             rather than erroring; restarted on every bit of buffer progress -->
+        <Timer id="stallTimer" duration="30" repeat="false" />
 
         <Animation id="fade" duration="0.22" easeFunction="outQuad">
             <FloatFieldInterpolator id="fadeInterp" key="[0.0, 1.0]" keyValue="[0.0, 1.0]" fieldToInterp="controls.opacity" />
@@ -55,6 +61,8 @@
         />
         <!-- 912 = (1920 - 96) / 2, so the spinner shares the status label's axis -->
         <BusySpinner id="spinner" translation="[912, 580]" uri="pkg:/images/spinner.png" visible="false" />
+        <Rectangle id="bufferTrack" width="480" height="6" translation="[720, 700]" color="0x45454F" visible="false" />
+        <Rectangle id="bufferFill" width="0" height="6" translation="[720, 700]" color="0xE50914" visible="false" />
 
         <Group id="controls" visible="false" opacity="0">
             <Poster

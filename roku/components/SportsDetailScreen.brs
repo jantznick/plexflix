@@ -23,7 +23,7 @@ sub onContentSet()
     league = asString(item.description)
     if league = "" and item.DoesExist("league") then league = asString(item.league)
     m.metaLabel.text = league
-    m.summaryLabel.text = "OK a stream to play. Remote Back returns to the guide."
+    showHint()
 
     art = asString(item.hdPosterUrl)
     if art = "" then art = asString(item.hdBackdropUrl)
@@ -82,6 +82,7 @@ sub playStreamAt(idx as Integer)
     url = asString(stream.streamUrl)
     if url = "" then return
 
+    m.top.streamError = ""
     m.top.playRequested = {
         title: m.titleLabel.text,
         description: m.metaLabel.text,
@@ -107,6 +108,42 @@ end sub
 
 sub onCloseRequested()
     if m.top.close = true then m.top.closed = true
+end sub
+
+sub onRefocus()
+    if m.top.refocus <> true then return
+    if m.streams.count() = 0 then
+        m.top.setFocus(true)
+        return
+    end if
+    ' The list kept its own place, so the stream just tried stays highlighted
+    m.streamList.setFocus(true)
+end sub
+
+sub onStreamError()
+    reason = m.top.streamError
+    if reason = "" then
+        showHint()
+        return
+    end if
+
+    idx = m.streamList.itemFocused
+    label = ""
+    root = m.streamList.content
+    if idx <> invalid and root <> invalid and idx >= 0 and idx < root.getChildCount() then
+        label = asString(root.getChild(idx).title)
+    end if
+    if label = "" then label = "That stream"
+
+    hint = "Try another stream."
+    if m.streams.count() < 2 then hint = "Try again in a moment."
+    m.summaryLabel.color = "0xFF6B6B"
+    m.summaryLabel.text = label + " failed: " + reason + ". " + hint
+end sub
+
+sub showHint()
+    m.summaryLabel.color = "0xC8C8D0"
+    m.summaryLabel.text = "OK a stream to play. Remote Back returns to the guide."
 end sub
 
 function onKeyEvent(key as String, press as Boolean) as Boolean
