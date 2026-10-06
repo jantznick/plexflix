@@ -36,6 +36,26 @@ def make_feed(path, audio=True, seconds=120):
     subprocess.run(cmd, check=True)
 
 
+@unittest.skipUnless(compositor_module.available(), "needs GStreamer (python3-gi)")
+class PushTests(unittest.TestCase):
+    def test_repeated_frames_are_pushed_as_separate_buffers(self):
+        # A frozen frame or slate is pushed many times; each push must be its
+        # own buffer, or retiming it rewrites one the pipeline still holds
+        comp = compositor_module.Compositor("/tmp", 1, {"fps": 30})
+        comp.frame_ns = 1000
+        pushed = []
+
+        class Src:
+            def emit(self, signal, buf):
+                pushed.append(buf)
+
+        comp._video_src = [Src()]
+        frame = bytes(ingest_module.FRAME_BYTES)
+        for n in range(3):
+            comp.push_video(0, frame, n)
+        self.assertEqual([buf.pts for buf in pushed], [0, 1000, 2000])
+
+
 @unittest.skipUnless(HAVE_TOOLS, "needs ffmpeg and GStreamer (python3-gi)")
 class SessionTests(unittest.TestCase):
     @classmethod

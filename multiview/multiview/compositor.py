@@ -14,6 +14,7 @@ from .layouts import CANVAS_H, CANVAS_W
 
 _gst = None
 _gst_lock = threading.Lock()
+_SHALLOW_COPY = None
 
 ENCODER_ALIASES = {
     "libx264": "x264", "x264": "x264", "x264enc": "x264",
@@ -192,14 +193,25 @@ class Compositor:
         self._push(self._audio_src[slot], ("a", slot), pcm, n, self.frame_ns)
 
     def _push(self, src, key, data, n, duration):
+        global _SHALLOW_COPY
+        if _SHALLOW_COPY is None:
+            flags = gst().BufferCopyFlags
+            _SHALLOW_COPY = flags.FLAGS | flags.TIMESTAMPS | flags.META | flags.MEMORY
         Gst = gst()
         cached = self._cache.get(key)
         if cached is not None and cached[0] is data:
-            buf = cached[1].copy()
+            template = cached[1]
         else:
-            buf = Gst.Buffer.new_wrapped(data)
-            self._cache[key] = (data, buf)
-            buf = buf.copy()
+            template = Gst.Buffer.new_wrapped(data)
+            self._cache[key] = (data, template)
+        # Buffer.copy() in the bindings only adds a reference, so it is the
+        # same buffer the pipeline may still hold; copy_region makes a new
+        # one that shares the frame's memory
+        buf = template.copy_region(_SHALLOW_COPY, 0, len(data))
+        # gst-python 1.26+ refuses to timestamp a buffer it can't prove is
+        # exclusively ours, which this settles without copying the frame
+        if hasattr(buf, "make_writable"):
+            buf.make_writable()
         buf.pts = self._offset + n * duration
         buf.duration = duration
         src.emit("push-buffer", buf)
