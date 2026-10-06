@@ -98,6 +98,43 @@ def make_player_scrim(width=16, height=360):
     write_png(os.path.join(IMAGES, "player_scrim.png"), width, height, pixels)
 
 
+def make_focus_ring(size=32, thick=4, corner=8):
+    """9-patch focus border for the RowList / MarkupGrid native focus indicator.
+
+    The firmware stretches only the marked middle band, so the white edge and
+    the red inner accent stay `thick` px on every tile size. The outer 1px is
+    the 9-patch marker frame (black = stretchable / content area).
+    """
+    full = size + 2
+    clear = (0, 0, 0, 0)
+    marker = (0, 0, 0, 255)
+    white = (255, 255, 255, 255)
+    accent = ACCENT + (255,)
+    pixels = []
+    for y in range(full):
+        for x in range(full):
+            edge_x = x in (0, full - 1)
+            edge_y = y in (0, full - 1)
+            if edge_x and edge_y:
+                pixels.append(clear)
+                continue
+            if edge_y:
+                pixels.append(marker if corner < x <= size - corner else clear)
+                continue
+            if edge_x:
+                pixels.append(marker if corner < y <= size - corner else clear)
+                continue
+            cx, cy = x - 1, y - 1
+            if cx < thick or cy < thick or cx >= size - thick or cy >= size - thick:
+                pixels.append(white)
+            elif size - thick * 2 <= cy < size - thick:
+                pixels.append(accent)
+            else:
+                pixels.append(clear)
+    write_png(os.path.join(IMAGES, "focus_ring.9.png"), full, full, pixels)
+
+
 if __name__ == "__main__":
     make_watched_check()
     make_player_scrim()
+    make_focus_ring()

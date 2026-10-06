@@ -8,12 +8,16 @@
         <!-- Set by the owning RowList; without it the ring stays lit on the
              selected episode even when Play or the sidebar holds focus -->
         <field id="rowListHasFocus" type="boolean" value="true" onChange="onOwnerFocusChange" />
+        <!-- RowList keeps focusPercent=1 on every row's remembered item, so
+             only the row that actually holds focus may light its ring -->
+        <field id="rowHasFocus" type="boolean" value="true" onChange="onOwnerFocusChange" />
     </interface>
 
     <script type="text/brightscript" uri="EpisodeItem.brs" />
 
     <children>
-        <!-- Focus chrome stays inside the RowList cell — negative offsets clip on device -->
+        <!-- The focus border is the RowList's native indicator (focus_ring.9.png),
+             drawn on the cell edge; art is inset so it never covers the border -->
         <Rectangle
             id="shadow"
             width="304"
@@ -78,13 +82,5 @@
             uri="pkg:/images/watched_check.png"
             visible="false"
         />
-
-        <Group id="focusChrome" visible="false">
-            <Rectangle id="ringT" width="320" height="4" translation="[0, 0]" color="0xFFFFFF" />
-            <Rectangle id="ringB" width="320" height="4" translation="[0, 176]" color="0xFFFFFF" />
-            <Rectangle id="ringL" width="4" height="180" translation="[0, 0]" color="0xFFFFFF" />
-            <Rectangle id="ringR" width="4" height="180" translation="[316, 0]" color="0xFFFFFF" />
-            <Rectangle id="focusAccent" width="320" height="4" translation="[0, 172]" color="0xE50914" />
-        </Group>
     </children>
 </component>

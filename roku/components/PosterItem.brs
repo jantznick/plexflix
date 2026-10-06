@@ -3,12 +3,6 @@ sub init()
     m.poster = m.top.findNode("poster")
     m.shadow = m.top.findNode("shadow")
     m.cardBg = m.top.findNode("cardBg")
-    m.focusChrome = m.top.findNode("focusChrome")
-    m.focusAccent = m.top.findNode("focusAccent")
-    m.ringT = m.top.findNode("ringT")
-    m.ringB = m.top.findNode("ringB")
-    m.ringL = m.top.findNode("ringL")
-    m.ringR = m.top.findNode("ringR")
     m.progressBg = m.top.findNode("progressBg")
     m.progressFg = m.top.findNode("progressFg")
     m.watchedBadge = m.top.findNode("watchedBadge")
@@ -19,7 +13,6 @@ sub init()
     m.itemWidth = 168
     m.itemHeight = 252
     m.focusPad = 8
-    m.ringThick = 4
     setFocused(false)
     if m.visual <> invalid then m.visual.translation = [0, 0]
 end sub
@@ -32,7 +25,6 @@ sub onSizeChange()
     if m.top.height > 0 then m.itemHeight = m.top.height
 
     pad = m.focusPad
-    thick = m.ringThick
     contentW = m.itemWidth - pad * 2
     contentH = m.itemHeight - pad * 2
     if contentW < 40 then contentW = 40
@@ -50,33 +42,6 @@ sub onSizeChange()
         m.shadow.width = contentW
         m.shadow.height = contentH
         m.shadow.translation = [pad + 6, pad + 6]
-    end if
-
-    ' Ring sits on the cell edge — fully inside RowList/MarkupGrid clip bounds
-    if m.ringT <> invalid then
-        m.ringT.width = m.itemWidth
-        m.ringT.height = thick
-        m.ringT.translation = [0, 0]
-    end if
-    if m.ringB <> invalid then
-        m.ringB.width = m.itemWidth
-        m.ringB.height = thick
-        m.ringB.translation = [0, m.itemHeight - thick]
-    end if
-    if m.ringL <> invalid then
-        m.ringL.width = thick
-        m.ringL.height = m.itemHeight
-        m.ringL.translation = [0, 0]
-    end if
-    if m.ringR <> invalid then
-        m.ringR.width = thick
-        m.ringR.height = m.itemHeight
-        m.ringR.translation = [m.itemWidth - thick, 0]
-    end if
-    if m.focusAccent <> invalid then
-        m.focusAccent.width = m.itemWidth
-        m.focusAccent.height = thick
-        m.focusAccent.translation = [0, m.itemHeight - thick * 2]
     end if
 
     barHeight = progressBarHeight()
@@ -236,11 +201,11 @@ function ownerHasFocus() as Boolean
     ' moved on to a toolbar or the sidebar, so the ring has to follow the owner
     if m.top.gridHasFocus = false then return false
     if m.top.rowListHasFocus = false then return false
+    if m.top.rowHasFocus = false then return false
     return true
 end function
 
 sub setFocused(focused as Boolean)
-    if m.focusChrome <> invalid then m.focusChrome.visible = focused
     if m.titleBar <> invalid then m.titleBar.visible = focused
     if m.titleLabel <> invalid then m.titleLabel.visible = focused
     if focused then

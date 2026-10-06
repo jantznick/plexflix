@@ -3,19 +3,12 @@ sub init()
     m.titleLabel = m.top.findNode("titleLabel")
     m.titleScrim = m.top.findNode("titleScrim")
     m.shadow = m.top.findNode("shadow")
-    m.focusChrome = m.top.findNode("focusChrome")
-    m.focusAccent = m.top.findNode("focusAccent")
-    m.ringT = m.top.findNode("ringT")
-    m.ringB = m.top.findNode("ringB")
-    m.ringL = m.top.findNode("ringL")
-    m.ringR = m.top.findNode("ringR")
     m.progressBg = m.top.findNode("progressBg")
     m.progressFg = m.top.findNode("progressFg")
     m.watchedBadge = m.top.findNode("watchedBadge")
     m.itemWidth = 320
     m.itemHeight = 180
     m.focusPad = 8
-    m.ringThick = 4
     setFocused(false)
 end sub
 
@@ -24,7 +17,6 @@ sub onSizeChange()
     if m.top.height > 0 then m.itemHeight = m.top.height
 
     pad = m.focusPad
-    thick = m.ringThick
     contentW = m.itemWidth - pad * 2
     contentH = m.itemHeight - pad * 2
     if contentW < 40 then contentW = 40
@@ -42,32 +34,6 @@ sub onSizeChange()
         m.shadow.width = contentW
         m.shadow.height = contentH
         m.shadow.translation = [pad + 6, pad + 6]
-    end if
-
-    if m.ringT <> invalid then
-        m.ringT.width = m.itemWidth
-        m.ringT.height = thick
-        m.ringT.translation = [0, 0]
-    end if
-    if m.ringB <> invalid then
-        m.ringB.width = m.itemWidth
-        m.ringB.height = thick
-        m.ringB.translation = [0, m.itemHeight - thick]
-    end if
-    if m.ringL <> invalid then
-        m.ringL.width = thick
-        m.ringL.height = m.itemHeight
-        m.ringL.translation = [0, 0]
-    end if
-    if m.ringR <> invalid then
-        m.ringR.width = thick
-        m.ringR.height = m.itemHeight
-        m.ringR.translation = [m.itemWidth - thick, 0]
-    end if
-    if m.focusAccent <> invalid then
-        m.focusAccent.width = m.itemWidth
-        m.focusAccent.height = thick
-        m.focusAccent.translation = [0, m.itemHeight - thick * 2]
     end if
 
     barHeight = 8
@@ -136,11 +102,10 @@ end sub
 sub refreshFocusVisual()
     fp = m.top.focusPercent
     if fp = invalid then fp = 0
-    setFocused(fp > 0.5 and m.top.rowListHasFocus <> false)
+    setFocused(fp > 0.5 and m.top.rowListHasFocus <> false and m.top.rowHasFocus <> false)
 end sub
 
 sub setFocused(focused as Boolean)
-    if m.focusChrome <> invalid then m.focusChrome.visible = focused
     if focused then
         m.still.opacity = 1.0
         if m.shadow <> invalid then
