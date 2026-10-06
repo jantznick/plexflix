@@ -22,27 +22,33 @@
             <Font role="font" uri="pkg:/fonts/Outfit-Medium.ttf" size="36" />
         </Label>
 
-        <Group translation="[96, 120]">
+        <!-- Sport filter pills: All + one per feed category. Clipped so a long
+             category list scrolls sideways instead of running off screen -->
+        <Group id="pillClip" translation="[96, 112]" clippingRect="[0, 0, 1728, 56]">
+            <Group id="pillRow" />
+        </Group>
+
+        <Group translation="[96, 184]">
             <Label id="eventTitle" width="900" height="60" color="0xFFFFFF" wrap="true" maxLines="1" text="Select a game">
                 <Font role="font" uri="pkg:/fonts/Outfit-Bold.ttf" size="48" />
             </Label>
             <Label id="eventMeta" translation="[0, 66]" width="900" height="40" color="0x8FA0B8" text="">
                 <Font role="font" uri="pkg:/fonts/Outfit-Medium.ttf" size="30" />
             </Label>
-            <Label id="eventSummary" translation="[0, 112]" width="900" height="76" color="0xC5CCD8" wrap="true" maxLines="2" lineSpacing="2" text="">
+            <Label id="eventSummary" translation="[0, 110]" width="900" height="40" color="0xC5CCD8" wrap="true" maxLines="1" text="">
                 <Font role="font" uri="pkg:/fonts/Outfit-Regular.ttf" size="28" />
             </Label>
-            <Label id="statusLabel" translation="[0, 196]" width="900" height="36" text="" color="0x778099">
+            <Label id="statusLabel" translation="[0, 156]" width="900" height="36" text="" color="0x778099">
                 <Font role="font" uri="pkg:/fonts/Outfit-Regular.ttf" size="26" />
             </Label>
 
-            <!-- height=250, width=250*(16/9)=444 -->
-            <Rectangle id="previewBg" translation="[1020, 0]" width="444" height="250" color="0x111820" />
+            <!-- height=196, width=196*(16/9)=348 -->
+            <Rectangle id="previewBg" translation="[1020, 0]" width="348" height="196" color="0x111820" />
             <Poster
                 id="previewArt"
                 translation="[1020, 0]"
-                width="444"
-                height="250"
+                width="348"
+                height="196"
                 loadDisplayMode="scaleToZoom"
                 loadWidth="1280"
                 loadHeight="720"
