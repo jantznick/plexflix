@@ -529,6 +529,18 @@ function viewedLeaves(item as Object) as Integer
     return item.viewedLeafCount
 end function
 
+' Guid children arrive as plain strings ("plex://movie/…") or { id: "…" } AAs
+function guidEntryId(entry as Dynamic) as String
+    if entry = invalid then return ""
+    entryType = type(entry)
+    if entryType = "String" or entryType = "roString" then return entry
+    if entryType = "roAssociativeArray" then
+        if entry.id <> invalid then return safeToStr(entry.id)
+        if entry.DoesExist("id") then return safeToStr(entry.id)
+    end if
+    return safeToStr(entry)
+end function
+
 function metadataToItem(cfg as Object, meta as Object) as Object
     if meta = invalid then return invalid
 
@@ -635,13 +647,13 @@ function metadataToItem(cfg as Object, meta as Object) as Object
 
     guid = ""
     if meta.guid <> invalid then guid = safeToStr(meta.guid)
-    ' Prefer a plex:// GUID when agents also expose tmdb/imdb Guids
-    if meta.Guid <> invalid then
+    ' Prefer a plex:// GUID when agents also expose tmdb/imdb Guids.
+    ' Discover payloads may send Guid as strings or as { id: "…" } objects.
+    if Left(guid, 7) <> "plex://" and meta.Guid <> invalid then
         guidList = meta.Guid
         if GetInterface(guidList, "ifArray") = invalid then guidList = [guidList]
         for each g in guidList
-            id = ""
-            if g <> invalid and g.id <> invalid then id = safeToStr(g.id)
+            id = guidEntryId(g)
             if Left(id, 7) = "plex://" then
                 guid = id
                 exit for
