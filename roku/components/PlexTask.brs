@@ -39,6 +39,16 @@ sub exec()
         m.top.response = fetchSportsFeed(cfg)
     else if action = "streamUrl" then
         m.top.response = buildStreamUrl(cfg, m.top.item)
+    else if action = "reportProgress" then
+        m.top.response = reportProgress(cfg, m.top.item)
+    else if action = "scrobble" then
+        m.top.response = scrobbleItem(cfg, m.top.item)
+    else if action = "mediaStreams" then
+        m.top.response = fetchMediaStreams(cfg, m.top.item)
+    else if action = "selectStreams" then
+        m.top.response = selectStreams(cfg, m.top.item)
+    else if action = "stopTranscode" then
+        m.top.response = stopTranscode(cfg, m.top.item)
     else
         m.top.response = { ok: false, error: "Unknown action: " + action }
     end if
@@ -178,6 +188,281 @@ function plexPost(cfg as Object, path as String, body = "" as String) as Object
     end while
 end function
 
+' Timeline, scrobble, part updates and transcode teardown answer with an empty
+' or XML body, so they get a request path that never tries to parse JSON.
+function plexCommand(cfg as Object, path as String, method as String) as Object
+    url = cfg.baseUrl + path
+    if path.Instr("?") > 0 then
+        url = url + "&X-Plex-Token=" + cfg.token
+    else
+        url = url + "?X-Plex-Token=" + cfg.token
+    end if
+
+    request = CreateObject("roUrlTransfer")
+    port = CreateObject("roMessagePort")
+    request.SetMessagePort(port)
+    request.SetUrl(url)
+    request.SetRequest(method)
+    request.EnableEncodings(true)
+    request.RetainBodyOnError(true)
+    request.AddHeader("X-Plex-Token", cfg.token)
+    request.AddHeader("X-Plex-Product", cfg.product)
+    request.AddHeader("X-Plex-Version", cfg.version)
+    request.AddHeader("X-Plex-Client-Identifier", cfg.clientId)
+    request.AddHeader("X-Plex-Platform", "Roku")
+    request.AddHeader("X-Plex-Device", "Roku")
+    request.AddHeader("X-Plex-Provides", "player")
+
+    if Left(cfg.baseUrl, 8) = "https://" then
+        request.SetCertificatesFile("common:/certs/ca-bundle.crt")
+        request.InitClientCertificates()
+    end if
+
+    started = false
+    if method = "GET" then
+        started = request.AsyncGetToString()
+    else
+        started = request.AsyncPostFromString("")
+    end if
+    if not started then return { ok: false, error: "Failed to start " + method + " " + path }
+
+    while true
+        msg = wait(10000, port)
+        if msg = invalid then
+            request.AsyncCancel()
+            return { ok: false, error: "Timed out on " + method + " " + path }
+        end if
+        if type(msg) = "roUrlEvent" then
+            code = msg.GetResponseCode()
+            if code < 200 or code >= 300 then
+                return { ok: false, error: "Plex HTTP " + safeToStr(code) + " for " + path }
+            end if
+            return { ok: true, body: msg.GetString() }
+        end if
+    end while
+end function
+
+' Without this the server never learns what was watched here: no Continue
+' Watching entry, no resume point, no played flag.
+function reportProgress(cfg as Object, item as Object) as Object
+    if item = invalid then return { ok: false, error: "No progress payload" }
+    ratingKey = safeToStr(item.ratingKey)
+    key = safeToStr(item.key)
+    if ratingKey = "" or key = "" then return { ok: false, error: "Missing keys for timeline" }
+
+    state = safeToStr(item.state)
+    if state = "" then state = "playing"
+
+    query = []
+    query.push("ratingKey=" + ratingKey)
+    query.push("key=" + requestEncode(key))
+    query.push("identifier=com.plexapp.plugins.library")
+    query.push("state=" + state)
+    query.push("time=" + safeToStr(intOrZero(item.time)))
+    query.push("duration=" + safeToStr(intOrZero(item.duration)))
+    query.push("hasMDE=1")
+
+    return plexCommand(cfg, "/:/timeline?" + joinStrings(query, "&"), "GET")
+end function
+
+function scrobbleItem(cfg as Object, item as Object) as Object
+    if item = invalid then return { ok: false, error: "No scrobble payload" }
+    ratingKey = safeToStr(item.ratingKey)
+    if ratingKey = "" then return { ok: false, error: "Missing ratingKey for scrobble" }
+
+    verb = "/:/scrobble"
+    if item.unwatch = true then verb = "/:/unscrobble"
+    path = verb + "?identifier=com.plexapp.plugins.library&key=" + ratingKey
+    return plexCommand(cfg, path, "GET")
+end function
+
+function stopTranscode(cfg as Object, item as Object) as Object
+    if item = invalid then return { ok: true }
+    session = safeToStr(item.session)
+    if session = "" then return { ok: true }
+    ' Leaves an orphaned ffmpeg on the server otherwise
+    return plexCommand(cfg, "/video/:/transcode/universal/stop?session=" + requestEncode(session), "GET")
+end function
+
+function fetchMediaStreams(cfg as Object, item as Object) as Object
+    if item = invalid then return { ok: false, error: "No item" }
+    ratingKey = safeToStr(item.ratingKey)
+    if ratingKey = "" then return { ok: false, error: "Missing ratingKey" }
+
+    ' includeMarkers brings back the intro / credits / commercial ranges Plex
+    ' generates, so the player can offer a skip without a second request
+    result = plexGet(cfg, "/library/metadata/" + ratingKey + "?includeMarkers=1")
+    if result.ok <> true or result.json = invalid then return { ok: false, error: "Could not read media info" }
+    container = result.json.MediaContainer
+    if container = invalid then return { ok: false, error: "Could not read media info" }
+
+    meta = container.Metadata
+    if meta = invalid then return { ok: false, error: "Could not read media info" }
+    if GetInterface(meta, "ifArray") <> invalid then
+        if meta.count() = 0 then return { ok: false, error: "Could not read media info" }
+        meta = meta[0]
+    end if
+
+    medias = meta.Media
+    if medias = invalid then return { ok: false, error: "No media versions" }
+    if GetInterface(medias, "ifArray") = invalid then medias = [medias]
+
+    versions = []
+    for i = 0 to medias.count() - 1
+        versions.push({
+            label: versionLabel(medias[i], i),
+            mediaIndex: i
+        })
+    end for
+
+    ' Streams live on the part, and the first part is the one we transcode
+    audio = []
+    subtitles = [{ id: 0, label: "Off", selected: true }]
+    partId = ""
+    previewUrlBase = ""
+    parts = medias[0].Part
+    if parts <> invalid then
+        if GetInterface(parts, "ifArray") = invalid then parts = [parts]
+        if parts.count() > 0 then
+            partId = safeToStr(parts[0].id)
+            ' indexes="sd" means the server has built a BIF preview index for
+            ' this file, which is what makes scrubbing thumbnails possible
+            if safeToStr(parts[0].indexes) = "sd" then
+                previewUrlBase = cfg.baseUrl + "/library/parts/" + partId + "/indexes/sd/"
+            end if
+            streams = parts[0].Stream
+            if streams <> invalid then
+                if GetInterface(streams, "ifArray") = invalid then streams = [streams]
+                for each stream in streams
+                    streamType = 0
+                    if stream.streamType <> invalid then streamType = stream.streamType
+                    selected = (stream.selected = true or safeToStr(stream.selected) = "1")
+                    entry = {
+                        id: intOrZero(stream.id),
+                        label: streamLabel(stream),
+                        selected: selected
+                    }
+                    if streamType = 2 then
+                        audio.push(entry)
+                    else if streamType = 3 then
+                        subtitles.push(entry)
+                        if selected then subtitles[0].selected = false
+                    end if
+                end for
+            end if
+        end if
+    end if
+
+    return {
+        ok: true,
+        partId: partId,
+        versions: versions,
+        audio: audio,
+        subtitles: subtitles,
+        markers: extractMarkers(meta),
+        previewUrlBase: previewUrlBase
+    }
+end function
+
+function extractMarkers(meta as Object) as Object
+    out = []
+    if meta = invalid then return out
+
+    markers = meta.Marker
+    if markers = invalid then return out
+    if GetInterface(markers, "ifArray") = invalid then markers = [markers]
+
+    for each marker in markers
+        kind = LCase(safeToStr(marker.type))
+        label = markerLabel(kind)
+        startAt = intOrZero(marker.startTimeOffset)
+        endAt = intOrZero(marker.endTimeOffset)
+        ' Plex occasionally emits zero-length or unlabelled markers
+        if label <> "" and endAt > startAt then
+            out.push({ kind: kind, startAt: startAt, endAt: endAt, label: label })
+        end if
+    end for
+    return out
+end function
+
+function markerLabel(kind as String) as String
+    if kind = "intro" then return "Skip Intro"
+    if kind = "credits" then return "Skip Credits"
+    if kind = "commercial" then return "Skip Ad"
+    return ""
+end function
+
+function versionLabel(media as Object, index as Integer) as String
+    bits = []
+    resolution = safeToStr(media.videoResolution)
+    if resolution <> "" then
+        if Instr(1, resolution, "k") > 0 or Instr(1, resolution, "K") > 0 then
+            bits.push(UCase(resolution))
+        else
+            bits.push(resolution + "p")
+        end if
+    end if
+    codec = safeToStr(media.videoCodec)
+    if codec <> "" then bits.push(UCase(codec))
+    if media.bitrate <> invalid and media.bitrate > 0 then
+        bits.push(safeToStr(Int(media.bitrate / 1000)) + " Mbps")
+    end if
+    if bits.count() = 0 then return "Version " + safeToStr(index + 1)
+    return joinStrings(bits, " · ")
+end function
+
+function streamLabel(stream as Object) as String
+    label = safeToStr(stream.displayTitle)
+    if label <> "" then return label
+    label = safeToStr(stream.extendedDisplayTitle)
+    if label <> "" then return label
+
+    bits = []
+    language = safeToStr(stream.language)
+    if language = "" then language = safeToStr(stream.languageCode)
+    if language <> "" then bits.push(language)
+    codec = safeToStr(stream.codec)
+    if codec <> "" then bits.push(UCase(codec))
+    if stream.channels <> invalid and stream.channels > 0 then
+        bits.push(safeToStr(stream.channels) + " ch")
+    end if
+    if bits.count() = 0 then return "Track " + safeToStr(intOrZero(stream.id))
+    return joinStrings(bits, " · ")
+end function
+
+function selectStreams(cfg as Object, item as Object) as Object
+    if item = invalid then return { ok: false, error: "No stream selection" }
+    partId = safeToStr(item.partId)
+    if partId = "" then return { ok: false, error: "Missing part id" }
+
+    query = ["allParts=1"]
+    if item.audioStreamID <> invalid then
+        query.push("audioStreamID=" + safeToStr(intOrZero(item.audioStreamID)))
+    end if
+    if item.subtitleStreamID <> invalid then
+        ' 0 turns subtitles off
+        query.push("subtitleStreamID=" + safeToStr(intOrZero(item.subtitleStreamID)))
+    end if
+
+    return plexCommand(cfg, "/library/parts/" + partId + "?" + joinStrings(query, "&"), "PUT")
+end function
+
+function intOrZero(value as Dynamic) as Integer
+    if value = invalid then return 0
+    valueType = type(value)
+    if valueType = "Integer" or valueType = "roInt" or valueType = "roInteger" or valueType = "LongInteger" then
+        return value
+    end if
+    if valueType = "Float" or valueType = "Double" or valueType = "roFloat" or valueType = "roDouble" then
+        return Int(value)
+    end if
+    if valueType = "String" or valueType = "roString" then
+        if value = "" then return 0
+        return Int(Val(value))
+    end if
+    return 0
+end function
+
 function imageUrl(cfg as Object, path as Dynamic, width = 420 as Integer, height = 630 as Integer) as String
     if path = invalid or path = "" then return ""
     pathStr = safeToStr(path)
@@ -197,6 +482,25 @@ end function
 function requestEncode(value as String) as String
     transfer = CreateObject("roUrlTransfer")
     return transfer.Escape(value)
+end function
+
+' Rows can mix library metadata with hand-built live TV / sports entries that
+' never went through metadataToItem, so normalise before handing to addFields
+function watchedFlag(item as Object) as Boolean
+    if item = invalid or item.watched <> true then return false
+    return true
+end function
+
+function unwatchedTotal(item as Object) as Integer
+    if item = invalid or item.unwatchedCount = invalid then return 0
+    count = item.unwatchedCount
+    if count < 0 then return 0
+    return count
+end function
+
+function viewedLeaves(item as Object) as Integer
+    if item = invalid or item.viewedLeafCount = invalid then return 0
+    return item.viewedLeafCount
 end function
 
 function metadataToItem(cfg as Object, meta as Object) as Object
@@ -261,6 +565,27 @@ function metadataToItem(cfg as Object, meta as Object) as Object
     viewOffset = 0
     if meta.viewOffset <> invalid then viewOffset = meta.viewOffset
 
+    ' Plex watched state: viewCount counts completed plays on a leaf (movie or
+    ' episode), viewedLeafCount counts watched episodes under a show or season
+    viewCount = 0
+    if meta.viewCount <> invalid then viewCount = meta.viewCount
+    viewedLeafCount = 0
+    if meta.viewedLeafCount <> invalid then viewedLeafCount = meta.viewedLeafCount
+    leafCount = 0
+    if meta.leafCount <> invalid then leafCount = meta.leafCount
+    lastViewedAt = 0
+    if meta.lastViewedAt <> invalid then lastViewedAt = meta.lastViewedAt
+
+    watched = false
+    if mediaType = "show" or mediaType = "season" then
+        watched = (leafCount > 0 and viewedLeafCount >= leafCount)
+    else
+        watched = (viewCount > 0 and viewOffset = 0)
+    end if
+
+    unwatchedCount = 0
+    if leafCount > viewedLeafCount then unwatchedCount = leafCount - viewedLeafCount
+
     indexVal = ""
     parentIndexVal = ""
     if meta.index <> invalid then indexVal = safeToStr(meta.index)
@@ -299,7 +624,11 @@ function metadataToItem(cfg as Object, meta as Object) as Object
         showDescription: "",
         duration: duration,
         viewOffset: viewOffset,
-        leafCount: meta.leafCount,
+        viewedLeafCount: viewedLeafCount,
+        lastViewedAt: lastViewedAt,
+        watched: watched,
+        unwatchedCount: unwatchedCount,
+        leafCount: leafCount,
         childCount: meta.childCount,
         index: indexVal,
         parentIndex: parentIndexVal,
@@ -397,6 +726,9 @@ function appendRowNodes(root as Object, title as String, items as Object) as Boo
             key: item.key,
             duration: item.duration,
             viewOffset: item.viewOffset,
+            watched: watchedFlag(item),
+            unwatchedCount: unwatchedTotal(item),
+            viewedLeafCount: viewedLeaves(item),
             leafCount: item.leafCount,
             childCount: item.childCount,
             grandparentRatingKey: item.grandparentRatingKey,
@@ -772,6 +1104,9 @@ sub addUniqueRowLoose(root as Object, seenTitles as Object, title as String, ite
             key: item.key,
             duration: item.duration,
             viewOffset: item.viewOffset,
+            watched: watchedFlag(item),
+            unwatchedCount: unwatchedTotal(item),
+            viewedLeafCount: viewedLeaves(item),
             leafCount: item.leafCount,
             childCount: item.childCount,
             grandparentRatingKey: item.grandparentRatingKey,
@@ -799,20 +1134,24 @@ function resolvePlayable(cfg as Object, item as Object) as Object
         return { ok: true, item: item }
     end if
 
-    ' Show -> pick on-deck episode, else first episode of first season
+    ' Show -> whatever Plex says is next up, else first episode of first season
     if mediaType = "show" then
-        ' Try metadata children (seasons)
+        onDeck = fetchOnDeck(cfg, safeToStr(item.ratingKey))
+        if onDeck <> invalid then return { ok: true, item: onDeck }
+
         detail = plexGet(cfg, "/library/metadata/" + item.ratingKey + "/allLeaves?sort=index")
         if detail.ok = true then
             episodes = collectMetadata(cfg, detail.json)
             if episodes.count() > 0 then
-                ' Prefer partially watched
+                ' Resume a part-watched episode before falling back to the start
                 for each ep in episodes
                     if ep.viewOffset <> invalid and ep.viewOffset > 0 then
                         return { ok: true, item: ep }
                     end if
                 end for
-                ' Else first unwatched-ish / first episode
+                for each ep in episodes
+                    if ep.watched <> true then return { ok: true, item: ep }
+                end for
                 return { ok: true, item: episodes[0] }
             end if
         end if
@@ -829,6 +1168,34 @@ function resolvePlayable(cfg as Object, item as Object) as Object
     return { ok: false, error: "Could not find a playable episode" }
 end function
 
+' includeOnDeck makes the server pick the next episode: the part-watched one if
+' there is one, otherwise the first unwatched in airing order.
+function fetchOnDeck(cfg as Object, ratingKey as String) as Object
+    if ratingKey = "" then return invalid
+
+    result = plexGet(cfg, "/library/metadata/" + ratingKey + "?includeOnDeck=1")
+    if result.ok <> true or result.json = invalid then return invalid
+    container = result.json.MediaContainer
+    if container = invalid then return invalid
+
+    meta = container.Metadata
+    if meta = invalid then return invalid
+    if GetInterface(meta, "ifArray") <> invalid then
+        if meta.count() = 0 then return invalid
+        meta = meta[0]
+    end if
+    if meta.OnDeck = invalid then return invalid
+
+    upNext = meta.OnDeck.Metadata
+    if upNext = invalid then return invalid
+    if GetInterface(upNext, "ifArray") <> invalid then
+        if upNext.count() = 0 then return invalid
+        upNext = upNext[0]
+    end if
+
+    return metadataToItem(cfg, upNext)
+end function
+
 function fetchChildren(cfg as Object, item as Object) as Object
     if item = invalid then return { ok: false, error: "No item" }
     ratingKey = safeToStr(item.ratingKey)
@@ -841,6 +1208,66 @@ function fetchChildren(cfg as Object, item as Object) as Object
     return { ok: true, items: items }
 end function
 
+function rolesToCast(cfg as Object, meta as Object) as Object
+    castItems = []
+    if meta = invalid then return castItems
+
+    roles = meta.Role
+    if roles = invalid then return castItems
+    if GetInterface(roles, "ifArray") = invalid then roles = [roles]
+
+    for each role in roles
+        name = ""
+        if role.tag <> invalid then
+            name = safeToStr(role.tag)
+        else if role.role <> invalid then
+            name = safeToStr(role.role)
+        end if
+        if name <> "" then
+            thumb = ""
+            if role.thumb <> invalid then thumb = safeToStr(role.thumb)
+            personId = ""
+            if role.id <> invalid then personId = safeToStr(role.id)
+            if personId = "" and role.tagKey <> invalid then personId = safeToStr(role.tagKey)
+            castItems.push({
+                title: name,
+                shortTitle: name,
+                description: safeToStr(role.role),
+                mediaType: "actor",
+                ratingKey: personId,
+                key: personId,
+                personId: personId,
+                hdPosterUrl: imageUrl(cfg, thumb, 300, 450),
+                hdBackdropUrl: "",
+                duration: 0,
+                viewOffset: 0,
+                year: "",
+                rating: "",
+                contentRating: "",
+                index: "",
+                parentIndex: ""
+            })
+        end if
+    end for
+    return castItems
+end function
+
+function fetchShowCast(cfg as Object, showKey as String) as Object
+    if showKey = "" then return []
+    result = plexGet(cfg, "/library/metadata/" + showKey)
+    if result.ok <> true or result.json = invalid then return []
+    container = result.json.MediaContainer
+    if container = invalid then return []
+
+    meta = container.Metadata
+    if meta = invalid then return []
+    if GetInterface(meta, "ifArray") <> invalid then
+        if meta.count() = 0 then return []
+        meta = meta[0]
+    end if
+    return rolesToCast(cfg, meta)
+end function
+
 function fetchExtras(cfg as Object, item as Object) as Object
     if item = invalid then return { ok: false, error: "No item" }
     ratingKey = safeToStr(item.ratingKey)
@@ -848,50 +1275,31 @@ function fetchExtras(cfg as Object, item as Object) as Object
 
     castItems = []
     similarItems = []
+    onDeckKey = ""
+    onDeckSeasonKey = ""
 
-    details = plexGet(cfg, "/library/metadata/" + ratingKey)
+    ' One request covers the header refresh, the cast and next-up
+    details = plexGet(cfg, "/library/metadata/" + ratingKey + "?includeOnDeck=1")
     if details.ok = true and details.json <> invalid and details.json.MediaContainer <> invalid then
         meta = details.json.MediaContainer.Metadata
         if meta <> invalid then
             if GetInterface(meta, "ifArray") <> invalid then
                 if meta.count() > 0 then meta = meta[0]
             end if
-            roles = meta.Role
-            if roles <> invalid then
-                if GetInterface(roles, "ifArray") = invalid then roles = [roles]
-                for each role in roles
-                    name = ""
-                    if role.tag <> invalid then
-                        name = safeToStr(role.tag)
-                    else if role.role <> invalid then
-                        name = safeToStr(role.role)
-                    end if
-                    if name <> "" then
-                        thumb = ""
-                        if role.thumb <> invalid then thumb = safeToStr(role.thumb)
-                        personId = ""
-                        if role.id <> invalid then personId = safeToStr(role.id)
-                        if personId = "" and role.tagKey <> invalid then personId = safeToStr(role.tagKey)
-                        castItems.push({
-                            title: name,
-                            shortTitle: name,
-                            description: safeToStr(role.role),
-                            mediaType: "actor",
-                            ratingKey: personId,
-                            key: personId,
-                            personId: personId,
-                            hdPosterUrl: imageUrl(cfg, thumb, 300, 450),
-                            hdBackdropUrl: "",
-                            duration: 0,
-                            viewOffset: 0,
-                            year: "",
-                            rating: "",
-                            contentRating: "",
-                            index: "",
-                            parentIndex: ""
-                        })
-                    end if
-                end for
+            if meta.OnDeck <> invalid then
+                upNext = meta.OnDeck.Metadata
+                if upNext <> invalid and GetInterface(upNext, "ifArray") <> invalid then
+                    if upNext.count() > 0 then upNext = upNext[0] else upNext = invalid
+                end if
+                if upNext <> invalid then
+                    onDeckKey = safeToStr(upNext.ratingKey)
+                    onDeckSeasonKey = safeToStr(upNext.parentRatingKey)
+                end if
+            end if
+            castItems = rolesToCast(cfg, meta)
+            ' Episodes usually only list guest stars, so borrow the series cast
+            if castItems.count() = 0 and safeToStr(meta.grandparentRatingKey) <> "" then
+                castItems = fetchShowCast(cfg, safeToStr(meta.grandparentRatingKey))
             end if
         end if
     end if
@@ -907,7 +1315,14 @@ function fetchExtras(cfg as Object, item as Object) as Object
         if mapped.count() > 0 then detail = mapped[0]
     end if
 
-    return { ok: true, cast: castItems, similar: similarItems, detail: detail }
+    return {
+        ok: true,
+        cast: castItems,
+        similar: similarItems,
+        detail: detail,
+        onDeckKey: onDeckKey,
+        onDeckSeasonKey: onDeckSeasonKey
+    }
 end function
 
 function fetchUnavailableDetail(cfg as Object, item as Object) as Object
@@ -1466,6 +1881,10 @@ function fetchSectionAll(cfg as Object, item as Object) as Object
             key: it.key,
             duration: it.duration,
             viewOffset: it.viewOffset,
+            watched: watchedFlag(it),
+            unwatchedCount: unwatchedTotal(it),
+            viewedLeafCount: viewedLeaves(it),
+            leafCount: it.leafCount,
             shortTitle: it.shortTitle,
             hdBackdropUrl: it.hdBackdropUrl
         })
@@ -2697,16 +3116,20 @@ function buildStreamUrl(cfg as Object, item as Object) as Object
         return { ok: false, error: "Missing media key for playback" }
     end if
 
+    mediaIndex = 0
+    if item.mediaIndex <> invalid then mediaIndex = intOrZero(item.mediaIndex)
+
     ' Universal transcoder → HLS, which Roku Video handles reliably
     query = []
     query.push("hasMDE=1")
     query.push("path=" + requestEncode(path))
-    query.push("mediaIndex=0")
+    query.push("mediaIndex=" + safeToStr(mediaIndex))
     query.push("partIndex=0")
     query.push("protocol=hls")
     query.push("fastSeek=1")
     query.push("directPlay=0")
     query.push("directStream=1")
+    query.push("subtitles=auto")
     query.push("subtitleSize=100")
     query.push("audioBoost=100")
     query.push("location=lan")
@@ -2718,12 +3141,17 @@ function buildStreamUrl(cfg as Object, item as Object) as Object
     query.push("X-Plex-Device=Roku")
     query.push("X-Plex-Token=" + cfg.token)
 
-    if item.viewOffset <> invalid and item.viewOffset > 0 then
-        query.push("offset=" + safeToStr(Int(item.viewOffset)))
+    ' A named session can be torn down later instead of leaking a transcode.
+    ' No offset= here on purpose: the playlist stays full-length so the player
+    ' seeks inside it, which keeps Video.position equal to the media position.
+    session = safeToStr(item.session)
+    if session <> "" then
+        query.push("session=" + requestEncode(session))
+        query.push("X-Plex-Session-Identifier=" + requestEncode(session))
     end if
 
     url = cfg.baseUrl + "/video/:/transcode/universal/start.m3u8?" + joinStrings(query, "&")
-    return { ok: true, url: url }
+    return { ok: true, url: url, session: session }
 end function
 
 function joinStrings(parts as Object, sep as String) as String

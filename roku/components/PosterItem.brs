@@ -12,6 +12,9 @@ sub init()
     m.ringR = m.top.findNode("ringR")
     m.progressBg = m.top.findNode("progressBg")
     m.progressFg = m.top.findNode("progressFg")
+    m.watchedBadge = m.top.findNode("watchedBadge")
+    m.unwatchedPill = m.top.findNode("unwatchedPill")
+    m.unwatchedLabel = m.top.findNode("unwatchedLabel")
     m.titleBar = m.top.findNode("titleBar")
     m.titleLabel = m.top.findNode("titleLabel")
     m.itemWidth = 168
@@ -77,9 +80,13 @@ sub onSizeChange()
         m.ringR.translation = [m.itemWidth + pad - 4, -pad]
     end if
 
+    barHeight = progressBarHeight()
     m.progressBg.width = m.itemWidth
-    m.progressBg.translation = [0, m.itemHeight - 5]
-    m.progressFg.translation = [0, m.itemHeight - 5]
+    m.progressBg.height = barHeight
+    m.progressFg.height = barHeight
+    m.progressBg.translation = [0, m.itemHeight - barHeight]
+    m.progressFg.translation = [0, m.itemHeight - barHeight]
+    layoutBadges()
     if m.titleBar <> invalid then
         m.titleBar.width = m.itemWidth
         m.titleBar.translation = [0, m.itemHeight - 56]
@@ -89,6 +96,44 @@ sub onSizeChange()
         m.titleLabel.translation = [4, m.itemHeight - 52]
     end if
     refreshProgress()
+end sub
+
+function progressBarHeight() as Integer
+    ' Scales with the tile so the bar stays visible on a 7-wide grid without
+    ' swamping the small Continue Watching posters
+    height = Int(m.itemWidth / 26)
+    if height < 6 then height = 6
+    if height > 12 then height = 12
+    return height
+end function
+
+sub layoutBadges()
+    if m.watchedBadge = invalid then return
+
+    size = Int(m.itemWidth / 6)
+    if size < 26 then size = 26
+    if size > 46 then size = 46
+    pad = Int(size / 4)
+
+    m.watchedBadge.width = size
+    m.watchedBadge.height = size
+    m.watchedBadge.translation = [m.itemWidth - size - pad, pad]
+
+    pillHeight = Int(size * 0.78)
+    digits = 1
+    if m.unwatchedLabel <> invalid and Len(m.unwatchedLabel.text) > 1 then
+        digits = Len(m.unwatchedLabel.text)
+    end if
+    pillWidth = size + (digits - 1) * Int(size / 3)
+
+    m.unwatchedPill.width = pillWidth
+    m.unwatchedPill.height = pillHeight
+    m.unwatchedPill.translation = [m.itemWidth - pillWidth - pad, pad]
+    if m.unwatchedLabel <> invalid then
+        m.unwatchedLabel.width = pillWidth
+        m.unwatchedLabel.height = pillHeight
+        m.unwatchedLabel.translation = [m.itemWidth - pillWidth - pad, pad]
+    end if
 end sub
 
 sub onContentChange()
@@ -103,6 +148,7 @@ sub onContentChange()
 
     refreshTitle()
     refreshProgress()
+    refreshWatchedState()
 end sub
 
 sub refreshTitle()
@@ -142,6 +188,30 @@ sub refreshProgress()
         m.progressBg.visible = false
         m.progressFg.visible = false
     end if
+end sub
+
+sub refreshWatchedState()
+    if m.watchedBadge = invalid then return
+
+    item = m.top.itemContent
+    watched = false
+    unwatched = 0
+    if item <> invalid then
+        if item.watched = true then watched = true
+        if item.unwatchedCount <> invalid then unwatched = item.unwatchedCount
+    end if
+
+    showPill = (not watched and unwatched > 0)
+    if showPill then
+        label = asNumberString(unwatched)
+        if unwatched > 99 then label = "99+"
+        m.unwatchedLabel.text = label
+        layoutBadges()
+    end if
+
+    m.watchedBadge.visible = watched
+    m.unwatchedPill.visible = showPill
+    m.unwatchedLabel.visible = showPill
 end sub
 
 sub onFocusPercentChange()
@@ -196,5 +266,18 @@ function asString(value as Dynamic) as String
     if value = invalid then return ""
     valueType = type(value)
     if valueType = "String" or valueType = "roString" then return value
+    return ""
+end function
+
+function asNumberString(value as Dynamic) as String
+    if value = invalid then return ""
+    valueType = type(value)
+    if valueType = "String" or valueType = "roString" then return value
+    if valueType = "Integer" or valueType = "roInt" or valueType = "roInteger" or valueType = "LongInteger" then
+        return StrI(value).Trim()
+    end if
+    if valueType = "Float" or valueType = "Double" or valueType = "roFloat" or valueType = "roDouble" then
+        return StrI(Int(value)).Trim()
+    end if
     return ""
 end function

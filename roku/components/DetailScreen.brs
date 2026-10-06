@@ -87,6 +87,25 @@ sub onContentSet()
         showMovieMode()
         loadExtras(item)
     end if
+
+    refreshPlayLabel(item)
+end sub
+
+sub refreshPlayLabel(item as Object)
+    if m.isUnavailable = true then return
+    if m.playLabel = invalid or item = invalid then return
+
+    resume = false
+    mediaType = asString(item.mediaType)
+    if mediaType = "show" or mediaType = "season" then
+        leaves = asInteger(item.leafCount)
+        viewed = asInteger(item.viewedLeafCount)
+        resume = (viewed > 0 and viewed < leaves)
+    else
+        resume = (asInteger(item.viewOffset) > 0)
+    end if
+
+    if resume then m.playLabel.text = "Resume" else m.playLabel.text = "Play"
 end sub
 
 sub applyShowHeader(item as Object)
@@ -104,6 +123,8 @@ sub applyShowHeader(item as Object)
     if rating <> "" then metaBits.push(rating + " ★")
     mediaType = asString(item.mediaType)
     if mediaType <> "" then metaBits.push(titleCaseType(mediaType))
+    watchBit = watchedSummary(item)
+    if watchBit <> "" then metaBits.push(watchBit)
     m.metaLabel.text = joinStrings(metaBits, "  ·  ")
     m.headerMode = "show"
 end sub
@@ -462,9 +483,12 @@ sub fillSeasonRow(index as Integer, season as Object, episodes as Object)
             mediaType: ep.mediaType,
             duration: ep.duration,
             viewOffset: ep.viewOffset,
+            watched: ep.watched,
+            unwatchedCount: ep.unwatchedCount,
             year: ep.year,
             hdBackdropUrl: ep.hdBackdropUrl,
             shortTitle: ep.shortTitle,
+            grandparentTitle: ep.grandparentTitle,
             index: ep.index,
             parentIndex: ep.parentIndex
         })
@@ -527,9 +551,12 @@ sub appendSeasonRow(season as Object, episodes as Object)
             mediaType: ep.mediaType,
             duration: ep.duration,
             viewOffset: ep.viewOffset,
+            watched: ep.watched,
+            unwatchedCount: ep.unwatchedCount,
             year: ep.year,
             hdBackdropUrl: ep.hdBackdropUrl,
             shortTitle: ep.shortTitle,
+            grandparentTitle: ep.grandparentTitle,
             index: ep.index,
             parentIndex: ep.parentIndex
         })
@@ -553,6 +580,7 @@ sub onExtrasLoaded()
         applyShowHeader(detail)
         if asString(detail.hdBackdropUrl) <> "" then m.backdrop.uri = detail.hdBackdropUrl
         rememberShowHeader()
+        refreshPlayLabel(detail)
         if prevMode = "episode" then
             ' Re-apply episode copy after the show cache refresh
             info = invalid
@@ -568,6 +596,8 @@ sub onExtrasLoaded()
             end if
         end if
     end if
+
+    adoptOnDeck(response, detail)
 
     castItems = response.cast
     similarItems = response.similar
@@ -600,6 +630,24 @@ sub onExtrasLoaded()
     end if
 end sub
 
+sub adoptOnDeck(response as Object, detail as Object)
+    ' Arriving from Continue Watching already pins an episode; otherwise let the
+    ' server's next-up pick it, but only once there is progress worth resuming
+    if m.focusEpisodeKey <> "" or detail = invalid then return
+    onDeckKey = asString(response.onDeckKey)
+    if onDeckKey = "" then return
+    if asInteger(detail.viewedLeafCount) <= 0 then return
+
+    m.focusEpisodeKey = onDeckKey
+    m.focusSeasonKey = asString(response.onDeckSeasonKey)
+    if m.seasonContent = invalid then return
+
+    ' Season rows may already be built, and those only try to focus as they fill
+    for i = 0 to m.seasonContent.getChildCount() - 1
+        maybeFocusEpisode(i)
+    end for
+end sub
+
 sub appendItemsRow(root as Object, title as String, items as Object)
     if items = invalid or items.count() = 0 then return
     row = root.createChild("ContentNode")
@@ -615,6 +663,10 @@ sub appendItemsRow(root as Object, title as String, items as Object)
             mediaType: item.mediaType,
             duration: item.duration,
             viewOffset: item.viewOffset,
+            watched: item.watched,
+            unwatchedCount: item.unwatchedCount,
+            viewedLeafCount: item.viewedLeafCount,
+            leafCount: item.leafCount,
             year: item.year,
             hdBackdropUrl: item.hdBackdropUrl,
             contentRating: item.contentRating,
@@ -624,6 +676,33 @@ sub appendItemsRow(root as Object, title as String, items as Object)
         })
     end for
 end sub
+
+function watchedSummary(item as Object) as String
+    if item = invalid then return ""
+
+    mediaType = asString(item.mediaType)
+    if mediaType = "show" or mediaType = "season" then
+        leaves = asInteger(item.leafCount)
+        if leaves <= 0 then return ""
+        viewed = asInteger(item.viewedLeafCount)
+        if viewed >= leaves then return "Watched"
+        if viewed <= 0 then return ""
+        return asString(viewed) + " of " + asString(leaves) + " watched"
+    end if
+
+    if asInteger(item.viewOffset) > 0 then
+        return minutesLeftLabel(asInteger(item.duration) - asInteger(item.viewOffset))
+    end if
+    if item.watched = true then return "Watched"
+    return ""
+end function
+
+function minutesLeftLabel(remainingMs as Integer) as String
+    if remainingMs <= 0 then return ""
+    minutes = Int(remainingMs / 60000)
+    if minutes < 1 then return "Almost finished"
+    return asString(minutes) + " min left"
+end function
 
 function formatEpisodeTitle(ep as Object) as String
     title = asString(ep.shortTitle)
@@ -680,8 +759,15 @@ function nodeToItem(item as Object) as Object
         hdBackdropUrl: item.hdBackdropUrl,
         duration: item.duration,
         viewOffset: item.viewOffset,
+        watched: item.watched,
+        unwatchedCount: item.unwatchedCount,
+        viewedLeafCount: item.viewedLeafCount,
+        leafCount: item.leafCount,
         personId: item.personId,
         shortTitle: item.shortTitle,
+        grandparentTitle: item.grandparentTitle,
+        index: item.index,
+        parentIndex: item.parentIndex,
         isDiscover: isDiscover
     }
 end function
@@ -717,8 +803,6 @@ sub focusActionButtons()
     ' Drop shelf focus so cast/episode rings cannot linger while Play is active
     if m.relatedRows <> invalid then
         m.relatedRows.setFocus(false)
-        m.relatedRows.visible = false
-        m.relatedRows.visible = true
     end if
     if m.seasonRows <> invalid then
         m.seasonRows.setFocus(false)
@@ -836,6 +920,22 @@ function asString(value as Dynamic) as String
         return Str(value).Trim()
     end if
     return ""
+end function
+
+function asInteger(value as Dynamic) as Integer
+    if value = invalid then return 0
+    valueType = type(value)
+    if valueType = "Integer" or valueType = "roInt" or valueType = "roInteger" or valueType = "LongInteger" then
+        return value
+    end if
+    if valueType = "Float" or valueType = "Double" or valueType = "roFloat" or valueType = "roDouble" then
+        return Int(value)
+    end if
+    if valueType = "String" or valueType = "roString" then
+        if value = "" then return 0
+        return Int(Val(value))
+    end if
+    return 0
 end function
 
 function joinStrings(parts as Object, sep as String) as String

@@ -10,13 +10,20 @@ This is intentionally a **design/UX shell** on top of existing Plex data. Creden
 - **Collapsible sidebar** (Left to open): Home, your **Libraries**, **Live TV**, Live Sports
 - Selecting a library in the sidebar opens that library’s shelves
 - **Live TV**: Guide layout always visible (columns + placeholder rows while syncing); program info top-left, preview top-right
-- **Libraries**: mosaic hero + **View all** / **Search**; full grid with filter, search and order-by
+- **Libraries**: mosaic hero + **View all**; full grid with filter, search, order-by and an A–Z rail
 - **Continue Watching**, **Recently Added**, Plex hubs, library shelves, **genre rows**, and **Discover** trending (Netflix/Disney+/etc.)
 - Home shelves require **15–30** items (except Continue Watching) and **loop** horizontally
 - Continue Watching episodes open the parent show with that episode focused
 - Title detail screen (Cast + More Like This) with larger hero art
 - Cast pages: bio, birthday/place, Movies + TV filmography (TMDB when configured)
-- Playback via Plex universal transcoder (HLS)
+- **Watched state from Plex**: a tick on finished titles, a remaining-episode count
+  on part-watched shows, and a resume bar on anything started
+- Playback via Plex universal transcoder (HLS) with a **custom player overlay**
+  (scrubber, elapsed / remaining, finish time, audio + subtitle + version pickers)
+- **Skip intro / credits** from Plex's own markers, **BIF scrubbing previews**,
+  and an **inline cast panel** that pauses rather than leaving playback
+- **Progress is written back to Plex**, so resume points and Continue Watching
+  stay in sync with every other Plex client
 - Live sports from a configurable JSON feed URL (event detail + stream picker)
 - Optional **TMDB** enrichment for cast pages and Discover titles missing from your library (`tmdbApiKey` in config)
 - Discover titles not in Plex open a **Not in your library** detail view (no Play) with synopsis + similar local picks
@@ -94,6 +101,82 @@ sticks. The window is kept much larger than the screen on purpose — re-anchori
 the grid after a trim is the one moment scrolling can jolt, so it should happen
 once every hundred-odd rows rather than every few pages.
 
+## Watched state
+
+Everything comes from fields Plex already returns on the metadata the app
+fetches, so there are no extra requests:
+
+- `viewOffset` draws the resume bar across the bottom of a tile
+- `viewCount` on a movie or episode draws the corner tick
+- `viewedLeafCount` vs `leafCount` on a show or season gives the amber
+  remaining-episode count, and the `7 of 10 watched` line on the detail header
+- **Play** reads **Resume** whenever there is something to pick up
+
+A movie that is both watched and part-way through a rewatch counts as in
+progress, not watched, which matches what Plex's own clients show.
+
+Which episode you land on comes from the server, via
+`/library/metadata/{key}?includeOnDeck=1`. That is the only reliable answer:
+scanning for a part-watched episode replays episode 1 once you have finished a
+run of them cleanly. Opening a show you have started focuses that episode in
+the season row; a show you have never touched still opens on Play.
+
+## Playing content
+
+The Video node runs with `enableUI="false"`, so the whole playback surface is
+ours and Roku's trick-play bar never appears.
+
+- **Down**, **OK** or **Pause** raises the panel; it stays up while paused and
+  auto-hides after five seconds of silence while playing
+- the panel shows elapsed, remaining, and **the clock time the title ends at**,
+  formatted against the TV's own 12h/24h setting (`roDeviceInfo.GetClockFormat`)
+- **Down** again moves to the button row: Pause, Restart, and Audio / Subtitles /
+  Version whenever the file offers more than one
+- **Left / Right** on the scrubber seeks 10s, the transport keys seek 30s; a run
+  of presses commits a single seek once it settles
+- **Up** from the scrubber reaches the **cast strip** above the title
+
+Switching audio, subtitles or version writes the choice to Plex
+(`PUT /library/parts/{id}`) and restarts the transcode at the current position,
+which costs a short buffer. The player stays open and keeps your place. The
+buttons only appear when there is a choice to make, so a file with one audio
+track and no subtitles shows just Pause and Restart.
+
+### Skip intro / credits
+
+`?includeMarkers=1` returns the `intro`, `credits` and `commercial` ranges Plex
+generates. Inside one of those ranges a pill appears bottom-right and **OK**
+takes it, with no need to raise the panel first; the same action leads the button
+row when the panel is up. The offer is withdrawn in the last second of a range,
+where the skip would be a no-op.
+
+### Scrubbing previews
+
+When the server has built a BIF index for a file (`Part` reports
+`indexes="sd"`), frames come from
+`/library/parts/{partId}/indexes/sd/{offsetMs}` and a thumbnail follows the
+playhead while seeking. Requests are bucketed to five seconds so holding a
+direction key does not fire one per press. The title and the cast strip hide
+while it is up, because it covers both.
+
+### Cast without leaving playback
+
+**OK** on a cast member pauses the video and opens an inline panel with the
+actor's photo, role, bio and known-for credits — the same `personDetail` lookup
+the cast page uses, Plex's `/library/people` plus optional TMDB enrichment.
+Closing it resumes playback, but only if the pause was ours: a video the viewer
+had already paused stays paused. Going to the full cast page instead would mean
+tearing down the transcode, so it stays inline.
+
+Progress goes back to the server on every state change and every ten seconds via
+`/:/timeline`, and `/:/scrobble` marks a title played when it finishes. Those
+calls are issued from `MainScene`, not the player: the last of them fire while
+`VideoScreen` is being removed from the tree, and a Task owned by a node that is
+going away can be collected before it finishes.
+
+Each playback names its own transcode session so the server side is torn down on
+exit instead of being left running.
+
 ## Remote / focus
 
 - **Left** opens the sidebar from Home, Libraries, Live Sports (and sports detail via Back first); **Right** or **Back** hides it
@@ -158,5 +241,11 @@ roku/
   fonts/
   images/
   scripts/update_splash_posters.py
+  scripts/make_player_assets.py
   package.sh
 ```
+
+`make_player_assets.py` regenerates `images/watched_check.png` (the watched
+tick, also reused for the selected row in the player's track pickers) and
+`images/player_scrim.png` (the gradient behind the playback controls). It has no
+dependencies; run it from the repo root if you change the accent colour.
