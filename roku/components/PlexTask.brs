@@ -9,6 +9,9 @@ sub exec()
     action = m.top.action
     if action = "home" then
         m.top.response = buildHome(cfg)
+    else if action = "homeMore" then
+        ' Infinite-scroll: one random Discover genre or ranking shelf (web parity)
+        m.top.response = buildHomeMore(cfg, m.top.item)
     else if action = "resolvePlayable" then
         m.top.response = resolvePlayable(cfg, m.top.item)
     else if action = "randomEpisode" then
@@ -986,6 +989,183 @@ sub appendDiscoverRows(root as Object, seenTitles as Object, cfg as Object)
         end if
     end for
 end sub
+
+'--------------------------------------------------------------------
+' Infinite scroll — mirrors web App.js fetchRandomPlaylist:
+' randomly append either a service genre shelf or a ranking/trending shelf
+'--------------------------------------------------------------------
+
+function discoverServices() as Object
+    return [
+        { name: "Disney Plus", slug: "disney-plus" },
+        { name: "Netflix", slug: "netflix" },
+        { name: "Hulu", slug: "hulu" },
+        { name: "Amazon Prime Video", slug: "amazon-prime-video" },
+        { name: "Apple TV", slug: "apple-tv-plus" }
+    ]
+end function
+
+function discoverServiceTypes() as Object
+    return [
+        { title: "Exclusively on ", slug: "exclusives" },
+        { title: "Trending on ", slug: "trend" },
+        { title: "Recently Released on ", slug: "recently-released" },
+        { title: "Popular now on ", slug: "platform-popular" },
+        { title: "", slug: "watchlist" }
+    ]
+end function
+
+function pickRandomIndex(count as Integer) as Integer
+    if count <= 0 then return 0
+    ' Rnd(n) → int 1..n
+    return Rnd(count) - 1
+end function
+
+function buildHomeMore(cfg as Object, exclude as Object) as Object
+    if cfg.token = invalid or cfg.token = "" or cfg.token = "REPLACE_WITH_YOUR_PLEX_TOKEN" then
+        return { ok: false, error: "Set your Plex token in roku/source/PlexConfig.brs" }
+    end if
+
+    seenTitles = {}
+    if exclude <> invalid and exclude.titles <> invalid then
+        for each t in exclude.titles
+            key = LCase(safeToStr(t))
+            if key <> "" then seenTitles[key] = true
+        end for
+    end if
+
+    root = createObject("roSGNode", "ContentNode")
+    services = discoverServices()
+    serviceTypes = discoverServiceTypes()
+
+    ' A few attempts: empty responses, thin shelves (<15), or duplicate titles
+    for attempt = 1 to 6
+        rowInfo = invalid
+        if Rnd(0) < 0.5 then
+            rowInfo = fetchRandomDiscoverGenreRow(cfg, services)
+        else
+            rowInfo = fetchRandomDiscoverRankingRow(cfg, services, serviceTypes)
+        end if
+
+        if rowInfo <> invalid then
+            titleKey = LCase(safeToStr(rowInfo.title))
+            if titleKey <> "" and seenTitles.DoesExist(titleKey) = false then
+                if appendRow(root, rowInfo.title, rowInfo.items) then
+                    return { ok: true, content: root }
+                end if
+            end if
+        end if
+    end for
+
+    return { ok: false, error: "No additional Discover row available" }
+end function
+
+function fetchRandomDiscoverGenreRow(cfg as Object, services as Object) as Object
+    if services = invalid or services.count() = 0 then return invalid
+    service = services[pickRandomIndex(services.count())]
+
+    genresResult = discoverGet(cfg, "/library/platforms/" + service.slug + "/popular-genres?includeMeta=1")
+    if genresResult.ok <> true then return invalid
+
+    genres = collectDiscoverDirectories(genresResult.json)
+    if genres.count() = 0 then return invalid
+
+    genre = genres[pickRandomIndex(genres.count())]
+    genreSlug = discoverGenreSlug(genre)
+    if genreSlug = "" then return invalid
+
+    listResult = discoverGet(cfg, "/library/platforms/" + service.slug + "/genre-popular-" + genreSlug + "?count=30&includeMeta=1")
+    if listResult.ok <> true then return invalid
+
+    items = collectDiscoverMetadata(cfg, listResult.json)
+    if items.count() = 0 then return invalid
+
+    shelfTitle = discoverContainerTitle(listResult.json)
+    if shelfTitle = "" then shelfTitle = safeToStr(genre.title)
+    if shelfTitle = "" then shelfTitle = genreSlug
+    title = "From " + service.name + ": " + shelfTitle
+
+    return { title: title, items: items }
+end function
+
+function fetchRandomDiscoverRankingRow(cfg as Object, services as Object, serviceTypes as Object) as Object
+    if services = invalid or services.count() = 0 then return invalid
+    if serviceTypes = invalid or serviceTypes.count() = 0 then return invalid
+
+    service = services[pickRandomIndex(services.count())]
+    serviceType = serviceTypes[pickRandomIndex(serviceTypes.count())]
+
+    listResult = discoverGet(cfg, "/library/platforms/" + service.slug + "/" + serviceType.slug + "?count=30&includeMeta=1")
+    if listResult.ok <> true then return invalid
+
+    items = collectDiscoverMetadata(cfg, listResult.json)
+    if items.count() = 0 then return invalid
+
+    shelfTitle = discoverContainerTitle(listResult.json)
+    if shelfTitle = "" then shelfTitle = serviceType.title + service.name
+
+    title = shelfTitle
+    if serviceType.slug = "watchlist" then
+        title = service.name + ": " + shelfTitle
+    end if
+
+    return { title: title, items: items }
+end function
+
+function discoverContainerTitle(container as Object) as String
+    if container = invalid then return ""
+    if container.MediaContainer <> invalid and container.MediaContainer.title <> invalid then
+        return safeToStr(container.MediaContainer.title)
+    end if
+    if container.title <> invalid then return safeToStr(container.title)
+    return ""
+end function
+
+function collectDiscoverDirectories(container as Object) as Object
+    dirs = []
+    if container = invalid then return dirs
+    list = invalid
+    if container.MediaContainer <> invalid and container.MediaContainer.Directory <> invalid then
+        list = container.MediaContainer.Directory
+    else if container.Directory <> invalid then
+        list = container.Directory
+    end if
+    if list = invalid then return dirs
+    if GetInterface(list, "ifArray") = invalid then list = [list]
+    for each entry in list
+        if entry <> invalid then dirs.push(entry)
+    end for
+    return dirs
+end function
+
+function discoverGenreSlug(genre as Object) as String
+    if genre = invalid then return ""
+    slug = safeToStr(genre.slug)
+    if slug <> "" then return slug
+    key = safeToStr(genre.key)
+    if key <> "" then
+        ' key may be a path (/library/.../comedy) — take the last segment
+        parts = key.Split("/")
+        if parts.count() > 0 then
+            last = safeToStr(parts[parts.count() - 1])
+            if last <> "" then return last
+        end if
+        return key
+    end if
+    title = LCase(safeToStr(genre.title))
+    if title = "" then return ""
+    ' crude slug: spaces → hyphens
+    out = ""
+    for i = 0 to Len(title) - 1
+        ch = Mid(title, i + 1, 1)
+        if ch = " " then
+            out = out + "-"
+        else
+            out = out + ch
+        end if
+    end for
+    return out
+end function
 
 function discoverGet(cfg as Object, path as String) as Object
     url = "https://discover.provider.plex.tv" + path

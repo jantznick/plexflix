@@ -27,6 +27,7 @@ This is intentionally a **design/UX shell** on top of existing Plex data. Creden
   library the rule targets, like any other episode or movie
 - **Libraries**: mosaic hero + **View all**; full grid with filter, search, order-by and an A–Z rail
 - **Continue Watching**, **Recently Added**, Plex hubs, library shelves, **genre rows**, and **Discover** trending (Netflix/Disney+/etc.)
+- Home **infinite-scrolls** like the web app: as you move down, it appends more random Discover shelves (popular genres per service + trending / exclusives / recently released / popular / watchlist)
 - Home shelves require **15–30** items (except Continue Watching) and **loop** horizontally
 - Continue Watching episodes open the parent show with that episode focused
 - Title detail screen (Cast + More Like This) with larger hero art
