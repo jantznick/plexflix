@@ -1,12 +1,24 @@
 sub init()
     m.navItems = m.top.findNode("navItems")
     m.versionLabel = m.top.findNode("versionLabel")
+    m.full = m.top.findNode("full")
+    m.mini = m.top.findNode("mini")
+    m.miniItems = m.top.findNode("miniItems")
     m.entries = []
     m.libraries = []
     m.index = 0
+    m.activeIndex = 0
     m.itemNodes = []
+    m.miniNodes = []
     buildStaticEntries()
     applyExpanded()
+    ' Screens finishing a load call setFocus on their own lists; while the
+    ' menu is open (it starts open) that would strand it without the remote
+    m.top.observeField("focusedChild", "onFocusChainChange")
+end sub
+
+sub onFocusChainChange()
+    if m.top.expanded = true and not m.top.isInFocusChain() then m.top.setFocus(true)
 end sub
 
 sub onConfigReady()
@@ -91,11 +103,58 @@ sub rebuildItems()
         y = y + 64
     end for
 
+    rebuildMini()
     if m.index >= m.entries.count() then m.index = 0
+    if m.activeIndex >= m.entries.count() then m.activeIndex = 0
     paint()
 end sub
 
+' Same vertical rhythm as the full list, so an icon sits where its label will
+' appear when the menu opens
+sub rebuildMini()
+    while m.miniItems.getChildCount() > 0
+        m.miniItems.removeChildIndex(0)
+    end while
+    m.miniNodes = []
+
+    y = 0
+    for each entry in m.entries
+        marker = m.miniItems.createChild("Rectangle")
+        marker.width = 4
+        marker.height = 40
+        marker.translation = [0, y + 8]
+        marker.color = "0xE50914"
+        marker.visible = false
+
+        icon = m.miniItems.createChild("Poster")
+        icon.width = 36
+        icon.height = 36
+        icon.translation = [18, y + 10]
+        icon.uri = iconFor(entry)
+
+        m.miniNodes.push({ marker: marker, icon: icon })
+        y = y + 64
+    end for
+end sub
+
+function iconFor(entry as Object) as String
+    if entry.id = "home" then return "pkg:/images/nav_home.png"
+    if entry.id = "livetv" then return "pkg:/images/nav_live.png"
+    if entry.id = "sports" then return "pkg:/images/nav_sports.png"
+    if entry.library <> invalid and asString(entry.library.sectionType) = "show" then
+        return "pkg:/images/nav_tv.png"
+    end if
+    return "pkg:/images/nav_movie.png"
+end function
+
 sub paint()
+    for i = 0 to m.miniNodes.count() - 1
+        node = m.miniNodes[i]
+        isActive = (i = m.activeIndex)
+        node.marker.visible = isActive
+        if isActive then node.icon.blendColor = "0xFFFFFF" else node.icon.blendColor = "0x77777F"
+    end for
+
     for i = 0 to m.itemNodes.count() - 1
         node = m.itemNodes[i]
         if i = m.index then
@@ -113,15 +172,20 @@ sub onExpandedChange()
 end sub
 
 sub applyExpanded()
+    m.top.visible = true
+    m.top.translation = [0, 0]
     if m.top.expanded = true then
-        m.top.visible = true
-        m.top.translation = [0, 0]
+        m.full.visible = true
+        m.mini.visible = false
         m.top.setFocus(true)
-        paint()
     else
-        m.top.translation = [-310, 0]
-        m.top.visible = false
+        m.full.visible = false
+        m.mini.visible = (m.top.railVisible = true)
+        ' Reopening should start on the section you are in, not wherever the
+        ' cursor was left when the menu was dismissed without a choice
+        m.index = m.activeIndex
     end if
+    paint()
 end sub
 
 sub onActiveChange()
@@ -134,6 +198,7 @@ sub syncActiveIndex()
     for i = 0 to m.entries.count() - 1
         if m.entries[i].id = active then
             m.index = i
+            m.activeIndex = i
             paint()
             return
         end if
