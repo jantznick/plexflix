@@ -232,6 +232,20 @@ GPU (`va`, or `qsv` on Intel, with `/dev/dri` passed through) or NVIDIA
 back to x264, and the log says so at startup. Each feed pulls the rendition
 closest to 720p from its master playlist (`VARIANT_HEIGHT`), and nothing else.
 
+To try it on a Mac first, without Docker:
+
+```bash
+brew install ffmpeg gstreamer pygobject3
+cd multiview
+ENCODER=vt "$(brew --prefix)/bin/python3" -m multiview.server
+```
+
+`vt` is the Mac's built-in hardware encoder (VideoToolbox). Use Homebrew's
+`python3`, since that's the one `pygobject3` is installed for. Segments go to
+the system temp directory. Point `multiviewUrl` at the Mac's IP
+(`ipconfig getifaddr en0`), or play
+`http://localhost:8095/sessions/<id>/master.m3u8` in Safari.
+
 Tests run without Docker or network (they need `ffmpeg`, GStreamer and
 `python3-gi`; on Ubuntu `apt install ffmpeg python3-gi gir1.2-gstreamer-1.0
 gstreamer1.0-plugins-{base,good,bad,ugly}`):

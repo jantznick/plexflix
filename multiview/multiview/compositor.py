@@ -20,6 +20,7 @@ ENCODER_ALIASES = {
     "h264_vaapi": "va", "vaapi": "va", "va": "va", "vah264enc": "va",
     "h264_qsv": "qsv", "qsv": "qsv", "qsvh264enc": "qsv",
     "h264_nvenc": "nvenc", "nvenc": "nvenc", "nvh264enc": "nvenc",
+    "h264_videotoolbox": "vt", "videotoolbox": "vt", "vt": "vt", "vtenc_h264": "vt",
 }
 # Candidates per family, best first, with the properties that matter here.
 # Properties an installed element doesn't have are left out, since names
@@ -39,6 +40,11 @@ ENCODERS = {
     ],
     "nvenc": [
         ("nvh264enc", "NV12", {"bitrate": "{kbps}", "gop-size": "{gop}", "bframes": "0", "zerolatency": "true"}),
+    ],
+    # macOS (Apple silicon or Intel Macs)
+    "vt": [
+        ("vtenc_h264", "NV12", {"bitrate": "{kbps}", "max-keyframe-interval": "{gop}",
+                                "allow-frame-reordering": "false", "realtime": "true"}),
     ],
 }
 AAC_ENCODERS = ("voaacenc", "avenc_aac", "fdkaacenc")
@@ -72,7 +78,7 @@ def encoder_description(settings):
     wanted = settings.get("encoder", "libx264")
     family = ENCODER_ALIASES.get(wanted)
     if family is None:
-        raise ValueError(f"unknown ENCODER {wanted!r}; use one of x264, va, qsv, nvenc")
+        raise ValueError(f"unknown ENCODER {wanted!r}; use one of x264, va, qsv, nvenc, vt")
     kbps = max(500, bitrate_bps(settings.get("video_bitrate", "6M")) // 1000)
     gop = settings.get("fps", 30) * 2
     candidates = ENCODERS[family] + (ENCODERS["x264"] if family != "x264" else [])

@@ -11,6 +11,7 @@
 import json
 import os
 import re
+import tempfile
 import threading
 import time
 import uuid
@@ -23,6 +24,20 @@ from .session import Session
 
 SESSION_PATH = re.compile(r"^/sessions/([0-9a-f-]{36})(?:/(.*))?$")
 FILE_NAME = re.compile(r"^(?:gen-\d+/)?[A-Za-z0-9_.-]+\.(?:m3u8|ts)$")
+# Outside the container (running from a checkout), the font is in the repo
+# and there is no /data volume
+_REPO_FONT = os.path.join(os.path.dirname(__file__), "..", "..", "roku", "fonts", "Outfit-SemiBold.ttf")
+
+
+def _default_font():
+    container = "/app/fonts/Outfit-SemiBold.ttf"
+    return container if os.path.exists(container) else os.path.abspath(_REPO_FONT)
+
+
+def _default_data_dir():
+    if os.path.isdir("/data"):
+        return "/data/sessions"
+    return os.path.join(tempfile.gettempdir(), "multiview-sessions")
 
 
 def settings_from_env(env=os.environ):
@@ -31,9 +46,9 @@ def settings_from_env(env=os.environ):
         "encoder": env.get("ENCODER", "libx264"),
         "fps": int(env.get("FPS", "30")),
         "video_bitrate": env.get("VIDEO_BITRATE", "6M"),
-        "font_file": env.get("FONT_FILE", "/app/fonts/Outfit-SemiBold.ttf"),
+        "font_file": env.get("FONT_FILE") or _default_font(),
         "variant_height": int(env.get("VARIANT_HEIGHT", "720")),
-        "data_dir": env.get("DATA_DIR", "/data/sessions"),
+        "data_dir": env.get("DATA_DIR") or _default_data_dir(),
         "idle_timeout": int(env.get("IDLE_TIMEOUT", "90")),
         "max_sessions": int(env.get("MAX_SESSIONS", "2")),
         "token": env.get("MULTIVIEW_TOKEN", ""),
