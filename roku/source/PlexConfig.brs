@@ -12,7 +12,7 @@ function GetPlexConfig() as Object
         clientId: "plexflix-roku-mvp-001",
 
         product: "PlexFlix",
-        version: "0.10.14",
+        version: "0.10.15",
 
         ' How many items to request per row (home clamps display to 15–30)
         rowSize: 40,

@@ -2913,45 +2913,24 @@ function liveSessionFromTune(cfg as Object, result as Object) as Dynamic
     if mediaUuid = "" and Instr(1, body, "MediaGrabOperation") > 0 then mediaUuid = scrapeAttr(body, "uuid")
     if mediaUuid = "" then return invalid
     print "[plexflix:livetv] tuned session "; mediaUuid; " subscription "; subId
-    transcodeSession = "plexflix-live-" + mediaUuid
-    consumerId = safeToStr(cfg.clientId)
-    if consumerId = "" then consumerId = "plexflix-roku"
-    sessionPath = "/livetv/sessions/" + mediaUuid
-    tokenQuery = "?X-Plex-Token=" + cfg.token
-    ' The grabber's own HLS needs no transcoder; the universal transcoder is
-    ' the fallback, and its start.m3u8 is only a master pointing at the session
-    candidates = [
-        { kind: "direct", url: cfg.baseUrl + sessionPath + "/" + requestEncode(consumerId) + "/index.m3u8" + tokenQuery, dead: false },
-        { kind: "direct", url: cfg.baseUrl + sessionPath + "/index.m3u8" + tokenQuery, dead: false },
-        { kind: "transcode", url: buildStreamUrl(cfg, { key: sessionPath, session: transcodeSession }).url, dead: false },
-        { kind: "transcode", url: buildStreamUrl(cfg, { key: sessionPath + "/index.m3u8", session: transcodeSession }).url, dead: false }
-    ]
-    for attemptNo = 1 to 15
-        alive = 0
-        for each cand in candidates
-            if not cand.dead then
-                alive = alive + 1
-                probe = probePlaylist(cfg, cand.url)
-                print "[plexflix:livetv] probe "; attemptNo; " "; cand.kind; " HTTP "; probe.code; " "; Left(cand.url, 140)
-                if probe.code = 404 or probe.code = 400 or probe.code = 403 then
-                    if cand.kind = "transcode" or attemptNo >= 3 then cand.dead = true
-                else if probe.ok and cand.kind = "direct" then
-                    if Instr(1, probe.body, "#EXTINF") > 0 or Instr(1, probe.body, "#EXT-X-STREAM-INF") > 0 then
-                        print "[plexflix:livetv] direct playlist: "; Left(probe.body, 300)
-                        return { ok: true, url: cand.url, session: "", subscriptionId: subId, liveSession: mediaUuid }
-                    end if
-                else if probe.ok then
-                    playUrl = transcodeVariant(cfg, cand.url, probe.body)
-                    if playUrl <> "" then
-                        return { ok: true, url: playUrl, session: transcodeSession, subscriptionId: subId, liveSession: mediaUuid }
-                    end if
-                    cand.dead = true
-                    logTranscoderState(cfg, probe.body)
-                    stopTranscode(cfg, { session: transcodeSession })
-                end if
+    ' Plex keys a live transcode by the live session uuid whatever session=
+    ' says, so naming it anything else leaves the master pointing nowhere
+    transcodeSession = mediaUuid
+    masterUrl = buildStreamUrl(cfg, { key: "/livetv/sessions/" + mediaUuid, session: transcodeSession }).url
+    ' start.m3u8 starts the transcode; the player gets the media playlist it
+    ' points at, since asking for start.m3u8 again restarts the session
+    for attemptNo = 1 to 10
+        probe = probePlaylist(cfg, masterUrl)
+        print "[plexflix:livetv] probe "; attemptNo; " HTTP "; probe.code; " "; Left(masterUrl, 140)
+        if probe.ok then
+            playUrl = transcodeVariant(cfg, masterUrl, probe.body)
+            if playUrl <> "" then
+                return { ok: true, url: playUrl, session: transcodeSession, subscriptionId: subId, liveSession: mediaUuid }
             end if
-        end for
-        if alive = 0 then exit for
+            logTranscoderState(cfg, probe.body)
+            exit for
+        end if
+        if probe.code = 400 or probe.code = 403 then exit for
         sleep(400)
     end for
     releaseLiveSession(cfg, { subscriptionId: subId, session: transcodeSession })
