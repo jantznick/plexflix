@@ -46,6 +46,7 @@ sub init()
     m.rowList.observeField("rowItemFocused", "onRowItemFocused")
     m.rowList.observeField("escapeLeft", "onEscapeLeft")
     m.rowList.observeField("escapeUp", "onEscapeUp")
+    m.rowList.observeField("escapeBack", "onEscapeBack")
 
     m.focusPoll = createObject("roSGNode", "Timer")
     m.focusPoll.repeat = true
@@ -408,6 +409,16 @@ end sub
 
 sub onEscapeLeft()
     m.top.openMenu = true
+end sub
+
+' Back from deep in the shelves returns to the top first; from the top it
+' opens the menu, which is where Back leaves the channel
+sub onEscapeBack()
+    if m.isCollapsed then
+        onEscapeUp()
+    else
+        m.top.openMenu = true
+    end if
 end sub
 
 sub onEscapeUp()

@@ -40,7 +40,7 @@ sub onEscapeUp()
 end sub
 
 sub onEscapeBack()
-    ' Back out of the shelves to View all; Back again leaves the library
+    ' Back out of the shelves to View all; Back again opens the menu
     focusHero()
 end sub
 
@@ -263,13 +263,13 @@ function onKeyEvent(key as String, press as Boolean) as Boolean
             end if
             return true
         else if key = "back" then
-            m.top.closed = true
+            m.top.openMenu = true
             return true
         end if
         ' Swallow the rest so shelves can't activate while the hero owns focus
         return true
     else if key = "back" then
-        m.top.closed = true
+        m.top.openMenu = true
         return true
     end if
     return false

@@ -316,6 +316,7 @@ end sub
 
 sub onGuideEscapeBack()
     if m.previewVideo <> invalid then m.previewVideo.control = "stop"
+    m.top.openMenu = true
 end sub
 
 sub onRefocus()

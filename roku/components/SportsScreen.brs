@@ -39,6 +39,7 @@ sub init()
     m.guideList.observeField("itemSelected", "onGuideSelected")
     m.guideList.observeField("escapeUp", "onGuideEscapeUp")
     m.guideList.observeField("escapeLeft", "onGuideEscapeLeft")
+    m.guideList.observeField("escapeBack", "onGuideEscapeBack")
 
     m.clockTimer = createObject("roSGNode", "Timer")
     m.clockTimer.repeat = true
@@ -337,6 +338,10 @@ sub onGuideEscapeUp()
 end sub
 
 sub onGuideEscapeLeft()
+    m.top.openMenu = true
+end sub
+
+sub onGuideEscapeBack()
     m.top.openMenu = true
 end sub
 

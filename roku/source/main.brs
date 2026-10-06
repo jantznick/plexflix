@@ -4,6 +4,7 @@ sub Main()
     screen.SetMessagePort(port)
 
     scene = screen.CreateScene("MainScene")
+    scene.observeField("exitApp", port)
     screen.Show()
 
     while true
@@ -11,6 +12,11 @@ sub Main()
         msgType = type(msg)
         if msgType = "roSGScreenEvent"
             if msg.IsScreenClosed() then return
+        else if msgType = "roSGNodeEvent"
+            if msg.getField() = "exitApp" and msg.getData() = true then
+                screen.Close()
+                return
+            end if
         end if
     end while
 end sub
