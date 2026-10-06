@@ -2922,17 +2922,29 @@ function liveSessionFromTune(cfg as Object, result as Object) as Dynamic
         buildStreamUrl(cfg, { key: sessionPath + "/index.m3u8", session: transcodeSession }).url,
         cfg.baseUrl + sessionPath + "/" + requestEncode(consumerId) + "/index.m3u8?X-Plex-Token=" + cfg.token
     ]
-    ' The tuner takes a few seconds to deliver the first segment; until then
-    ' Plex answers the playlist with an error, which the Video node won't retry
-    for attemptNo = 1 to 6
+    ' Requesting start.m3u8 starts the transcode, so the player must get the
+    ' variant playlist it points at; a second start.m3u8 restarts the session
+    for attemptNo = 1 to 16
         for each url in urls
             probe = probePlaylist(cfg, url)
             print "[plexflix:livetv] probe "; attemptNo; " HTTP "; probe.code; " "; Left(url, 140)
             if probe.ok then
-                return { ok: true, url: url, session: transcodeSession, subscriptionId: subId, liveSession: mediaUuid }
+                playUrl = url
+                variant = playlistVariantUrl(cfg, url, probe.body)
+                if variant <> "" then
+                    print "[plexflix:livetv] variant "; Left(variant, 160)
+                    playUrl = variant
+                    for waitNo = 1 to 20
+                        vprobe = probePlaylist(cfg, variant)
+                        if vprobe.ok and Instr(1, vprobe.body, "#EXTINF") > 0 then exit for
+                        sleep(300)
+                    end for
+                end if
+                return { ok: true, url: playUrl, session: transcodeSession, subscriptionId: subId, liveSession: mediaUuid }
             end if
+            if attemptNo > 1 then exit for
         end for
-        sleep(1500)
+        sleep(400)
     end for
     releaseLiveSession(cfg, { subscriptionId: subId, session: transcodeSession })
     return { ok: false, error: "Tuned, but Plex never served the live stream" }
@@ -2954,15 +2966,54 @@ function probePlaylist(cfg as Object, url as String) as Object
         request.SetCertificatesFile("common:/certs/ca-bundle.crt")
         request.InitClientCertificates()
     end if
-    if not request.AsyncGetToString() then return { ok: false, code: 0 }
+    if not request.AsyncGetToString() then return { ok: false, code: 0, body: "" }
     msg = wait(10000, port)
     if msg = invalid then
         request.AsyncCancel()
-        return { ok: false, code: 0 }
+        return { ok: false, code: 0, body: "" }
     end if
     code = msg.GetResponseCode()
     body = msg.GetString()
-    return { ok: (code >= 200 and code < 300 and Instr(1, body, "#EXTM3U") > 0), code: code }
+    return { ok: (code >= 200 and code < 300 and Instr(1, body, "#EXTM3U") > 0), code: code, body: body }
+end function
+
+' First media-playlist URI in a master playlist, made absolute and tokenized;
+' empty when the playlist is already a media playlist
+function playlistVariantUrl(cfg as Object, masterUrl as String, body as String) as String
+    if Instr(1, body, "#EXT-X-STREAM-INF") = 0 then return ""
+    line = ""
+    for each raw in body.Tokenize(Chr(10))
+        candidate = raw.Trim()
+        if candidate <> "" and Left(candidate, 1) <> "#" then
+            line = candidate
+            exit for
+        end if
+    end for
+    if line = "" then return ""
+    if Left(line, 4) = "http" then
+        url = line
+    else if Left(line, 1) = "/" then
+        url = cfg.baseUrl + line
+    else
+        dirEnd = Instr(1, masterUrl, "?")
+        if dirEnd = 0 then dirEnd = Len(masterUrl) + 1
+        dirPart = Left(masterUrl, dirEnd - 1)
+        slash = 0
+        hit = Instr(1, dirPart, "/")
+        while hit > 0
+            slash = hit
+            hit = Instr(hit + 1, dirPart, "/")
+        end while
+        url = Left(dirPart, slash) + line
+    end if
+    if Instr(1, url, "X-Plex-Token=") = 0 then
+        if Instr(1, url, "?") > 0 then
+            url = url + "&X-Plex-Token=" + cfg.token
+        else
+            url = url + "?X-Plex-Token=" + cfg.token
+        end if
+    end if
+    return url
 end function
 
 ' Ends a live preview/watch: stops its transcode and drops the temporary
