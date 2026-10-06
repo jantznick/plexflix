@@ -194,7 +194,9 @@ exit instead of being left running.
 
 ## Remote / focus
 
-- **Left** opens the sidebar from Home, Libraries, Live Sports (and sports detail via Back first); **Right** or **Back** hides it
+- **Left** opens the sidebar from Home, Libraries, Live Sports (and sports detail via Back first); **Right** hides it
+- **Back** on a section's main screen (Home, a library, Live TV, Live Sports) opens the sidebar; from deep in Home's shelves or a library's shelves it returns to the top first
+- **Back** with the sidebar open exits the channel
 - Libraries appear as flat items in the sidebar (no wrapping cycle at the ends)
 - Arrow keys move across poster rows
 - Every list, grid and shelf uses `vertFocusAnimationStyle="floatingFocus"`: Up and

@@ -625,11 +625,15 @@ function onKeyEvent(key as String, press as Boolean) as Boolean
         else if m.libraryAllScreen <> invalid then
             m.libraryAllScreen.close = true
             return true
-        else if m.libraryBrowseScreen <> invalid then
-            m.libraryBrowseScreen.close = true
-            return true
         else if m.navExpanded then
-            setNavExpanded(false)
+            m.top.exitApp = true
+            return true
+        else
+            ' Nothing is on screen yet but the splash; let Back leave as usual
+            if splashShowing() then return false
+            ' The main screen of every section: Back brings up the menu, and Back
+            ' again from there leaves the channel
+            onOpenMenu()
             return true
         end if
     else if key = "left" and not m.navExpanded and m.videoScreen = invalid and m.detailScreen = invalid and m.castDetailScreen = invalid then

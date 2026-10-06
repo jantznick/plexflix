@@ -241,8 +241,8 @@ function onKeyEvent(key as String, press as Boolean) as Boolean
         activateCurrent()
         return true
     else if key = "back"
-        m.top.expanded = false
-        return true
+        ' MainScene owns Back from the open menu: it leaves the channel
+        return false
     else if key = "right"
         return false
     end if
