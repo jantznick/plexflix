@@ -45,6 +45,8 @@ sub exec()
         m.top.response = createRecording(cfg, m.top.item)
     else if action = "recordCancel" then
         m.top.response = cancelRecording(cfg, m.top.item)
+    else if action = "ruleUpdate" then
+        m.top.response = updateRecordingRule(cfg, m.top.item)
     else if action = "tuneLiveChannel" then
         m.top.response = tuneLiveChannel(cfg, m.top.item)
     else if action = "sportsFeed" then
@@ -3418,14 +3420,17 @@ function fetchDvrSchedule(cfg as Object) as Object
                 found = nodeList(candidate)
                 if target = invalid and found.count() > 0 then target = found[0]
             end for
-            title = safeToStr(subNode.title)
+            title = ""
             guid = ""
             art = ""
+            summary = ""
             if target <> invalid then
-                if title = "" then title = safeToStr(target.title)
+                title = firstString(target, ["grandparentTitle", "title"])
                 guid = safeToStr(target.guid)
                 art = epgArt(cfg, target)
+                summary = safeToStr(target.summary)
             end if
+            if title = "" then title = safeToStr(subNode.title)
             grabs = nodeList(subNode.MediaGrabOperation)
             rules.push({
                 id: id,
@@ -3436,7 +3441,9 @@ function fetchDvrSchedule(cfg as Object) as Object
                 library: safeToStr(subNode.librarySectionTitle),
                 airingsType: safeToStr(subNode.airingsType),
                 count: grabs.count(),
-                art: art
+                art: art,
+                summary: summary,
+                settings: ruleSettings(subNode)
             })
             for each grab in grabs
                 item = grabToUpcoming(cfg, grab, id, subType)
@@ -3463,6 +3470,56 @@ function fetchDvrSchedule(cfg as Object) as Object
         return { ok: false, error: errors[0] }
     end if
     return { ok: true, upcoming: upcoming, rules: rules }
+end function
+
+' Editable prefs on a rule: enum settings ("0:Any|1:HD only") and booleans
+function ruleSettings(subNode as Object) as Object
+    out = []
+    for each setting in nodeList(subNode.Setting)
+        prefId = safeToStr(setting.id)
+        if prefId <> "" and not truthy(setting.hidden) then
+            label = firstString(setting, ["label", "summary"])
+            if label = "" then label = prefId
+            value = safeToStr(setting.value)
+            if value = "" then value = safeToStr(setting.default)
+            choices = []
+            enumText = safeToStr(setting.enumValues)
+            if enumText <> "" then
+                for each pair in enumText.Split("|")
+                    colon = Instr(1, pair, ":")
+                    if colon > 0 then
+                        choices.push({ value: Left(pair, colon - 1), label: Mid(pair, colon + 1) })
+                    else if pair <> "" then
+                        choices.push({ value: pair, label: pair })
+                    end if
+                end for
+            else if LCase(safeToStr(setting.type)) = "bool" then
+                if value = "1" or value = "0" then
+                    choices = [{ value: "1", label: "Yes" }, { value: "0", label: "No" }]
+                else
+                    choices = [{ value: "true", label: "Yes" }, { value: "false", label: "No" }]
+                end if
+            end if
+            if choices.count() > 1 then out.push({ id: prefId, label: label, value: value, choices: choices })
+        end if
+    end for
+    return out
+end function
+
+function updateRecordingRule(cfg as Object, item as Object) as Object
+    id = ""
+    if item <> invalid then id = safeToStr(item.subscriptionId)
+    if id = "" then return { ok: false, error: "No rule to update" }
+    query = ""
+    if item.prefs <> invalid then
+        for each prefId in item.prefs
+            if query <> "" then query = query + "&"
+            query = query + "prefs%5B" + prefId + "%5D=" + requestEncode(safeToStr(item.prefs[prefId]))
+        end for
+    end if
+    if query = "" then return { ok: true }
+    print "[plexflix:dvr] update subscription "; id; " "; query
+    return plexCommand(cfg, "/media/subscriptions/" + requestEncode(id) + "?" + query, "PUT")
 end function
 
 function recordOptionLabel(subType as Integer, kind as String) as String

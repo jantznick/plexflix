@@ -36,6 +36,10 @@ sub onContentChange()
     if m.col1 <> invalid and m.col2 <> invalid then
         if m.col2.text = "" then m.col1.width = 900 else m.col1.width = 620
     end if
+    ' DVR rules put the show in the first column and leave the second empty
+    if m.col0 <> invalid and m.col1 <> invalid then
+        if m.col1.text = "" then m.col0.width = 940 else m.col0.width = 300
+    end if
 end sub
 
 function fieldStr(item as Object, name as String) as String

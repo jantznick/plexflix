@@ -7,7 +7,6 @@ sub init()
     m.progressGroup = m.top.findNode("progressGroup")
     m.progressFill = m.top.findNode("progressFill")
     m.progressLabel = m.top.findNode("progressLabel")
-    m.hintLabel = m.top.findNode("hintLabel")
     m.heroArt = m.top.findNode("heroArt")
     m.tabRow = m.top.findNode("tabRow")
 
@@ -32,6 +31,7 @@ sub init()
 
     m.menu = m.top.findNode("menu")
     m.menuPanel = m.top.findNode("menuPanel")
+    m.menuAccent = m.top.findNode("menuAccent")
     m.menuTitle = m.top.findNode("menuTitle")
     m.menuSub = m.top.findNode("menuSub")
     m.menuFocus = m.top.findNode("menuFocus")
@@ -81,6 +81,8 @@ sub init()
     m.dvrItems = []
     m.menuActions = []
     m.menuReturnZone = "grid"
+    m.ruleEdit = invalid
+    m.menuListY = 412
     m.previewKey = ""
 
     buildTabs()
@@ -111,7 +113,6 @@ sub init()
     m.toastTimer.duration = 3
     m.toastTimer.observeField("fire", "onToastDone")
 
-    m.hintLabel.text = "OK  Watch / record      *  Options      << >>  Page channels"
     m.previewHint.text = "PREVIEW"
     updateClock()
     paintTabs()
@@ -938,11 +939,6 @@ sub updateGridInfo()
         m.programSummary.translation = [0, 236]
     end if
 
-    if live or p.placeholder = true then
-        m.hintLabel.text = "OK  Watch live      *  Record & options      << >>  Page channels"
-    else
-        m.hintLabel.text = "OK  Record options      *  Options      << >>  Page channels"
-    end if
 end sub
 
 ' ---------------------------------------------------------------------------
@@ -1056,12 +1052,12 @@ sub fillDvrList(keepFocus as Boolean)
             setDvrRow(root.createChild("ContentNode"), when, name, chan, upcomingStatus(up))
             m.dvrItems.push({ kind: "upcoming", data: up })
         end for
-        empty = "Nothing scheduled to record. Pick a show in the Guide and press OK to record it."
+        empty = "Nothing scheduled to record."
     else
-        heads = ["TYPE", "RECORDING RULE", "UPCOMING", "LIBRARY"]
+        heads = ["SHOW", "", "RECORDING", "UPCOMING"]
         for each rule in m.schedule.rules
             countText = StrI(rule.count).Trim() + " upcoming"
-            setDvrRow(root.createChild("ContentNode"), rule.typeLabel, rule.title, countText, valueOr(rule.library, ""))
+            setDvrRow(root.createChild("ContentNode"), rule.title, "", rule.typeLabel, countText)
             m.dvrItems.push({ kind: "rule", data: rule })
         end for
         empty = "No recording rules yet."
@@ -1110,13 +1106,11 @@ sub updateDvrInfo(idx as Integer)
         if up.beginsAt > 0 then meta.push(dayLabel(up.beginsAt) + " " + rangeText(up.beginsAt, up.endsAt))
         meta.push(status)
         paintInfo(up.title, joinStrings(subParts, "  ·  "), joinStrings(meta, "  ·  "), valueOr(up.summary, ""), badges, valueOr(up.art, ""))
-        m.hintLabel.text = "OK  Manage recording"
     else
         rule = entry.data
         meta = [rule.typeLabel, StrI(rule.count).Trim() + " upcoming"]
         if valueOr(rule.library, "") <> "" then meta.push("Saves to " + rule.library)
-        paintInfo(rule.title, valueOr(rule.airingsType, ""), joinStrings(meta, "  ·  "), "", [], valueOr(rule.art, ""))
-        m.hintLabel.text = "OK  Manage rule"
+        paintInfo(rule.title, valueOr(rule.airingsType, ""), joinStrings(meta, "  ·  "), valueOr(rule.summary, ""), [], valueOr(rule.art, ""))
     end if
 end sub
 
@@ -1143,11 +1137,69 @@ sub onDvrSelected()
         actions.push({ label: "Close", act: "close" })
         openActionMenu(up.title, subText, actions)
     else
-        rule = entry.data
-        actions.push({ label: "Delete rule", act: "cancel", data: { subscriptionId: rule.id, done: "Rule deleted" } })
-        actions.push({ label: "Close", act: "close" })
-        openActionMenu(rule.title, rule.typeLabel + " rule", actions)
+        openRuleEditor(entry.data)
     end if
+end sub
+
+sub openRuleEditor(rule as Object)
+    values = {}
+    for each setting in nodeListOf(rule.settings)
+        values[setting.id] = setting.value
+    end for
+    m.ruleEdit = { rule: rule, values: values }
+    subParts = [rule.typeLabel]
+    if valueOr(rule.library, "") <> "" then subParts.push("Saves to " + rule.library)
+    openActionMenu(rule.title, joinStrings(subParts, "  ·  "), ruleActions())
+end sub
+
+function nodeListOf(value as Dynamic) as Object
+    if value = invalid or GetInterface(value, "ifArray") = invalid then return []
+    return value
+end function
+
+function choiceIndex(setting as Object, value as String) as Integer
+    for i = 0 to setting.choices.count() - 1
+        if setting.choices[i].value = value then return i
+    end for
+    return 0
+end function
+
+function ruleActions() as Object
+    actions = []
+    if m.ruleEdit = invalid then return actions
+    settings = nodeListOf(m.ruleEdit.rule.settings)
+    for i = 0 to settings.count() - 1
+        setting = settings[i]
+        choice = setting.choices[choiceIndex(setting, m.ruleEdit.values[setting.id])]
+        actions.push({ label: setting.label + ":  " + choice.label, act: "cycle", data: i })
+    end for
+    if settings.count() > 0 then actions.push({ label: "Save changes", act: "saveRule" })
+    actions.push({ label: "Delete rule", act: "cancel", data: { subscriptionId: m.ruleEdit.rule.id, done: "Rule deleted" } })
+    actions.push({ label: "Close", act: "close" })
+    return actions
+end function
+
+sub cycleRuleSetting(index as Integer, delta as Integer)
+    settings = nodeListOf(m.ruleEdit.rule.settings)
+    if index < 0 or index >= settings.count() then return
+    setting = settings[index]
+    n = setting.choices.count()
+    nextIdx = (choiceIndex(setting, m.ruleEdit.values[setting.id]) + delta + n) mod n
+    m.ruleEdit.values[setting.id] = setting.choices[nextIdx].value
+    focusIdx = m.menuList.itemFocused
+    setMenuActions(ruleActions())
+    if focusIdx <> invalid and focusIdx >= 0 then m.menuList.jumpToItem = focusIdx
+end sub
+
+sub saveRule()
+    changed = {}
+    for each setting in nodeListOf(m.ruleEdit.rule.settings)
+        value = m.ruleEdit.values[setting.id]
+        if value <> setting.value then changed[setting.id] = value
+    end for
+    closeActionMenu()
+    if changed.count() = 0 then return
+    runDvrCommand("ruleUpdate", { subscriptionId: m.ruleEdit.rule.id, prefs: changed }, "Rule updated")
 end sub
 
 sub onDvrEscapeUp()
@@ -1324,15 +1376,24 @@ sub setMenuActions(actions as Object)
     end for
     m.menuList.content = root
     rows = actions.count()
-    if rows > 6 then rows = 6
-    m.menuPanel.height = 176 + rows * 72
+    if rows > 9 then rows = 9
+    h = 176 + rows * 72
+    y = Int((1080 - h) / 2)
+    m.menuPanel.height = h
+    m.menuPanel.translation = [560, y]
+    m.menuAccent.translation = [560, y]
+    m.menuTitle.translation = [608, y + 36]
+    m.menuSub.translation = [608, y + 92]
+    m.menuListY = y + 152
+    m.menuList.translation = [608, m.menuListY]
     onMenuFocused()
 end sub
 
 sub onMenuFocused()
     idx = m.menuList.itemFocused
     if idx = invalid or idx < 0 then idx = 0
-    m.menuFocus.translation = [592, 412 + idx * 72]
+    if m.menuListY = invalid then m.menuListY = 412
+    m.menuFocus.translation = [592, m.menuListY + idx * 72]
 end sub
 
 sub closeActionMenu()
@@ -1358,6 +1419,10 @@ sub onMenuSelected()
     if action.act = "none" then return
     if action.act = "close" then
         closeActionMenu()
+    else if action.act = "cycle" then
+        cycleRuleSetting(action.data, 1)
+    else if action.act = "saveRule" then
+        saveRule()
     else if action.act = "watch" then
         closeActionMenu()
         watchChannel(focusedChannel(), focusedProgram())
@@ -1414,6 +1479,13 @@ function onKeyEvent(key as String, press as Boolean) as Boolean
     if m.zone = "menu" then
         if key = "back" or key = "options" then
             closeActionMenu()
+        else if key = "left" or key = "right" then
+            idx = m.menuList.itemFocused
+            if idx <> invalid and idx >= 0 and idx < m.menuActions.count() and m.menuActions[idx].act = "cycle" then
+                delta = 1
+                if key = "left" then delta = -1
+                cycleRuleSetting(m.menuActions[idx].data, delta)
+            end if
         end if
         return true
     end if
@@ -1492,7 +1564,16 @@ function onKeyEvent(key as String, press as Boolean) as Boolean
         openProgramMenu(true)
         return true
     else if key = "back" then
-        leaveToMenu()
+        nowIdx = programIndexAt(m.channels[0], nowSeconds())
+        if m.focusCh <> 0 or m.winStart <> m.minWin or m.focusProg <> nowIdx then
+            m.focusCh = 0
+            m.topRow = 0
+            m.winStart = m.minWin
+            refocusAnchor(nowSeconds())
+            afterFocusMove(true)
+        else
+            leaveToMenu()
+        end if
         return true
     end if
     return false

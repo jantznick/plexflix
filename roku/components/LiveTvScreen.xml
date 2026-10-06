@@ -47,9 +47,6 @@
             <Label id="programSummary" translation="[0, 256]" width="1180" height="72" color="0xB8C0CE" wrap="true" maxLines="2" lineSpacing="2" text="">
                 <Font role="font" uri="pkg:/fonts/Outfit-Regular.ttf" size="26" />
             </Label>
-            <Label id="hintLabel" translation="[0, 314]" width="1240" height="32" color="0x5E6880" text="">
-                <Font role="font" uri="pkg:/fonts/Outfit-Medium.ttf" size="22" />
-            </Label>
         </Group>
 
         <!-- Live preview of the focused channel -->
@@ -127,7 +124,7 @@
                 translation="[608, 412]"
                 itemSize="[704, 64]"
                 itemSpacing="[0, 8]"
-                numRows="6"
+                numRows="9"
                 vertFocusAnimationStyle="floatingFocus"
                 drawFocusFeedback="false"
                 color="0xC5CCD8"

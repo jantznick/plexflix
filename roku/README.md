@@ -19,7 +19,8 @@ This is intentionally a **design/UX shell** on top of existing Plex data. Creden
   preview of the focused channel. Up/Down change channel, Left/Right move through programs (time pages in 30-minute
   steps and later hours load as you go), `<<`/`>>` page channels. OK on something airing now watches it; OK on a future
   show (or `*` on anything) opens **Record this episode / Record series / Cancel recording**
-- **DVR**: Upcoming and Rules tabs above the guide list scheduled recordings and recording rules; OK on one cancels it.
+- **DVR**: Upcoming lists scheduled recordings (OK cancels one). Rules lists each show with a rule; OK opens an editor for
+  its Plex recording settings (Left/Right or OK cycles a value), plus Save and Delete.
   Programs that will record are tagged **REC** (or **SERIES**) in the grid. Finished recordings land in the Plex
   library the rule targets, like any other episode or movie
 - **Libraries**: mosaic hero + **View all**; full grid with filter, search, order-by and an A–Z rail
@@ -202,7 +203,7 @@ exit instead of being left running.
 ## Remote / focus
 
 - **Left** opens the sidebar from Home, Libraries, Live Sports (and sports detail via Back first); **Right** hides it
-- **Back** on a section's main screen (Home, a library, Live TV, Live Sports) opens the sidebar; from deep in Home's shelves or a library's shelves it returns to the top first
+- **Back** in the Live TV guide first jumps to the top channel at the current time; **Back** on a section's main screen (Home, a library, Live TV, Live Sports) opens the sidebar; from deep in Home's shelves or a library's shelves it returns to the top first
 - **Back** with the sidebar open exits the channel
 - Libraries appear as flat items in the sidebar (no wrapping cycle at the ends)
 - Arrow keys move across poster rows
