@@ -25,14 +25,16 @@
         <Rectangle width="1920" height="1080" color="0x000000" />
 
         <!-- enableUI="false": every control below is ours, so Roku's stock
-             trick-play overlay must stay out of the way. Focus also stays on
-             this Group rather than the Video node so one key handler owns the
-             remote for the whole screen. -->
+             trick-play overlay must stay out of the way. focusable="false"
+             keeps the Video node from stealing focus once playback starts —
+             without that, keys land on Video and disappear (the Group's
+             onKeyEvent never sees them). -->
         <Video
             id="video"
             width="1920"
             height="1080"
             enableUI="false"
+            focusable="false"
             notificationInterval="1"
         />
 

@@ -123,8 +123,10 @@ the season row; a show you have never touched still opens on Play.
 
 ## Playing content
 
-The Video node runs with `enableUI="false"`, so the whole playback surface is
-ours and Roku's trick-play bar never appears.
+The Video node runs with `enableUI="false"` and `focusable="false"`, so the whole
+playback surface is ours, Roku's trick-play bar never appears, and remote keys
+stay on the player screen (Video otherwise steals focus once a stream starts and
+swallows the remote).
 
 - **Down**, **OK** or **Pause** raises the panel; it stays up while paused and
   auto-hides after five seconds of silence while playing
