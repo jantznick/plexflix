@@ -72,8 +72,14 @@ function multiviewRequest(cfg as Object, method as String, path as String, body 
         if type(msg) = "roUrlEvent" then
             code = msg.GetResponseCode()
             text = msg.GetString()
+            if text = invalid then text = ""
+            text = text.Trim()
             parsed = invalid
-            if text <> invalid and text.Trim() <> "" then parsed = ParseJson(text)
+            if Left(text, 1) = "{" then parsed = ParseJson(text)
+            if code > 0 and text <> "" and parsed = invalid then
+                ' Some other server answered: the URL or port is pointing elsewhere
+                return { ok: false, code: code, error: "Something other than the multiview server answered at " + base + " (HTTP " + StrI(code).Trim() + ": " + Left(text, 60) + "). Check the IP and port in multiviewUrl." }
+            end if
             if code < 200 or code >= 300 then
                 err = "Multiview server error " + StrI(code).Trim()
                 if code < 0 then err = "Can't reach the multiview server at " + base + " (" + msg.GetFailureReason() + ")"
