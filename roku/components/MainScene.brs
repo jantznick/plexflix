@@ -30,8 +30,6 @@ sub init()
     m.sideNav.observeField("selectedLibrary", "onLibrarySelected")
     ' The nav can collapse itself (Back); keep the scrim and focus in sync when it does
     m.sideNav.observeField("expanded", "onNavExpandedChanged")
-    ' The menu starts open, but only once the splash has made way for Home
-    m.openNavAfterSplash = true
     showHome()
 end sub
 
@@ -51,11 +49,6 @@ end function
 
 sub onHomeSplashChange()
     updateNavRail()
-    if splashShowing() then return
-    if m.openNavAfterSplash = true then
-        m.openNavAfterSplash = false
-        setNavExpanded(true)
-    end if
 end sub
 
 sub onNavExpandedChanged(event as Object)
@@ -86,10 +79,16 @@ end sub
 sub clearScreens()
     ' Stop the library hub's focus guard before its node leaves the tree
     if m.libraryBrowseScreen <> invalid then m.libraryBrowseScreen.suspended = true
-    while m.screens.getChildCount() > 0
-        m.screens.removeChildIndex(0)
-    end while
-    m.homeScreen = invalid
+    ' Home is parked rather than dropped, so coming back to it is instant and
+    ' only a background refresh instead of the splash and a full load
+    for i = m.screens.getChildCount() - 1 to 0 step -1
+        child = m.screens.getChild(i)
+        if m.homeScreen = invalid or not child.isSameNode(m.homeScreen) then m.screens.removeChildIndex(i)
+    end for
+    if m.homeScreen <> invalid then
+        m.homeScreen.suspended = true
+        m.homeScreen.visible = false
+    end if
     m.detailScreen = invalid
     m.videoScreen = invalid
     m.libraryBrowseScreen = invalid
@@ -153,7 +152,19 @@ end sub
 
 sub showHome()
     clearScreens()
+    m.section = "home"
     m.sideNav.active = "home"
+
+    if m.homeScreen <> invalid then
+        m.homeScreen.visible = true
+        m.homeScreen.suspended = false
+        m.homeScreen.setFocus(true)
+        m.homeScreen.refocus = true
+        m.homeScreen.refresh = true
+        updateNavRail()
+        return
+    end if
+
     m.homeScreen = createObject("roSGNode", "HomeScreen")
     m.homeScreen.config = m.config
     m.homeScreen.observeField("selectedItem", "onBrowseSelected")
@@ -556,6 +567,8 @@ sub onVideoClosed()
         m.videoScreen = invalid
     end if
     updateNavRail()
+    ' Resume points and watched flags just moved; a parked Home refreshes on return
+    if m.homeScreen <> invalid and m.section = "home" then m.homeScreen.refresh = true
     if m.detailScreen <> invalid then
         m.detailScreen.setFocus(true)
     else if m.sportsDetailScreen <> invalid then

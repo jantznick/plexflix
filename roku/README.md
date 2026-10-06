@@ -8,8 +8,11 @@ This is intentionally a **design/UX shell** on top of existing Plex data. Creden
 
 - Dark Netflix-like home: billboard hero + horizontal shelves
 - **Collapsible sidebar** (Left to open): Home, your **Libraries**, **Live TV**, Live Sports.
-  It starts open on launch; collapsed, a 72px icon rail stays on browse screens
-  (hidden on detail pages and in the player) with the current section lit
+  Collapsed, a 72px icon rail stays on browse screens with the current section
+  lit; it is hidden on detail pages, in the player and over the launch splash
+- **Home stays loaded**: switching sections parks it instead of discarding it,
+  so returning is instant and the hubs refresh in the background (also after
+  playback), updating only the rows whose items changed
 - Selecting a library in the sidebar opens that library’s shelves
 - **Live TV**: Guide layout always visible (columns + placeholder rows while syncing); program info top-left, preview top-right
 - **Libraries**: mosaic hero + **View all**; full grid with filter, search, order-by and an A–Z rail
