@@ -94,8 +94,12 @@ sub init()
 
     m.clock24 = (CreateObject("roDeviceInfo").GetClockFormat() = "24h")
 
+    ' Belt-and-suspenders with focusable="false" in XML: some firmware still
+    ' hands focus to Video when control="play" flips it to buffering/playing.
+    m.video.focusable = false
     m.video.observeField("state", "onVideoState")
     m.video.observeField("position", "onPositionChange")
+    m.top.observeField("focusedChild", "onFocusedChild")
 end sub
 
 '--------------------------------------------------------------------
@@ -181,7 +185,7 @@ sub playDirect(url as String, item as Object)
     m.video.content = contentNode
     m.video.control = "play"
     clearStatus()
-    m.top.setFocus(true)
+    ensurePlayerFocus()
 end sub
 
 sub onStreamReady()
@@ -190,6 +194,7 @@ sub onStreamReady()
         err = "Playback failed"
         if response <> invalid and response.error <> invalid then err = response.error
         setStatus(err)
+        ensurePlayerFocus()
         return
     end if
 
@@ -209,16 +214,39 @@ sub onStreamReady()
     m.video.content = contentNode
     m.video.control = "play"
     clearStatus()
-    m.top.setFocus(true)
+    ensurePlayerFocus()
 end sub
 
 '--------------------------------------------------------------------
 ' Playback state
 '--------------------------------------------------------------------
 
+sub onFocusedChild()
+    ' If anything under this screen (especially Video) grabs focus, take it
+    ' back so onKeyEvent keeps owning the remote.
+    child = m.top.focusedChild
+    if child = invalid then return
+    if child.isSameNode(m.video) then
+        ensurePlayerFocus()
+    end if
+end sub
+
+sub ensurePlayerFocus()
+    m.video.focusable = false
+    ' Always re-assert: hasFocus() is false while a child holds focus, and that
+    ' is exactly the broken state we are trying to leave.
+    m.top.setFocus(true)
+end sub
+
 sub onVideoState()
     state = m.video.state
     logPlayback("state=" + state + " position=" + StrI(m.position).Trim() + " duration=" + StrI(m.duration).Trim())
+
+    ' Reclaim focus on every live playback transition — Video likes to take it
+    ' the moment a stream actually starts.
+    if state = "playing" or state = "paused" or state = "buffering" then
+        ensurePlayerFocus()
+    end if
 
     if state = "playing" then
         m.started = true
@@ -242,6 +270,7 @@ sub onVideoState()
         m.reportTimer.control = "stop"
         sendPlaybackActions([releaseAction()])
         showPlaybackError("Playback failed")
+        ensurePlayerFocus()
     else if state = "finished" then
         m.reportTimer.control = "stop"
         if playedToEnd() then
@@ -253,6 +282,7 @@ sub onVideoState()
             ' mark something watched that never rendered a frame.
             sendPlaybackActions([releaseAction()])
             showPlaybackError("Stream ended before it played")
+            ensurePlayerFocus()
         end if
     end if
 end sub
