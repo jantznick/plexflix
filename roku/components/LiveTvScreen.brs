@@ -1135,7 +1135,7 @@ sub onDvrSelected()
         seriesId = seriesRuleIdForUpcoming(up)
         if seriesId <> "" then
             actions.push({ label: "Edit series rule", act: "editRule", data: seriesId })
-            actions.push({ label: "Delete series rule", act: "cancel", data: { subscriptionId: seriesId, done: "Series rule deleted" } })
+            actions.push({ label: "Delete series rule", act: "confirmDelete", data: { subscriptionId: seriesId, title: up.title, done: "Series rule deleted" } })
         end if
         if seriesId <> up.subscriptionId then
             actions.push({ label: "Cancel recording", act: "cancel", data: { subscriptionId: up.subscriptionId, done: "Recording cancelled" } })
@@ -1231,7 +1231,7 @@ function ruleActions() as Object
     end for
     if m.ruleEdit.loading = true then actions.push({ label: "Loading settings…", act: "none" })
     if settings.count() > 0 then actions.push({ label: "Save changes", act: "saveRule" })
-    actions.push({ label: "Delete rule", act: "cancel", data: { subscriptionId: m.ruleEdit.rule.id, done: "Rule deleted" } })
+    actions.push({ label: "Delete rule", act: "confirmDelete", data: { subscriptionId: m.ruleEdit.rule.id, title: m.ruleEdit.rule.title, done: "Rule deleted" } })
     actions.push({ label: "Close", act: "close" })
     return actions
 end function
@@ -1428,14 +1428,13 @@ sub openProgramMenu(includeWatch as Boolean)
     if includeWatch then actions.push({ label: "Watch " + channelLabel(ch) + " live", act: "watch" })
     rec = recordingFor(ch, p)
     seriesId = seriesRuleFor(p)
-    if rec <> invalid then
-        if rec.subscriptionType = 2 then
-            actions.push({ label: "Delete series rule", act: "cancel", data: { subscriptionId: rec.subscriptionId, done: "Series rule deleted" } })
-        else
-            actions.push({ label: "Cancel recording", act: "cancel", data: { subscriptionId: rec.subscriptionId, done: "Recording cancelled" } })
-        end if
-    else if seriesId <> "" then
-        actions.push({ label: "Delete series rule", act: "cancel", data: { subscriptionId: seriesId, done: "Series rule deleted" } })
+    if rec <> invalid and seriesId = "" then seriesId = seriesRuleIdForUpcoming(rec)
+    if seriesId <> "" then
+        actions.push({ label: "Edit series rule", act: "editRule", data: seriesId })
+        actions.push({ label: "Delete series rule", act: "confirmDelete", data: { subscriptionId: seriesId, title: p.title, done: "Series rule deleted" } })
+    end if
+    if rec <> invalid and rec.subscriptionId <> seriesId then
+        actions.push({ label: "Cancel recording", act: "cancel", data: { subscriptionId: rec.subscriptionId, done: "Recording cancelled" } })
     end if
     loadingRecord = false
     if rec = invalid and seriesId = "" and p.placeholder <> true and valueOr(p.guid, "") <> "" and p.endsAt > nowSeconds() then
@@ -1549,6 +1548,15 @@ sub onMenuSelected()
         closeSettingPicker(action.data)
     else if action.act = "saveRule" then
         saveRule()
+    else if action.act = "editRule" then
+        closeActionMenu()
+        editRuleById(action.data)
+    else if action.act = "confirmDelete" then
+        closeActionMenu()
+        openActionMenu("Delete this recording rule?", valueOr(action.data.title, ""), [
+            { label: "Keep rule", act: "close" },
+            { label: "Delete rule", act: "cancel", data: action.data }
+        ])
     else if action.act = "watch" then
         closeActionMenu()
         watchChannel(focusedChannel(), focusedProgram())
