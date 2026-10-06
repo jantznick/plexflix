@@ -27,6 +27,8 @@ function GetPlexConfig() as Object
 
         ' Multiview compositor on the home server (multiview/ in this repo).
         ' Leave empty to hide multiview from the sports guide.
+        ' The Roku calls this itself, so use the server's LAN IP, never localhost:
+        ' e.g. "http://192.168.1.20:8095"
         multiviewUrl: "",
         ' Must match MULTIVIEW_TOKEN in its docker-compose.yml when that is set
         multiviewToken: "",

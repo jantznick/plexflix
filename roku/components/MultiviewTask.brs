@@ -26,10 +26,11 @@ end sub
 
 function multiviewBase(cfg as Object) as String
     if cfg = invalid or cfg.multiviewUrl = invalid then return ""
-    base = cfg.multiviewUrl
+    base = cfg.multiviewUrl.Trim()
     while Right(base, 1) = "/"
         base = Left(base, Len(base) - 1)
     end while
+    if base <> "" and Instr(1, base, "://") = 0 then base = "http://" + base
     return base
 end function
 
@@ -60,7 +61,7 @@ function multiviewRequest(cfg as Object, method as String, path as String, body 
         ' decides the verb actually sent
         started = request.AsyncPostFromString(body)
     end if
-    if not started then return { ok: false, error: "Could not reach the multiview server" }
+    if not started then return { ok: false, error: "Could not reach the multiview server at " + base }
 
     while true
         msg = wait(15000, port)
@@ -70,10 +71,12 @@ function multiviewRequest(cfg as Object, method as String, path as String, body 
         end if
         if type(msg) = "roUrlEvent" then
             code = msg.GetResponseCode()
-            parsed = ParseJson(msg.GetString())
+            text = msg.GetString()
+            parsed = invalid
+            if text <> invalid and text.Trim() <> "" then parsed = ParseJson(text)
             if code < 200 or code >= 300 then
                 err = "Multiview server error " + StrI(code).Trim()
-                if code < 0 then err = "Can't reach the multiview server (" + msg.GetFailureReason() + ")"
+                if code < 0 then err = "Can't reach the multiview server at " + base + " (" + msg.GetFailureReason() + ")"
                 if parsed <> invalid and parsed.error <> invalid then err = parsed.error
                 return { ok: false, error: err, code: code }
             end if
