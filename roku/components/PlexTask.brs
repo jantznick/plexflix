@@ -484,7 +484,14 @@ end function
 function imageUrl(cfg as Object, path as Dynamic, width = 420 as Integer, height = 630 as Integer) as String
     if path = invalid or path = "" then return ""
     pathStr = safeToStr(path)
-    if Left(pathStr, 4) = "http" then return pathStr
+    ' Discover / TMDB often hand us absolute URLs at /original or w780. Returning
+    ' those as-is made home shelves download multi-MB posters into 180px tiles,
+    ' which saturates Roku's image pipeline so many thumbs appear stuck forever.
+    if Left(pathStr, 4) = "http" then
+        tmdb = rewriteTmdbImageUrl(pathStr, width)
+        if tmdb <> "" then return tmdb
+        ' Non-TMDB remotes (metadata CDN, etc.): still ask Plex to resize/proxy
+    end if
     ' minSize=1 = cover/crop (preserves aspect). upscale=0 avoids mushy blow-ups.
     return cfg.baseUrl + "/photo/:/transcode?width=" + safeToStr(width) + "&height=" + safeToStr(height) + "&minSize=1&upscale=0&url=" + requestEncode(pathStr) + "&X-Plex-Token=" + cfg.token
 end function
@@ -493,8 +500,37 @@ function imageUrlWide(cfg as Object, path as Dynamic, width = 1920 as Integer) a
     ' Width-only: Plex scales proportionally — no forced height that can look stretched
     if path = invalid or path = "" then return ""
     pathStr = safeToStr(path)
-    if Left(pathStr, 4) = "http" then return pathStr
+    if Left(pathStr, 4) = "http" then
+        tmdb = rewriteTmdbImageUrl(pathStr, width)
+        if tmdb <> "" then return tmdb
+    end if
     return cfg.baseUrl + "/photo/:/transcode?width=" + safeToStr(width) + "&minSize=1&upscale=0&url=" + requestEncode(pathStr) + "&X-Plex-Token=" + cfg.token
+end function
+
+' Swap any TMDB /t/p/<size>/ segment for a width that matches the tile we draw.
+' Returns "" when the URL is not a TMDB image CDN link.
+function rewriteTmdbImageUrl(url as String, width as Integer) as String
+    marker = "image.tmdb.org/t/p/"
+    idx = Instr(1, url, marker)
+    if idx = 0 then return ""
+
+    size = "w342"
+    if width >= 1280 then
+        size = "w1280"
+    else if width >= 780 then
+        size = "w780"
+    else if width >= 500 then
+        size = "w500"
+    else if width >= 342 then
+        size = "w342"
+    else
+        size = "w185"
+    end if
+
+    startAt = idx + Len(marker)
+    slash = Instr(startAt, url, "/")
+    if slash = 0 then return ""
+    return Left(url, startAt - 1) + size + Mid(url, slash)
 end function
 
 function requestEncode(value as String) as String

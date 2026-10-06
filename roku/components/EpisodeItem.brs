@@ -24,6 +24,8 @@ sub onSizeChange()
 
     m.still.width = contentW
     m.still.height = contentH
+    m.still.loadWidth = Int(contentW * 1.5)
+    m.still.loadHeight = Int(contentH * 1.5)
     m.still.translation = [pad, pad]
     m.titleScrim.width = contentW
     m.titleScrim.translation = [pad, pad + contentH - 52]

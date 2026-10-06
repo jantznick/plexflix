@@ -33,16 +33,22 @@ sub onActiveChange()
             m.spinner.control = "start"
             CenterSpinner(m.spinner, 960)
         end if
+        ' Rebuild if we tore the mosaic down while Home was loading
+        if m.rowNodes = invalid or m.rowNodes.count() = 0 then buildRows(defaultPosterPool())
         m.tick.control = "start"
+        if m.top.manifestUrl <> "" then fetchManifest(m.top.manifestUrl)
     else
         m.tick.control = "stop"
         if m.spinner <> invalid then m.spinner.control = "stop"
         m.top.visible = false
+        ' ~168 splash posters otherwise keep downloading under Home and starve
+        ' the shelf thumbnails of Roku's limited concurrent image slots
+        releasePosters()
     end if
 end sub
 
 sub onManifestUrlChange()
-    if m.top.manifestUrl <> "" then fetchManifest(m.top.manifestUrl)
+    if m.top.active = true and m.top.manifestUrl <> "" then fetchManifest(m.top.manifestUrl)
 end sub
 
 sub fetchManifest(url as String)
@@ -53,6 +59,8 @@ sub fetchManifest(url as String)
 end sub
 
 sub onManifestReady()
+    ' A late CDN response must not rebuild ~168 posters after Home is already up
+    if m.top.active <> true then return
     response = m.manifestTask.response
     if response = invalid or response.ok <> true then return
     posters = response.posters
@@ -60,7 +68,7 @@ sub onManifestReady()
     buildRows(posters)
 end sub
 
-sub buildRows(pool as Object)
+sub releasePosters()
     if m.rowsRoot = invalid then return
     while m.rowsRoot.getChildCount() > 0
         m.rowsRoot.removeChildIndex(0)
@@ -69,6 +77,11 @@ sub buildRows(pool as Object)
     m.rowOffsets = []
     m.rowSpeeds = []
     m.loopWidths = []
+end sub
+
+sub buildRows(pool as Object)
+    if m.rowsRoot = invalid then return
+    releasePosters()
 
     if pool = invalid or pool.count() = 0 then pool = defaultPosterPool()
 
