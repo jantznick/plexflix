@@ -19,7 +19,9 @@ This is intentionally a **design/UX shell** on top of existing Plex data. Creden
 - **Watched state from Plex**: a tick on finished titles, a remaining-episode count
   on part-watched shows, and a resume bar on anything started
 - Playback via Plex universal transcoder (HLS) with a **custom player overlay**
-  (scrubber, elapsed / remaining, finish time, cast, audio + subtitle pickers)
+  (scrubber, elapsed / remaining, finish time, audio + subtitle + version pickers)
+- **Skip intro / credits** from Plex's own markers, **BIF scrubbing previews**,
+  and an **inline cast panel** that pauses rather than leaving playback
 - **Progress is written back to Plex**, so resume points and Continue Watching
   stay in sync with every other Plex client
 - Live sports from a configurable JSON feed URL (event detail + stream picker)
@@ -131,12 +133,39 @@ ours and Roku's trick-play bar never appears.
   Version whenever the file offers more than one
 - **Left / Right** on the scrubber seeks 10s, the transport keys seek 30s; a run
   of presses commits a single seek once it settles
-- the **cast strip** sits above the title. It is deliberately not focusable —
-  opening a cast page from here would have to tear down playback
+- **Up** from the scrubber reaches the **cast strip** above the title
 
 Switching audio, subtitles or version writes the choice to Plex
 (`PUT /library/parts/{id}`) and restarts the transcode at the current position,
-which costs a short buffer. The player stays open and keeps your place.
+which costs a short buffer. The player stays open and keeps your place. The
+buttons only appear when there is a choice to make, so a file with one audio
+track and no subtitles shows just Pause and Restart.
+
+### Skip intro / credits
+
+`?includeMarkers=1` returns the `intro`, `credits` and `commercial` ranges Plex
+generates. Inside one of those ranges a pill appears bottom-right and **OK**
+takes it, with no need to raise the panel first; the same action leads the button
+row when the panel is up. The offer is withdrawn in the last second of a range,
+where the skip would be a no-op.
+
+### Scrubbing previews
+
+When the server has built a BIF index for a file (`Part` reports
+`indexes="sd"`), frames come from
+`/library/parts/{partId}/indexes/sd/{offsetMs}` and a thumbnail follows the
+playhead while seeking. Requests are bucketed to five seconds so holding a
+direction key does not fire one per press. The title and the cast strip hide
+while it is up, because it covers both.
+
+### Cast without leaving playback
+
+**OK** on a cast member pauses the video and opens an inline panel with the
+actor's photo, role, bio and known-for credits — the same `personDetail` lookup
+the cast page uses, Plex's `/library/people` plus optional TMDB enrichment.
+Closing it resumes playback, but only if the pause was ours: a video the viewer
+had already paused stays paused. Going to the full cast page instead would mean
+tearing down the transcode, so it stays inline.
 
 Progress goes back to the server on every state change and every ten seconds via
 `/:/timeline`, and `/:/scrobble` marks a title played when it finishes. Those
