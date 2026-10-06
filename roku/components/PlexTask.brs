@@ -2919,13 +2919,20 @@ function liveSessionFromTune(cfg as Object, result as Object) as Dynamic
     transcodeSession = ""
     ' start.m3u8 starts the transcode; the player gets the media playlist it
     ' points at, since asking for start.m3u8 again restarts the session
-    for startNo = 1 to 3
+    ' Broadcast MPEG-2 converted to H.264 dies on some servers, so first ask
+    ' Plex to pass through any codec this Roku decodes
+    strategies = [
+        { name: "copy", extra: ["X-Plex-Client-Profile-Extra=" + requestEncode(liveCopyProfile())] },
+        { name: "720p", extra: ["videoResolution=1280x720", "maxVideoBitrate=4000", "videoQuality=75"] }
+    ]
+    for startNo = 1 to strategies.count()
+        strategy = strategies[startNo - 1]
         transcodeSession = "plexflix-live-" + mediaUuid
         if startNo > 1 then transcodeSession = transcodeSession + "-r" + startNo.ToStr()
-        masterUrl = buildStreamUrl(cfg, { key: "/livetv/sessions/" + mediaUuid, session: transcodeSession }).url
-        if startNo = 1 then logDecision(cfg, masterUrl)
+        masterUrl = buildStreamUrl(cfg, { key: "/livetv/sessions/" + mediaUuid, session: transcodeSession, extraQuery: strategy.extra }).url
+        logDecision(cfg, masterUrl)
         probe = probePlaylist(cfg, masterUrl)
-        print "[plexflix:livetv] start "; startNo; " HTTP "; probe.code; " "; Left(masterUrl, 140)
+        print "[plexflix:livetv] start "; startNo; " ("; strategy.name; ") HTTP "; probe.code; " "; Left(masterUrl, 140)
         if probe.ok then
             playUrl = transcodeVariant(cfg, masterUrl, probe.body)
             if playUrl <> "" then
@@ -2983,6 +2990,7 @@ function transcodeVariant(cfg as Object, masterUrl as String, body as String) as
             logFirstSegment(cfg, variant, vprobe.body)
             return variant
         end if
+        if vprobe.code >= 500 then print "[plexflix:livetv] variant error body: "; Left(vprobe.body, 400)
         if vprobe.code = 404 then misses = misses + 1
         if misses >= 3 then exit for
         sleep(400)
@@ -3024,8 +3032,29 @@ end function
 sub logDecision(cfg as Object, masterUrl as String)
     decisionUrl = masterUrl.Replace("/start.m3u8?", "/decision?")
     decision = probePlaylist(cfg, decisionUrl)
-    print "[plexflix:livetv] decision HTTP "; decision.code; ": "; Left(decision.body, 500)
+    body = decision.body
+    print "[plexflix:livetv] decision HTTP "; decision.code; ": "; Left(body, 300)
+    streamAt = Instr(1, body, "<Stream ")
+    while streamAt > 0
+        closeAt = Instr(streamAt, body, ">")
+        if closeAt = 0 then exit while
+        print "[plexflix:livetv]   "; Left(Mid(body, streamAt, closeAt - streamAt + 1), 260)
+        streamAt = Instr(closeAt, body, "<Stream ")
+    end while
 end sub
+
+' Generic clients get H.264-only HLS; this widens it to what the device decodes
+function liveCopyProfile() as String
+    info = CreateObject("roDeviceInfo")
+    videoCodecs = "h264"
+    if info.CanDecodeVideo({ Codec: "hevc" }).result = true then videoCodecs = videoCodecs + ",hevc"
+    if info.CanDecodeVideo({ Codec: "mpeg2" }).result = true then videoCodecs = videoCodecs + ",mpeg2video"
+    audioCodecs = "aac,mp3"
+    if info.CanDecodeAudio({ Codec: "ac3" }).result = true then audioCodecs = audioCodecs + ",ac3"
+    if info.CanDecodeAudio({ Codec: "eac3" }).result = true then audioCodecs = audioCodecs + ",eac3"
+    print "[plexflix:livetv] device decodes video "; videoCodecs; " audio "; audioCodecs
+    return "add-transcode-target(type=videoProfile&context=streaming&protocol=hls&container=mpegts&videoCodec=" + videoCodecs + "&audioCodec=" + audioCodecs + "&replace=true)"
+end function
 
 ' Why a transcode died is only visible server-side; this shows whether Plex
 ' still lists it and what it decided
@@ -4275,6 +4304,11 @@ function buildStreamUrl(cfg as Object, item as Object) as Object
     if session <> "" then
         query.push("session=" + requestEncode(session))
         query.push("X-Plex-Session-Identifier=" + requestEncode(session))
+    end if
+    if item.extraQuery <> invalid then
+        for each part in item.extraQuery
+            query.push(part)
+        end for
     end if
 
     url = cfg.baseUrl + "/video/:/transcode/universal/start.m3u8?" + joinStrings(query, "&")
