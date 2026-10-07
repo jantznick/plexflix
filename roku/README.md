@@ -4,6 +4,8 @@ Netflix-style browse + play layer over your local Plex Media Server.
 
 This is intentionally a **design/UX shell** on top of existing Plex data. Credentials are hardcoded for local testing.
 
+**New to Roku / coming from React or Node?** Start with [LEARNING.md](./LEARNING.md) — a guided tour of SceneGraph vs BrightScript and a file-by-file learning path through this channel.
+
 ## What you get
 
 - Dark Netflix-like home: billboard hero + horizontal shelves
