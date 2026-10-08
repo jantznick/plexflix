@@ -51,7 +51,9 @@ This is intentionally a **design/UX shell** on top of existing Plex data. Creden
 - **Multiview**: 2–4 live games at once in Grid, Spotlight or Picture in picture,
   tiled on your home server (see [Multiview](#multiview))
 - Optional **TMDB** enrichment for cast pages and Discover titles missing from your library (`tmdbApiKey` in config)
-- Discover titles not in Plex open a **Not in your library** detail view (no Play) with synopsis, similar local picks, and Watchlist actions
+- Discover titles not in Plex open a **Not in your library** detail view (no Play)
+  with synopsis, similar local picks, **Add to Watchlist**, and optional **Grab Now**
+  (only when `grabUrl` is set; fails open if the grab server is down)
 
 ## Configure before sideload
 
@@ -110,6 +112,11 @@ open the detail page.
 On any Discover title that is not in your library, the detail page offers
 **Add to Watchlist** / **Remove Watchlist** (`/actions/addToWatchlist` and
 `removeFromWatchlist`) — the same personal Watchlist as the official Plex apps.
+
+Optional **Grab Now** (when `grabUrl` is set in `PlexConfig.brs`) calls the
+`grab/` sidecar to Force-download via NZBGet. It is fail-open: empty `grabUrl`
+hides the button; timeouts / unreachable server only update the soft status line
+and never block Watchlist, Back, or the rest of the channel.
 If the same `plex://` GUID is already on your server, detail promotes to a
 normal Play page instead.
 

@@ -12,7 +12,7 @@ function GetPlexConfig() as Object
         clientId: "plexflix-roku-mvp-001",
 
         product: "PlexFlix",
-        version: "0.10.21",
+        version: "0.10.24",
 
         ' How many items to request per row (home clamps display to 15–30)
         rowSize: 40,
@@ -32,6 +32,13 @@ function GetPlexConfig() as Object
         multiviewUrl: "",
         ' Must match MULTIVIEW_TOKEN in its docker-compose.yml when that is set
         multiviewToken: "",
+
+        ' Grab sidecar (grab/ in this repo): NZBFinder → NZBGet Force → Plex.
+        ' Leave empty to hide Grab Now — channel stays fully usable without it.
+        ' e.g. "http://192.168.1.50:8096"
+        grabUrl: "",
+        ' Must match GRAB_TOKEN in grab's docker-compose when that is set
+        grabToken: "",
 
         ' Optional TMDB key for cast bios / photos / known-for when Plex people data is thin.
         ' https://www.themoviedb.org/settings/api
