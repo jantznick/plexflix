@@ -10,7 +10,7 @@ This is intentionally a **design/UX shell** on top of existing Plex data. Creden
 
 - Dark Netflix-like home: billboard hero + horizontal shelves
 - **Collapsible sidebar** (Left to open): Home, **Search**, your **Libraries**,
-  **Live TV**, Live Sports.
+  **Live TV**, **Cable TV**, Live Sports.
   Collapsed, a 72px icon rail stays on browse screens with the current section
   lit; it is hidden on detail pages, in the player and over the launch splash
 - **Search**: Plex Discover catalog search for any movie/show (not just what’s
@@ -21,6 +21,7 @@ This is intentionally a **design/UX shell** on top of existing Plex data. Creden
   playback), updating only the rows whose items changed
 - Selecting a library in the sidebar opens that library’s shelves
 - **Live TV**: a real grid guide built from your Plex EPG (`/<epg provider>/grid`): channel logo, number and call sign
+- **Cable TV**: same guide layout for Entertainment and Cartoons from the sports JSON feed; optional `cableEpgUrl` sidecar supplies what’s-on listings (otherwise 24/7 placeholders). Those sections no longer appear under Live Sports
   down the left, half-hour time slots across the top, program blocks sized by duration, a red now-line, and a live
   preview of the focused channel. Up/Down change channel, Left/Right move through programs (time pages in 30-minute
   steps and later hours load as you go), `<<`/`>>` page channels. OK on something airing now watches it; OK on a future
@@ -61,6 +62,7 @@ Edit `roku/source/PlexConfig.brs`:
 baseUrl: "http://192.168.x.x:32400"
 token: "YOUR_PLEX_TOKEN"
 sportsFeedUrl: "https://roku-hockey.s3.us-west-004.backblazeb2.com/secretfeedfilename.json"
+cableEpgUrl: "https://roku-hockey.s3.us-west-004.backblazeb2.com/plexflix/cable-epg.json"
 tmdbApiKey: "YOUR_TMDB_API_KEY"
 multiviewUrl: "http://192.168.x.x:8095"   ' optional, see Multiview
 ```
@@ -69,6 +71,10 @@ Optional keys:
 - `tmdbApiKey` — cast bios / photos / known-for, plus synopsis art for Discover titles not in your library (https://www.themoviedb.org/settings/api)
 - Leave as `REPLACE_WITH_TMDB_API_KEY` to skip TMDB (Plex people data still used when available)
 `sportsFeedUrl` can point at any JSON feed. Category maps like `{ "FOOTBALL": [ { title, thumbnail, content.videos[].url } ] }` are supported.
+
+### Cable TV listings (EPG)
+
+Entertainment / Cartoons are 24/7 streams. Listings live in a **sidecar** JSON (`cable-epg.json`) so your 5-minute sports feed publish never wipes them. Full setup is under [Cable TV EPG sidecar](#cable-tv-epg-sidecar-home-server) below.
 
 Notes:
 
@@ -317,7 +323,7 @@ erroring out.
 ## Remote / focus
 
 - **Left** opens the sidebar from Home, Libraries, Live Sports (and sports detail via Back first); **Right** hides it
-- **Back** in the Live TV guide first jumps to the top channel at the current time; **Back** on a section's main screen (Home, a library, Live TV, Live Sports) opens the sidebar; from deep in Home's shelves or a library's shelves it returns to the top first
+- **Back** on Live TV / Cable TV / Live Sports: first press returns to the top tabs/pills; second press opens the sidebar. On Home or a library, Back opens the sidebar (from deep in shelves it returns to the top first)
 - **Back** with the sidebar open exits the channel
 - Libraries appear as flat items in the sidebar (no wrapping cycle at the ends)
 - Arrow keys move across poster rows
@@ -332,6 +338,102 @@ erroring out.
 - Back returns to the previous screen
 - Loading uses a Netflix-style scrolling poster mosaic on home launch (CDN-refreshable)
 - Soft loading banner for in-app fetches — the UI stays navigable
+
+## Cable TV EPG sidecar (home server)
+
+Streams stay in `sportsFeedUrl` (updates as often as every 5 minutes). What’s-on listings are a **separate** object the Roku merges by channel id.
+
+Run this on the **home server** (not this laptop). Every **6–12 hours** is enough — not after every feed publish.
+
+### 1. One-time setup
+
+```bash
+# venv (reuse the splash one if you already have b2sdk there)
+python3 -m venv ~/plexflix-epg-venv
+~/plexflix-epg-venv/bin/pip install b2sdk
+
+# env file
+cp /path/to/repo/roku/scripts/cable_epg.env.example ~/plexflix-cable-epg.env
+chmod 600 ~/plexflix-cable-epg.env
+```
+
+Edit `~/plexflix-cable-epg.env`:
+
+```bash
+# XMLTV source (default is fine for US cable nets)
+EPG_XMLTV_URL=https://epgshare01.online/epgshare01/epg_ripper_US2.xml.gz
+
+# Optional — synopsis / backdrop / cast for the guide + player (same key as PlexConfig tmdbApiKey)
+TMDB_API_KEY=your_tmdb_v3_key
+
+# Backblaze B2 — same bucket you already use for the sports feed / splash
+B2_BUCKET=roku-hockey
+B2_KEY_ID=your_key_id
+B2_APPLICATION_KEY=your_application_key
+
+# MUST be the sidecar key — do not point this at secretfeedfilename.json
+B2_REMOTE_KEY=plexflix/cable-epg.json
+```
+
+With `TMDB_API_KEY` set, the enricher looks up each unique programme title (cached under
+`~/.cache/plexflix-cable-tmdb.json`) and attaches overview, backdrop/poster, year, rating,
+and up to 8 cast members. The Cable TV guide uses that art/summary; OK → player shows the
+cast strip like library titles (stream stays live — no scrubber).
+
+Channel id map (usually leave as-is): `roku/scripts/cable_epg_map.json`  
+(`timst-cartoon-network` → `Cartoon.Network.HD.us2`, etc.)
+
+### 2. Dry run (no upload)
+
+```bash
+~/plexflix-epg-venv/bin/python /path/to/repo/roku/scripts/enrich_cable_epg.py \
+  --env-file ~/plexflix-cable-epg.env \
+  --out /tmp/cable-epg.json
+```
+
+You should see something like `sidecar mapped=55 withEpg=55 programmes=…` and a ~0.8–1.5 MB JSON file.
+
+Optional: `--days 2` keeps two days ahead (default is **6 hours back + 1 day ahead**).
+
+### 3. Upload to B2
+
+```bash
+~/plexflix-epg-venv/bin/python /path/to/repo/roku/scripts/enrich_cable_epg.py \
+  --env-file ~/plexflix-cable-epg.env \
+  --upload
+```
+
+That writes:
+
+`https://roku-hockey.s3.us-west-004.backblazeb2.com/plexflix/cable-epg.json`
+
+`cableEpgUrl` in `PlexConfig.brs` already points there. If the object isn’t public yet, make that B2 file (or prefix) readable the same way as `secretfeedfilename.json` / splash posters.
+
+### 4. Cron
+
+```cron
+# every 6 hours
+20 */6 * * * ~/plexflix-epg-venv/bin/python /path/to/repo/roku/scripts/enrich_cable_epg.py --env-file ~/plexflix-cable-epg.env --upload >>/var/log/plexflix-cable-epg.log 2>&1
+```
+
+### What the Roku does
+
+1. Load sports feed → Entertainment / Cartoons channels + stream URLs  
+2. Load `cableEpgUrl` → `programs[]` keyed by feed channel `id`  
+3. Merge into the Cable TV grid  
+
+Missing sidecar or unmapped channels (Fox, CBeebies, WAPA Deportes today) show a single 24/7 cell; playback still works.
+
+### Without B2 upload
+
+Build locally and copy however you like:
+
+```bash
+~/plexflix-epg-venv/bin/python /path/to/repo/roku/scripts/enrich_cable_epg.py \
+  --env-file ~/plexflix-cable-epg.env \
+  --out /tmp/cable-epg.json
+# then rclone/aws/cp to your CDN, and set cableEpgUrl to that public URL
+```
 
 ## Daily splash posters (home server)
 
@@ -380,6 +482,9 @@ roku/
   fonts/
   images/
   scripts/update_splash_posters.py
+  scripts/enrich_cable_epg.py
+  scripts/cable_epg_map.json
+  scripts/cable_epg.env.example
   scripts/make_player_assets.py
   package.sh
 ```

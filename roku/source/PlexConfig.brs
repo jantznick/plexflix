@@ -12,7 +12,7 @@ function GetPlexConfig() as Object
         clientId: "plexflix-roku-mvp-001",
 
         product: "PlexFlix",
-        version: "0.10.21",
+        version: "0.10.27",
 
         ' How many items to request per row (home clamps display to 15–30)
         rowSize: 40,
@@ -24,6 +24,10 @@ function GetPlexConfig() as Object
 
         ' Live sports JSON feed (editable). Expected objects with title/name + url/stream fields.
         sportsFeedUrl: "https://roku-hockey.s3.us-west-004.backblazeb2.com/secretfeedfilename.json",
+
+        ' Cable TV listings sidecar (optional). Built by roku/scripts/enrich_cable_epg.py
+        ' on a slow cron; merged into Cable TV by channel id. Leave empty to skip.
+        cableEpgUrl: "https://roku-hockey.s3.us-west-004.backblazeb2.com/plexflix/cable-epg.json",
 
         ' Multiview compositor on the home server (multiview/ in this repo).
         ' Leave empty to hide multiview from the sports guide.

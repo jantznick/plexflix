@@ -34,6 +34,7 @@ sub buildStaticEntries()
         { id: "home", kind: "nav", title: "Home" },
         { id: "search", kind: "nav", title: "Search" },
         { id: "livetv", kind: "nav", title: "Live TV" },
+        { id: "cable", kind: "nav", title: "Cable TV" },
         { id: "sports", kind: "nav", title: "Live Sports" }
     ]
     rebuildItems()
@@ -66,6 +67,7 @@ sub onLibrariesLoaded()
         })
     end for
     m.entries.push({ id: "livetv", kind: "nav", title: "Live TV" })
+    m.entries.push({ id: "cable", kind: "nav", title: "Cable TV" })
     m.entries.push({ id: "sports", kind: "nav", title: "Live Sports" })
     rebuildItems()
     syncActiveIndex()
@@ -143,6 +145,7 @@ function iconFor(entry as Object) as String
     if entry.id = "home" then return "pkg:/images/nav_home.png"
     if entry.id = "search" then return "pkg:/images/nav_search.png"
     if entry.id = "livetv" then return "pkg:/images/nav_live.png"
+    if entry.id = "cable" then return "pkg:/images/nav_cable.png"
     if entry.id = "sports" then return "pkg:/images/nav_sports.png"
     if entry.library <> invalid and asString(entry.library.sectionType) = "show" then
         return "pkg:/images/nav_tv.png"

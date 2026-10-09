@@ -119,14 +119,17 @@ sub onFeedLoaded()
     for each rowData in rows
         league = asString(rowData.title)
         if league = "" then league = "Live"
-        items = rowData.items
-        if items = invalid then items = []
-        if items.count() > 0 then
-            for each item in items
-                item.league = league
-                allItems.push(item)
-            end for
-            m.categories.push({ title: prettyCategory(league), items: items })
+        ' Entertainment / Cartoons live under Cable TV, not the sports guide
+        if not isCableCategory(league) then
+            items = rowData.items
+            if items = invalid then items = []
+            if items.count() > 0 then
+                for each item in items
+                    item.league = league
+                    allItems.push(item)
+                end for
+                m.categories.push({ title: prettyCategory(league), items: items })
+            end if
         end if
     end for
     ' "All" leads so the unfiltered guide is one press away from any sport
@@ -145,6 +148,11 @@ sub onFeedLoaded()
     applyCategory(keep)
     if m.zone = "list" then m.guideList.setFocus(true)
 end sub
+
+function isCableCategory(title as String) as Boolean
+    key = LCase(title)
+    return key = "entertainment" or key = "cartoons"
+end function
 
 ' Feed keys are shouty slugs ("AMERICAN-FOOTBALL"); "24/7 Channels" is already fine
 function prettyCategory(raw as String) as String
@@ -186,6 +194,12 @@ sub applyCategory(index as Integer)
         m.statusLabel.text = StrI(m.events.count()).Trim() + " events"
         m.guideList.jumpToItem = 0
         updateInfo(0)
+    end if
+    ' Replacing MarkupList content can yank focus off the pills; put it back
+    if m.zone = "pills" then
+        m.top.setFocus(true)
+    else if m.events.count() > 0 then
+        m.guideList.setFocus(true)
     end if
 end sub
 
@@ -256,7 +270,10 @@ sub scrollPillsIntoView()
 end sub
 
 sub focusPills()
-    if m.pills.count() < 2 then return
+    if m.pills.count() = 0 then
+        m.top.openMenu = true
+        return
+    end if
     m.zone = "pills"
     m.top.setFocus(true)
     paintPills()
@@ -265,7 +282,14 @@ end sub
 sub focusList()
     m.zone = "list"
     paintPills()
+    if m.events.count() = 0 then
+        m.top.setFocus(true)
+        return
+    end if
     m.guideList.setFocus(true)
+    if m.currentIndex >= 0 and m.currentIndex < m.events.count() then
+        m.guideList.jumpToItem = m.currentIndex
+    end if
 end sub
 
 sub setGuideCols(node as Object, c0 as String, c1 as String, c2 as String, c3 as String)
@@ -479,16 +503,27 @@ sub onGuideEscapeLeft()
     m.top.openMenu = true
 end sub
 
+' First Back from the event list jumps to the category pills; Back again
+' (while on the pills) opens the sidebar — same rhythm as Live TV tabs
 sub onGuideEscapeBack()
-    m.top.openMenu = true
+    focusPills()
 end sub
 
 sub onRefocus()
-    if m.top.refocus = true then
-        if m.zone = "pills" then
-            m.top.setFocus(true)
-        else
+    if m.top.refocus <> true then return
+    if m.zone = "pills" then
+        m.top.setFocus(true)
+        paintPills()
+    else
+        m.zone = "list"
+        paintPills()
+        if m.events.count() > 0 then
             m.guideList.setFocus(true)
+            if m.currentIndex >= 0 and m.currentIndex < m.events.count() then
+                m.guideList.jumpToItem = m.currentIndex
+            end if
+        else
+            m.top.setFocus(true)
         end if
     end if
 end sub
@@ -519,9 +554,12 @@ function onKeyEvent(key as String, press as Boolean) as Boolean
     else if key = "right" then
         if m.pillIndex < m.pills.count() - 1 then applyCategory(m.pillIndex + 1)
         return true
-    else if key = "down" or key = "OK" or key = "back" then
-        if m.events.count() = 0 then return key <> "back"
+    else if key = "down" or key = "OK" then
+        if m.events.count() = 0 then return true
         focusList()
+        return true
+    else if key = "back" then
+        m.top.openMenu = true
         return true
     else if key = "up" then
         return true

@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<component name="CableTvScreen" extends="Group">
+    <interface>
+        <field id="config" type="assocarray" onChange="onConfigReady" />
+        <field id="selectedItem" type="assocarray" />
+        <field id="loadingMessage" type="string" />
+        <field id="openMenu" type="boolean" alwaysNotify="true" />
+        <field id="refocus" type="boolean" alwaysNotify="true" onChange="onRefocus" />
+    </interface>
+
+    <script type="text/brightscript" uri="CableTvScreen.brs" />
+    <script type="text/brightscript" uri="pkg:/source/Fonts.brs" />
+
+    <!-- Grid geometry is mirrored in CableTvScreen.brs (m.gridTop, m.progX, ...) -->
+    <children>
+        <Rectangle width="1920" height="1080" color="0x080B12" />
+
+        <Poster id="heroArt" translation="[880, 0]" width="1040" height="384" loadDisplayMode="scaleToZoom" loadWidth="1280" loadHeight="720" opacity="0.55" />
+        <Poster translation="[880, 0]" width="520" height="384" uri="pkg:/images/guide_fade_h.png" />
+        <Poster translation="[880, 184]" width="1040" height="200" uri="pkg:/images/guide_fade_v.png" />
+
+        <Group id="tabRow" translation="[120, 36]">
+            <Label width="220" height="48" vertAlign="center" text="CABLE TV" color="0xE50914">
+                <Font role="font" uri="pkg:/fonts/Outfit-Bold.ttf" size="36" />
+            </Label>
+        </Group>
+
+        <Group translation="[120, 36]">
+            <Label id="programTitle" translation="[0, 68]" width="1240" height="68" color="0xFFFFFF" wrap="false" text="">
+                <Font role="font" uri="pkg:/fonts/Outfit-Bold.ttf" size="56" />
+            </Label>
+            <Label id="programSub" translation="[0, 138]" width="1240" height="40" color="0xD5DBE6" wrap="false" text="">
+                <Font role="font" uri="pkg:/fonts/Outfit-Medium.ttf" size="32" />
+            </Label>
+            <Group id="badgeRow" translation="[0, 186]" />
+            <Label id="programMeta" translation="[0, 186]" width="1240" height="36" vertAlign="center" color="0x8FA0B8" wrap="false" text="">
+                <Font role="font" uri="pkg:/fonts/Outfit-Medium.ttf" size="28" />
+            </Label>
+            <Label id="programSummary" translation="[0, 236]" width="1180" height="72" color="0xB8C0CE" wrap="true" maxLines="2" lineSpacing="2" text="">
+                <Font role="font" uri="pkg:/fonts/Outfit-Regular.ttf" size="26" />
+            </Label>
+        </Group>
+
+        <Group id="previewGroup" translation="[1392, 36]">
+            <Rectangle translation="[-2, -2]" width="484" height="274" color="0x2A3348" />
+            <Rectangle width="480" height="270" color="0x0E131D" />
+            <Poster id="previewArt" width="480" height="270" loadDisplayMode="scaleToZoom" loadWidth="960" loadHeight="540" />
+            <Label id="previewHint" translation="[0, 117]" width="480" height="36" horizAlign="center" vertAlign="center" text="PREVIEW" color="0x5E6880">
+                <Font role="font" uri="pkg:/fonts/Outfit-Medium.ttf" size="24" />
+            </Label>
+        </Group>
+
+        <Group id="guideView">
+            <Rectangle translation="[96, 392]" width="1776" height="44" color="0x0E131D" />
+            <Label id="clockLabel" translation="[112, 392]" width="232" height="44" vertAlign="center" color="0xFFFFFF" text="">
+                <Font role="font" uri="pkg:/fonts/Outfit-SemiBold.ttf" size="28" />
+            </Label>
+            <Group id="slotHeader" />
+            <Group id="gridRows" />
+            <Rectangle id="pastShade" translation="[360, 436]" width="0" height="610" color="0x080B12" opacity="0.35" />
+            <Rectangle id="nowLine" translation="[360, 392]" width="3" height="654" color="0xE50914" visible="false" />
+            <Label id="guideStatus" translation="[360, 600]" width="1512" height="60" horizAlign="center" vertAlign="center" color="0x8FA0B8" text="" visible="false">
+                <Font role="font" uri="pkg:/fonts/Outfit-Medium.ttf" size="32" />
+            </Label>
+        </Group>
+    </children>
+</component>
