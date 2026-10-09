@@ -119,14 +119,17 @@ sub onFeedLoaded()
     for each rowData in rows
         league = asString(rowData.title)
         if league = "" then league = "Live"
-        items = rowData.items
-        if items = invalid then items = []
-        if items.count() > 0 then
-            for each item in items
-                item.league = league
-                allItems.push(item)
-            end for
-            m.categories.push({ title: prettyCategory(league), items: items })
+        ' Entertainment / Cartoons live under Cable TV, not the sports guide
+        if not isCableCategory(league) then
+            items = rowData.items
+            if items = invalid then items = []
+            if items.count() > 0 then
+                for each item in items
+                    item.league = league
+                    allItems.push(item)
+                end for
+                m.categories.push({ title: prettyCategory(league), items: items })
+            end if
         end if
     end for
     ' "All" leads so the unfiltered guide is one press away from any sport
@@ -145,6 +148,11 @@ sub onFeedLoaded()
     applyCategory(keep)
     if m.zone = "list" then m.guideList.setFocus(true)
 end sub
+
+function isCableCategory(title as String) as Boolean
+    key = LCase(title)
+    return key = "entertainment" or key = "cartoons"
+end function
 
 ' Feed keys are shouty slugs ("AMERICAN-FOOTBALL"); "24/7 Channels" is already fine
 function prettyCategory(raw as String) as String

@@ -10,7 +10,7 @@ This is intentionally a **design/UX shell** on top of existing Plex data. Creden
 
 - Dark Netflix-like home: billboard hero + horizontal shelves
 - **Collapsible sidebar** (Left to open): Home, **Search**, your **Libraries**,
-  **Live TV**, Live Sports.
+  **Live TV**, **Cable TV**, Live Sports.
   Collapsed, a 72px icon rail stays on browse screens with the current section
   lit; it is hidden on detail pages, in the player and over the launch splash
 - **Search**: Plex Discover catalog search for any movie/show (not just what’s
@@ -21,6 +21,7 @@ This is intentionally a **design/UX shell** on top of existing Plex data. Creden
   playback), updating only the rows whose items changed
 - Selecting a library in the sidebar opens that library’s shelves
 - **Live TV**: a real grid guide built from your Plex EPG (`/<epg provider>/grid`): channel logo, number and call sign
+- **Cable TV**: same guide layout for Entertainment and Cartoons from the sports JSON feed (24/7 channels); those sections no longer appear under Live Sports
   down the left, half-hour time slots across the top, program blocks sized by duration, a red now-line, and a live
   preview of the focused channel. Up/Down change channel, Left/Right move through programs (time pages in 30-minute
   steps and later hours load as you go), `<<`/`>>` page channels. OK on something airing now watches it; OK on a future
