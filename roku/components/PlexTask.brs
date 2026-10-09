@@ -4771,6 +4771,7 @@ function normalizeFeedPrograms(raw as Dynamic) as Object
             title = firstString(p, ["title", "name"])
             if title = "" then title = "Program"
             if beginsAt > 0 and endsAt > beginsAt then
+                art = firstString(p, ["art", "backdrop", "poster", "icon", "image", "thumbnail"])
                 out.push({
                     title: title,
                     subtitle: firstString(p, ["subtitle", "subTitle", "episodeTitle"]),
@@ -4778,9 +4779,46 @@ function normalizeFeedPrograms(raw as Dynamic) as Object
                     beginsAt: beginsAt,
                     endsAt: endsAt,
                     episodeLabel: firstString(p, ["episodeLabel", "episode", "episodeNum"]),
-                    contentRating: firstString(p, ["contentRating", "rating"]),
-                    art: firstString(p, ["art", "icon", "image", "poster", "thumbnail"]),
+                    contentRating: firstString(p, ["contentRating"]),
+                    rating: firstString(p, ["rating", "voteAverage"]),
+                    year: firstString(p, ["year"]),
+                    art: art,
+                    poster: firstString(p, ["poster"]),
+                    backdrop: firstString(p, ["backdrop"]),
+                    tmdbId: firstString(p, ["tmdbId"]),
+                    tmdbType: firstString(p, ["tmdbType"]),
+                    cast: normalizeFeedCast(p.cast),
                     placeholder: false
+                })
+            end if
+        end if
+    end for
+    return out
+end function
+
+function normalizeFeedCast(raw as Dynamic) as Object
+    out = []
+    if raw = invalid or GetInterface(raw, "ifArray") = invalid then return out
+    maxN = raw.count()
+    if maxN > 8 then maxN = 8
+    for i = 0 to maxN - 1
+        c = raw[i]
+        if GetInterface(c, "ifAssociativeArray") <> invalid then
+            name = firstString(c, ["title", "shortTitle", "name"])
+            if name <> "" then
+                out.push({
+                    title: name,
+                    shortTitle: name,
+                    description: firstString(c, ["description", "character", "role"]),
+                    mediaType: "actor",
+                    ratingKey: "",
+                    key: "",
+                    personId: "",
+                    hdPosterUrl: firstString(c, ["hdPosterUrl", "poster", "image", "thumb"]),
+                    hdBackdropUrl: "",
+                    year: "",
+                    rating: "",
+                    contentRating: ""
                 })
             end if
         end if

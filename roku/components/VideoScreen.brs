@@ -136,6 +136,8 @@ sub onContentSet()
 
     if directUrl <> "" and Left(directUrl, 4) = "http" then
         playDirect(directUrl, item)
+        ' Cable/sports may ship TMDB cast on the item; Plex cast needs a ratingKey
+        loadCast()
         return
     end if
 
@@ -148,6 +150,7 @@ sub onContentSet()
         m.task.item = item
         m.task.observeField("response", "onStreamReady")
         m.task.control = "RUN"
+        loadCast()
         return
     end if
 
@@ -784,6 +787,15 @@ end sub
 
 sub loadCast()
     if m.item = invalid then return
+
+    ' Cable EPG sidecar (TMDB) and similar direct plays can ship cast on the item
+    if m.item.cast <> invalid and GetInterface(m.item.cast, "ifArray") <> invalid then
+        if m.item.cast.count() > 0 then
+            paintCastRow(m.item.cast)
+            return
+        end if
+    end if
+
     ratingKey = valueOrEmpty(m.item.ratingKey)
     if ratingKey = "" then return
 
@@ -799,6 +811,11 @@ sub onCastLoaded()
     response = m.castTask.response
     if response = invalid or response.ok <> true then return
     cast = response.cast
+    if cast = invalid or cast.count() = 0 then return
+    paintCastRow(cast)
+end sub
+
+sub paintCastRow(cast as Object)
     if cast = invalid or cast.count() = 0 then return
 
     maxShown = 7
@@ -994,10 +1011,21 @@ sub paintMeta()
         end if
     else
         bits = []
+        ' For cable the full title is often "Show · Channel"
+        if m.isSport or m.isLive then
+            fullTitle = valueOrEmpty(m.item.title)
+            if fullTitle <> "" and fullTitle <> headline and Instr(1, fullTitle, headline) = 1 then
+                suffix = Mid(fullTitle, Len(headline) + 1).Trim()
+                if Left(suffix, 1) = "·" then suffix = Mid(suffix, 2).Trim()
+                if suffix <> "" then bits.push(suffix)
+            end if
+        end if
         year = valueOrEmpty(m.item.year)
         if year <> "" then bits.push(year)
         contentRating = valueOrEmpty(m.item.contentRating)
         if contentRating <> "" then bits.push(contentRating)
+        rating = valueOrEmpty(m.item.rating)
+        if rating <> "" then bits.push(rating)
         context = joinWith(bits, "  ·  ")
     end if
 

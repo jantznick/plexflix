@@ -11,6 +11,8 @@ Typical cron (every 6–12 hours is enough):
 
 Environment (or --env-file KEY=VALUE lines):
   EPG_XMLTV_URL       XMLTV .xml or .xml.gz (default: epgshare01 US2)
+  TMDB_API_KEY        Optional — enrich programmes with overview/art/cast
+  TMDB_CACHE_PATH     Optional cache file (default: ~/.cache/plexflix-cable-tmdb.json)
   B2_BUCKET           Optional Backblaze B2 bucket for --upload
   B2_KEY_ID / B2_APPLICATION_KEY
   B2_REMOTE_KEY       Object key (default: plexflix/cable-epg.json)
@@ -37,8 +39,12 @@ import gzip
 import io
 import json
 import os
+import re
 import sys
 import tempfile
+import time
+import urllib.error
+import urllib.parse
 import urllib.request
 import xml.etree.ElementTree as ET
 from datetime import datetime, timedelta, timezone
@@ -52,6 +58,9 @@ DEFAULT_REMOTE_KEY = "plexflix/cable-epg.json"
 DEFAULT_PUBLIC_URL = (
     "https://roku-hockey.s3.us-west-004.backblazeb2.com/plexflix/cable-epg.json"
 )
+DEFAULT_TMDB_CACHE = Path.home() / ".cache" / "plexflix-cable-tmdb.json"
+TMDB_CAST_LIMIT = 8
+TMDB_DESC_LIMIT = 320
 
 
 def load_env_file(path: Path) -> None:
@@ -251,6 +260,255 @@ def build_sidecar(
     return sidecar, stats
 
 
+# ---------------------------------------------------------------------------
+# TMDB enrichment (optional)
+# ---------------------------------------------------------------------------
+
+def clean_program_title(title: str) -> str:
+    text = (title or "").strip()
+    text = re.sub(r"^\[[^\]]+\]\s*", "", text)  # [as], [CC], …
+    text = re.sub(r"\s+\(\d{4}\)\s*$", "", text)
+    text = re.sub(r"\s+", " ", text).strip()
+    return text
+
+
+def tmdb_cache_key(title: str) -> str:
+    return clean_program_title(title).lower()
+
+
+def load_tmdb_cache(path: Path) -> dict[str, Any]:
+    if not path.is_file():
+        return {}
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+        return data if isinstance(data, dict) else {}
+    except (OSError, json.JSONDecodeError):
+        return {}
+
+
+def save_tmdb_cache(path: Path, cache: dict[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(cache, ensure_ascii=False), encoding="utf-8")
+
+
+def tmdb_get(api_key: str, path: str, params: dict[str, str] | None = None) -> Any:
+    q = dict(params or {})
+    q["api_key"] = api_key
+    url = "https://api.themoviedb.org/3" + path + "?" + urllib.parse.urlencode(q)
+    try:
+        raw = http_get(url, timeout=30)
+    except (urllib.error.URLError, TimeoutError, OSError) as exc:
+        print(f"  tmdb error {path}: {exc}")
+        return None
+    try:
+        return json.loads(raw.decode("utf-8"))
+    except json.JSONDecodeError:
+        return None
+
+
+def tmdb_search_best(api_key: str, title: str) -> tuple[str, dict[str, Any]] | None:
+    """Return (kind, hit) for tv or movie, preferring TV for cable listings."""
+    query = clean_program_title(title)
+    if not query or query.lower() in {"paid programming", "to be announced", "tba", "sign off"}:
+        return None
+
+    for kind in ("tv", "movie"):
+        data = tmdb_get(api_key, f"/search/{kind}", {"query": query})
+        results = (data or {}).get("results") or []
+        if results:
+            return kind, results[0]
+    return None
+
+
+def tmdb_detail(api_key: str, kind: str, tmdb_id: str) -> dict[str, Any] | None:
+    return tmdb_get(
+        api_key,
+        f"/{kind}/{tmdb_id}",
+        {"append_to_response": "credits,content_ratings,release_dates"},
+    )
+
+
+def tmdb_content_rating(kind: str, detail: dict[str, Any]) -> str:
+    if kind == "tv":
+        for row in (detail.get("content_ratings") or {}).get("results") or []:
+            if row.get("iso_3166_1") == "US" and row.get("rating"):
+                return str(row["rating"]).strip()
+    else:
+        for row in (detail.get("release_dates") or {}).get("results") or []:
+            if row.get("iso_3166_1") != "US":
+                continue
+            for d in row.get("release_dates") or []:
+                cert = str(d.get("certification") or "").strip()
+                if cert:
+                    return cert
+    return ""
+
+
+def tmdb_meta_from_detail(kind: str, detail: dict[str, Any]) -> dict[str, Any]:
+    overview = " ".join(str(detail.get("overview") or "").split())
+    if len(overview) > TMDB_DESC_LIMIT:
+        overview = overview[: TMDB_DESC_LIMIT - 1].rstrip() + "…"
+
+    year = ""
+    if kind == "tv":
+        year = str(detail.get("first_air_date") or "")[:4]
+    else:
+        year = str(detail.get("release_date") or "")[:4]
+
+    poster = ""
+    backdrop = ""
+    if detail.get("poster_path"):
+        poster = "https://image.tmdb.org/t/p/w500" + str(detail["poster_path"])
+    if detail.get("backdrop_path"):
+        backdrop = "https://image.tmdb.org/t/p/w1280" + str(detail["backdrop_path"])
+
+    rating = ""
+    if detail.get("vote_average") is not None:
+        try:
+            rating = f"{float(detail['vote_average']):.1f}"
+        except (TypeError, ValueError):
+            rating = ""
+
+    cast: list[dict[str, str]] = []
+    credits = detail.get("credits") or {}
+    for person in (credits.get("cast") or [])[:TMDB_CAST_LIMIT]:
+        name = str(person.get("name") or "").strip()
+        if not name:
+            continue
+        thumb = ""
+        if person.get("profile_path"):
+            thumb = "https://image.tmdb.org/t/p/w342" + str(person["profile_path"])
+        cast.append(
+            {
+                "title": name,
+                "shortTitle": name,
+                "description": str(person.get("character") or "").strip(),
+                "mediaType": "actor",
+                "hdPosterUrl": thumb,
+            }
+        )
+
+    return {
+        "tmdbId": str(detail.get("id") or ""),
+        "tmdbType": kind,
+        "description": overview,
+        "year": year,
+        "rating": rating,
+        "contentRating": tmdb_content_rating(kind, detail),
+        "poster": poster,
+        "backdrop": backdrop,
+        "art": backdrop or poster,
+        "cast": cast,
+    }
+
+
+def lookup_tmdb(
+    api_key: str,
+    title: str,
+    cache: dict[str, Any],
+    stats: dict[str, int],
+) -> dict[str, Any] | None:
+    key = tmdb_cache_key(title)
+    if not key:
+        return None
+    if key in cache:
+        stats["cacheHits"] += 1
+        hit = cache[key]
+        return hit if isinstance(hit, dict) else None
+
+    stats["lookups"] += 1
+    time.sleep(0.25)
+    found = tmdb_search_best(api_key, title)
+    if found is None:
+        cache[key] = None
+        stats["misses"] += 1
+        return None
+
+    kind, hit = found
+    tmdb_id = str(hit.get("id") or "")
+    if not tmdb_id:
+        cache[key] = None
+        stats["misses"] += 1
+        return None
+
+    time.sleep(0.25)
+    detail = tmdb_detail(api_key, kind, tmdb_id)
+    if detail is None:
+        cache[key] = None
+        stats["misses"] += 1
+        return None
+
+    meta = tmdb_meta_from_detail(kind, detail)
+    cache[key] = meta
+    stats["hits"] += 1
+    return meta
+
+
+def apply_tmdb_to_programmes(
+    programmes_by_xmltv: dict[str, list[dict[str, Any]]],
+    api_key: str,
+    cache_path: Path,
+) -> dict[str, int]:
+    cache = load_tmdb_cache(cache_path)
+    stats = {
+        "titles": 0,
+        "lookups": 0,
+        "cacheHits": 0,
+        "hits": 0,
+        "misses": 0,
+        "programmesTagged": 0,
+    }
+
+    # Unique titles first so the cache fills before we walk every airing
+    unique_titles: list[str] = []
+    seen: set[str] = set()
+    for programs in programmes_by_xmltv.values():
+        for prog in programs:
+            key = tmdb_cache_key(str(prog.get("title") or ""))
+            if key and key not in seen:
+                seen.add(key)
+                unique_titles.append(str(prog.get("title") or ""))
+    stats["titles"] = len(unique_titles)
+    print(f"tmdb: enriching {len(unique_titles)} unique titles (cache {cache_path})")
+
+    title_meta: dict[str, dict[str, Any] | None] = {}
+    for title in unique_titles:
+        title_meta[tmdb_cache_key(title)] = lookup_tmdb(api_key, title, cache, stats)
+
+    for programs in programmes_by_xmltv.values():
+        for prog in programs:
+            meta = title_meta.get(tmdb_cache_key(str(prog.get("title") or "")))
+            if not meta:
+                continue
+            if meta.get("description"):
+                # Prefer TMDB synopsis when EPG blurb is thin
+                epg_desc = str(prog.get("description") or "")
+                if len(epg_desc) < 80 or not epg_desc:
+                    prog["description"] = meta["description"]
+            if meta.get("art"):
+                prog["art"] = meta["art"]
+            if meta.get("poster"):
+                prog["poster"] = meta["poster"]
+            if meta.get("backdrop"):
+                prog["backdrop"] = meta["backdrop"]
+            if meta.get("year"):
+                prog["year"] = meta["year"]
+            if meta.get("rating"):
+                prog["rating"] = meta["rating"]
+            if meta.get("contentRating") and not prog.get("contentRating"):
+                prog["contentRating"] = meta["contentRating"]
+            if meta.get("tmdbId"):
+                prog["tmdbId"] = meta["tmdbId"]
+            if meta.get("tmdbType"):
+                prog["tmdbType"] = meta["tmdbType"]
+            if meta.get("cast"):
+                prog["cast"] = meta["cast"]
+            stats["programmesTagged"] += 1
+
+    save_tmdb_cache(cache_path, cache)
+    return stats
+
+
 def upload_b2(local_path: Path, remote_key: str) -> None:
     try:
         from b2sdk.v2 import B2Api, InMemoryAccountInfo  # type: ignore
@@ -308,6 +566,17 @@ def main() -> int:
         default=None,
         help=f"B2 object key (default: env B2_REMOTE_KEY or {DEFAULT_REMOTE_KEY})",
     )
+    parser.add_argument(
+        "--skip-tmdb",
+        action="store_true",
+        help="Skip TMDB enrichment even if TMDB_API_KEY is set",
+    )
+    parser.add_argument(
+        "--tmdb-cache",
+        type=Path,
+        default=None,
+        help="TMDB title cache JSON (default: env TMDB_CACHE_PATH or ~/.cache/...)",
+    )
     args = parser.parse_args()
 
     if args.env_file:
@@ -335,8 +604,29 @@ def main() -> int:
     covered = sum(1 for v in programmes.values() if v)
     print(f"  xmltv channels with listings: {covered}/{len(wanted)}")
 
+    tmdb_key = (os.environ.get("TMDB_API_KEY") or "").strip()
+    if tmdb_key and tmdb_key.startswith("REPLACE"):
+        tmdb_key = ""
+    if args.skip_tmdb:
+        tmdb_key = ""
+    if tmdb_key:
+        cache_path = (
+            args.tmdb_cache
+            or Path(os.environ.get("TMDB_CACHE_PATH") or DEFAULT_TMDB_CACHE)
+        )
+        tmdb_stats = apply_tmdb_to_programmes(programmes, tmdb_key, cache_path)
+        print(
+            f"tmdb: titles={tmdb_stats['titles']} lookups={tmdb_stats['lookups']} "
+            f"cacheHits={tmdb_stats['cacheHits']} hits={tmdb_stats['hits']} "
+            f"misses={tmdb_stats['misses']} tagged={tmdb_stats['programmesTagged']}"
+        )
+    else:
+        print("tmdb: skipped (set TMDB_API_KEY to enrich overview/art/cast)")
+
     sidecar, stats = build_sidecar(id_map, programmes, source)
     sidecar["windowDaysAhead"] = max(1, args.days)
+    if tmdb_key:
+        sidecar["tmdbEnriched"] = True
     print(
         f"sidecar mapped={stats['mapped']} withEpg={stats['withEpg']} "
         f"programmes={stats['programmes']} empty={stats['empty']}"

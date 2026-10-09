@@ -363,6 +363,9 @@ Edit `~/plexflix-cable-epg.env`:
 # XMLTV source (default is fine for US cable nets)
 EPG_XMLTV_URL=https://epgshare01.online/epgshare01/epg_ripper_US2.xml.gz
 
+# Optional — synopsis / backdrop / cast for the guide + player (same key as PlexConfig tmdbApiKey)
+TMDB_API_KEY=your_tmdb_v3_key
+
 # Backblaze B2 — same bucket you already use for the sports feed / splash
 B2_BUCKET=roku-hockey
 B2_KEY_ID=your_key_id
@@ -371,6 +374,11 @@ B2_APPLICATION_KEY=your_application_key
 # MUST be the sidecar key — do not point this at secretfeedfilename.json
 B2_REMOTE_KEY=plexflix/cable-epg.json
 ```
+
+With `TMDB_API_KEY` set, the enricher looks up each unique programme title (cached under
+`~/.cache/plexflix-cable-tmdb.json`) and attaches overview, backdrop/poster, year, rating,
+and up to 8 cast members. The Cable TV guide uses that art/summary; OK → player shows the
+cast strip like library titles (stream stays live — no scrubber).
 
 Channel id map (usually leave as-is): `roku/scripts/cable_epg_map.json`  
 (`timst-cartoon-network` → `Cartoon.Network.HD.us2`, etc.)

@@ -935,7 +935,9 @@ sub updateGridInfo()
         when = rangeText(p.beginsAt, p.endsAt)
         if dayKey(p.beginsAt) <> dayKey(nowSeconds()) then when = dayLabel(p.beginsAt) + " " + when
         if when <> "" then metaParts.push(when)
+        if p.year <> invalid and p.year <> "" then metaParts.push(p.year)
         if p.contentRating <> invalid and p.contentRating <> "" then metaParts.push(p.contentRating)
+        if p.rating <> invalid and p.rating <> "" then metaParts.push(p.rating)
     else
         metaParts.push("No listing")
     end if
@@ -949,7 +951,9 @@ sub updateGridInfo()
     if p.placeholder = true then summary = "No program information for this time on " + channelLabel(ch) + "."
     if summary = "" then summary = ch.summary
 
-    art = valueOr(p.art, "")
+    art = valueOr(p.backdrop, "")
+    if art = "" then art = valueOr(p.art, "")
+    if art = "" then art = valueOr(p.poster, "")
     if art = "" then art = ch.logo
     paintInfo(p.title, joinStrings(subParts, "  ·  "), joinStrings(metaParts, "  ·  "), summary, badges, art)
 end sub
@@ -991,10 +995,41 @@ end sub
 sub watchChannel(ch as Object)
     if ch = invalid or ch.item = invalid then return
     item = ch.item
-    ' Play like Live TV: straight into the player with the feed stream URL
+    p = focusedProgram()
+
+    title = asString(item.title)
+    description = asString(item.description)
+    poster = asString(item.hdPosterUrl)
+    backdrop = asString(item.hdBackdropUrl)
+    year = ""
+    contentRating = ""
+    rating = ""
+    cast = []
+    shortTitle = title
+
+    if p <> invalid and p.placeholder <> true then
+        if asString(p.title) <> "" then
+            shortTitle = asString(p.title)
+            title = shortTitle + "  ·  " + asString(item.title)
+        end if
+        if asString(p.summary) <> "" then description = asString(p.summary)
+        if asString(p.poster) <> "" then poster = asString(p.poster)
+        if asString(p.backdrop) <> "" then backdrop = asString(p.backdrop)
+        if backdrop = "" and asString(p.art) <> "" then backdrop = asString(p.art)
+        if poster = "" and asString(p.art) <> "" then poster = asString(p.art)
+        year = asString(p.year)
+        contentRating = asString(p.contentRating)
+        rating = asString(p.rating)
+        if p.cast <> invalid then cast = p.cast
+    end if
+    if poster = "" then poster = asString(item.hdPosterUrl)
+    if backdrop = "" then backdrop = poster
+
+    ' Direct HLS like sports, but carry TMDB/EPG chrome for the custom player
     m.top.selectedItem = {
-        title: asString(item.title),
-        description: asString(item.description),
+        title: title,
+        shortTitle: shortTitle,
+        description: description,
         mediaType: "sport",
         ratingKey: "",
         key: asString(item.streamUrl),
@@ -1002,8 +1037,12 @@ sub watchChannel(ch as Object)
         streamFormat: asString(item.streamFormat),
         streams: item.streams,
         streamCount: item.streamCount,
-        hdPosterUrl: asString(item.hdPosterUrl),
-        hdBackdropUrl: asString(item.hdBackdropUrl),
+        hdPosterUrl: poster,
+        hdBackdropUrl: backdrop,
+        year: year,
+        contentRating: contentRating,
+        rating: rating,
+        cast: cast,
         duration: 0,
         viewOffset: 0
     }
