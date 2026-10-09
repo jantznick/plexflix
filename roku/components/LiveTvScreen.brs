@@ -96,7 +96,7 @@ sub init()
     m.dvrList.observeField("itemSelected", "onDvrSelected")
     m.dvrList.observeField("escapeUp", "onDvrEscapeUp")
     m.dvrList.observeField("escapeLeft", "onEscapeToMenu")
-    m.dvrList.observeField("escapeBack", "onEscapeToMenu")
+    m.dvrList.observeField("escapeBack", "onDvrEscapeBack")
     m.menuList.observeField("itemSelected", "onMenuSelected")
 
     m.clockTimer = createObject("roSGNode", "Timer")
@@ -1040,6 +1040,8 @@ sub applyTab(index as Integer)
         fillDvrList(false)
         loadSchedule()
     end if
+    ' Tab switches while the pills own the remote must not hand focus to the list
+    if m.zone = "tabs" then m.top.setFocus(true)
 end sub
 
 sub setDvrRow(node as Object, c0 as String, c1 as String, c2 as String, c3 as String)
@@ -1310,6 +1312,10 @@ sub saveRule()
 end sub
 
 sub onDvrEscapeUp()
+    enterTabs()
+end sub
+
+sub onDvrEscapeBack()
     enterTabs()
 end sub
 
@@ -1733,16 +1739,8 @@ function onKeyEvent(key as String, press as Boolean) as Boolean
         openProgramMenu(true)
         return true
     else if key = "back" then
-        nowIdx = programIndexAt(m.channels[0], nowSeconds())
-        if m.focusCh <> 0 or m.winStart <> m.minWin or m.focusProg <> nowIdx then
-            m.focusCh = 0
-            m.topRow = 0
-            m.winStart = m.minWin
-            refocusAnchor(nowSeconds())
-            afterFocusMove(true)
-        else
-            leaveToMenu()
-        end if
+        ' First Back → Guide/Upcoming/Rules tabs; Back again from tabs opens the menu
+        enterTabs()
         return true
     end if
     return false
