@@ -66,6 +66,8 @@ sub exec()
         m.top.response = tuneLiveChannel(cfg, m.top.item)
     else if action = "sportsFeed" then
         m.top.response = fetchSportsFeed(cfg)
+    else if action = "cableEpg" then
+        m.top.response = fetchCableEpg(cfg)
     else if action = "streamUrl" then
         m.top.response = buildStreamUrl(cfg, m.top.item)
     else if action = "reportProgress" then
@@ -4580,6 +4582,87 @@ function fetchSportsFeed(cfg as Object) as Object
             return { ok: true, rows: normalizeSportsFeed(parsed) }
         end if
     end while
+end function
+
+' Sidecar listings for Cable TV — separate from the 5‑minute sports feed
+function fetchCableEpg(cfg as Object) as Object
+    epgUrl = ""
+    if cfg.cableEpgUrl <> invalid then epgUrl = cfg.cableEpgUrl
+    if epgUrl = "" then return { ok: true, byId: {}, skipped: true }
+
+    request = CreateObject("roUrlTransfer")
+    port = CreateObject("roMessagePort")
+    request.SetMessagePort(port)
+    request.SetUrl(epgUrl)
+    request.SetRequest("GET")
+    request.EnableEncodings(true)
+    request.RetainBodyOnError(true)
+    request.AddHeader("Accept", "application/json")
+    if Left(epgUrl, 8) = "https://" then
+        request.SetCertificatesFile("common:/certs/ca-bundle.crt")
+        request.InitClientCertificates()
+    end if
+
+    if not request.AsyncGetToString() then
+        return { ok: false, error: "Failed to start cable EPG request" }
+    end if
+
+    while true
+        msg = wait(25000, port)
+        if msg = invalid then
+            request.AsyncCancel()
+            return { ok: false, error: "Timed out loading cable EPG" }
+        end if
+        if type(msg) = "roUrlEvent" then
+            code = msg.GetResponseCode()
+            body = msg.GetString()
+            if code < 200 or code >= 300 then
+                return { ok: false, error: "Cable EPG HTTP " + safeToStr(code) }
+            end if
+            parsed = ParseJson(body)
+            if parsed = invalid then
+                return { ok: false, error: "Could not parse cable EPG JSON" }
+            end if
+            return { ok: true, byId: normalizeCableEpg(parsed), updated: safeToStr(parsed.updated) }
+        end if
+    end while
+end function
+
+function normalizeCableEpg(parsed as Object) as Object
+    byId = {}
+    if parsed = invalid then return byId
+    channels = invalid
+    if GetInterface(parsed, "ifAssociativeArray") <> invalid then
+        if parsed.channels <> invalid then channels = parsed.channels
+    end if
+    if channels = invalid then return byId
+
+    ' Shape A: { "timst-abc": { programs: [...] }, ... }
+    if GetInterface(channels, "ifAssociativeArray") <> invalid then
+        for each feedId in channels
+            entry = channels[feedId]
+            programs = []
+            if GetInterface(entry, "ifAssociativeArray") <> invalid then
+                programs = normalizeFeedPrograms(entry.programs)
+            else if GetInterface(entry, "ifArray") <> invalid then
+                programs = normalizeFeedPrograms(entry)
+            end if
+            if programs.count() > 0 then byId[feedId] = programs
+        end for
+        return byId
+    end if
+
+    ' Shape B: [ { id, programs }, ... ]
+    if GetInterface(channels, "ifArray") <> invalid then
+        for each entry in channels
+            if GetInterface(entry, "ifAssociativeArray") <> invalid then
+                feedId = firstString(entry, ["id", "channelId"])
+                programs = normalizeFeedPrograms(entry.programs)
+                if feedId <> "" and programs.count() > 0 then byId[feedId] = programs
+            end if
+        end for
+    end if
+    return byId
 end function
 
 function normalizeSportsFeed(parsed as Object) as Object

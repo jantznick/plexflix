@@ -1,23 +1,33 @@
 #!/usr/bin/env python3
-"""Attach XMLTV programme listings to Entertainment / Cartoons in the sports feed.
+"""Build a Cable TV EPG sidecar JSON from a free XMLTV dump.
 
-Runs on the home server (not this laptop). Downloads the published feed JSON plus
-a free US XMLTV dump (epgshare01 US2 by default), maps channels via
-cable_epg_map.json, and writes programs[] onto each matched channel.
+Runs on the home server (not this laptop). Independent of the 5‑minute sports
+feed publisher: listings live in a separate object the Roku merges by channel id.
 
-Typical cron (after your feed publisher finishes):
+Typical cron (every 6–12 hours is enough):
 
-  15 * * * * /path/to/venv/bin/python /path/to/enrich_cable_epg.py \\
+  20 */6 * * * /path/to/venv/bin/python /path/to/enrich_cable_epg.py \\
       --env-file /path/to/plexflix.env --upload
 
 Environment (or --env-file KEY=VALUE lines):
-  SPORTS_FEED_URL     Source feed (default: PlexConfig sportsFeedUrl)
   EPG_XMLTV_URL       XMLTV .xml or .xml.gz (default: epgshare01 US2)
   B2_BUCKET           Optional Backblaze B2 bucket for --upload
   B2_KEY_ID / B2_APPLICATION_KEY
-  B2_REMOTE_KEY       Object key inside the bucket (default: secretfeedfilename.json)
+  B2_REMOTE_KEY       Object key (default: plexflix/cable-epg.json)
 
-The Roku Cable TV guide reads programs[] when present; unmapped channels stay 24/7.
+Output shape (cable-epg.json):
+  {
+    "updated": "…Z",
+    "source": "https://…xml.gz",
+    "channels": {
+      "timst-cartoon-network": {
+        "epgChannelId": "Cartoon.Network.HD.us2",
+        "programs": [ { "title", "beginsAt", "endsAt", … }, … ]
+      }
+    }
+  }
+
+Point PlexConfig.brs cableEpgUrl at the public URL for that object.
 """
 
 from __future__ import annotations
@@ -37,11 +47,11 @@ from typing import Any
 
 
 SCRIPT_DIR = Path(__file__).resolve().parent
-DEFAULT_FEED_URL = (
-    "https://roku-hockey.s3.us-west-004.backblazeb2.com/secretfeedfilename.json"
-)
 DEFAULT_EPG_URL = "https://epgshare01.online/epgshare01/epg_ripper_US2.xml.gz"
-CABLE_SECTIONS = ("Entertainment", "Cartoons")
+DEFAULT_REMOTE_KEY = "plexflix/cable-epg.json"
+DEFAULT_PUBLIC_URL = (
+    "https://roku-hockey.s3.us-west-004.backblazeb2.com/plexflix/cable-epg.json"
+)
 
 
 def load_env_file(path: Path) -> None:
@@ -70,7 +80,7 @@ def http_get(url: str, timeout: int = 120) -> bytes:
         url,
         headers={
             "Accept": "*/*",
-            "User-Agent": "PlexFlix-CableEPG/1.0",
+            "User-Agent": "PlexFlix-CableEPG/1.1",
         },
     )
     with urllib.request.urlopen(req, timeout=timeout) as resp:
@@ -124,7 +134,6 @@ def first_child(node: ET.Element, names: list[str]) -> ET.Element | None:
         child = node.find(name)
         if child is not None:
             return child
-        # XMLTV sometimes uses namespaced tags
         for el in node:
             if el.tag.endswith(name) or el.tag == name:
                 return el
@@ -154,7 +163,6 @@ def programme_to_dict(node: ET.Element) -> dict[str, Any] | None:
             rating_val = value.text.strip()
             break
 
-    # Keep the published feed lean for the Roku JSON parse
     if len(desc) > 280:
         desc = desc[:277].rstrip() + "…"
 
@@ -192,7 +200,6 @@ def extract_programmes(
     start_ts = int(window_start.timestamp())
     end_ts = int(window_end.timestamp())
 
-    # iterparse keeps memory bounded on the 70MB+ US2 dump
     context = ET.iterparse(stream, events=("end",))
     for _event, elem in context:
         tag = elem.tag.rsplit("}", 1)[-1]
@@ -206,7 +213,6 @@ def extract_programmes(
         elem.clear()
         if prog is None:
             continue
-        # Keep anything overlapping [window_start, window_end]
         if prog["endsAt"] <= start_ts or prog["beginsAt"] >= end_ts:
             continue
         out[channel].append(prog)
@@ -216,45 +222,33 @@ def extract_programmes(
     return out
 
 
-def enrich_feed(
-    feed: dict[str, Any],
+def build_sidecar(
     id_map: dict[str, str],
     programmes_by_xmltv: dict[str, list[dict[str, Any]]],
-) -> dict[str, int]:
-    stats = {"channels": 0, "withEpg": 0, "programmes": 0, "unmapped": 0}
+    source: str,
+) -> tuple[dict[str, Any], dict[str, int]]:
     now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    channels: dict[str, Any] = {}
+    stats = {"mapped": 0, "withEpg": 0, "programmes": 0, "empty": 0}
 
-    for section in CABLE_SECTIONS:
-        rows = feed.get(section)
-        if not isinstance(rows, list):
-            continue
-        for entry in rows:
-            if not isinstance(entry, dict):
-                continue
-            stats["channels"] += 1
-            feed_id = str(entry.get("id") or "")
-            xmltv_id = id_map.get(feed_id, "")
-            if not xmltv_id:
-                # Title fallback for hand-edited feeds
-                title = str(entry.get("title") or "").strip().lower()
-                for fid, xid in id_map.items():
-                    if fid.replace("timst-", "").replace("-", " ") == title:
-                        xmltv_id = xid
-                        break
-            programs = programmes_by_xmltv.get(xmltv_id, []) if xmltv_id else []
-            entry["epgChannelId"] = xmltv_id
-            entry["epgUpdated"] = now
-            if programs:
-                entry["programs"] = programs
-                stats["withEpg"] += 1
-                stats["programmes"] += len(programs)
-            else:
-                entry.pop("programs", None)
-                stats["unmapped"] += 1
+    for feed_id, xmltv_id in id_map.items():
+        stats["mapped"] += 1
+        programs = programmes_by_xmltv.get(xmltv_id, [])
+        entry = {"epgChannelId": xmltv_id, "programs": programs}
+        channels[feed_id] = entry
+        if programs:
+            stats["withEpg"] += 1
+            stats["programmes"] += len(programs)
+        else:
+            stats["empty"] += 1
 
-    feed["epgEnrichedAt"] = now
-    feed["epgSource"] = os.environ.get("EPG_XMLTV_URL", DEFAULT_EPG_URL)
-    return stats
+    sidecar = {
+        "updated": now,
+        "source": source,
+        "windowHoursBack": 6,
+        "channels": channels,
+    }
+    return sidecar, stats
 
 
 def upload_b2(local_path: Path, remote_key: str) -> None:
@@ -263,7 +257,7 @@ def upload_b2(local_path: Path, remote_key: str) -> None:
     except ImportError as exc:
         raise SystemExit(
             "b2sdk not installed. On the home server: pip install b2sdk\n"
-            "Or copy the enriched JSON to your CDN yourself."
+            "Or copy the sidecar JSON to your CDN yourself."
         ) from exc
 
     key_id = require_env("B2_KEY_ID")
@@ -281,17 +275,15 @@ def upload_b2(local_path: Path, remote_key: str) -> None:
 
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description="Enrich PlexFlix sports feed Entertainment/Cartoons with XMLTV EPG"
+        description="Build PlexFlix Cable TV EPG sidecar (does not touch the sports feed)"
     )
     parser.add_argument("--env-file", type=Path, help="Optional KEY=VALUE env file")
     parser.add_argument(
         "--map",
         type=Path,
         default=SCRIPT_DIR / "cable_epg_map.json",
-        help="Channel id → XMLTV id map",
+        help="Feed channel id → XMLTV id map",
     )
-    parser.add_argument("--feed-url", default=None, help="Sports feed JSON URL")
-    parser.add_argument("--feed-file", type=Path, help="Local feed JSON instead of URL")
     parser.add_argument("--epg-url", default=None, help="XMLTV .xml / .xml.gz URL")
     parser.add_argument("--epg-file", type=Path, help="Local XMLTV instead of URL")
     parser.add_argument(
@@ -304,17 +296,17 @@ def main() -> int:
         "--out",
         type=Path,
         default=None,
-        help="Write enriched feed JSON here (default: temp file / stdout path)",
+        help="Write sidecar JSON here (default: temp cable-epg.json)",
     )
     parser.add_argument(
         "--upload",
         action="store_true",
-        help="Upload enriched JSON to Backblaze B2 (overwrites sports feed object)",
+        help="Upload sidecar JSON to Backblaze B2",
     )
     parser.add_argument(
         "--remote-key",
         default=None,
-        help="B2 object key (default: env B2_REMOTE_KEY or secretfeedfilename.json)",
+        help=f"B2 object key (default: env B2_REMOTE_KEY or {DEFAULT_REMOTE_KEY})",
     )
     args = parser.parse_args()
 
@@ -322,23 +314,17 @@ def main() -> int:
         load_env_file(args.env_file)
 
     id_map = load_map(args.map)
-    feed_url = (args.feed_url or os.environ.get("SPORTS_FEED_URL") or DEFAULT_FEED_URL).strip()
     epg_url = (args.epg_url or os.environ.get("EPG_XMLTV_URL") or DEFAULT_EPG_URL).strip()
-
-    if args.feed_file:
-        print(f"load feed {args.feed_file}")
-        feed = json.loads(args.feed_file.read_text(encoding="utf-8"))
-    else:
-        print(f"download feed {feed_url}")
-        feed = json.loads(http_get(feed_url).decode("utf-8"))
 
     if args.epg_file:
         print(f"load epg {args.epg_file}")
         xmltv_bytes = args.epg_file.read_bytes()
+        source = str(args.epg_file)
     else:
         print(f"download epg {epg_url}")
         xmltv_bytes = http_get(epg_url, timeout=180)
         print(f"  epg bytes {len(xmltv_bytes)}")
+        source = epg_url
 
     now = datetime.now(timezone.utc)
     window_start = now - timedelta(hours=6)
@@ -347,30 +333,28 @@ def main() -> int:
     print(f"parse programmes for {len(wanted)} xmltv ids ({window_start} → {window_end})")
     programmes = extract_programmes(xmltv_bytes, wanted, window_start, window_end)
     covered = sum(1 for v in programmes.values() if v)
-    print(f"  channels with listings: {covered}/{len(wanted)}")
+    print(f"  xmltv channels with listings: {covered}/{len(wanted)}")
 
-    stats = enrich_feed(feed, id_map, programmes)
+    sidecar, stats = build_sidecar(id_map, programmes, source)
+    sidecar["windowDaysAhead"] = max(1, args.days)
     print(
-        f"enriched cable channels={stats['channels']} withEpg={stats['withEpg']} "
-        f"programmes={stats['programmes']} unmapped={stats['unmapped']}"
+        f"sidecar mapped={stats['mapped']} withEpg={stats['withEpg']} "
+        f"programmes={stats['programmes']} empty={stats['empty']}"
     )
 
-    out_path = args.out
-    if out_path is None:
-        tmp = Path(tempfile.gettempdir()) / "plexflix-feed-enriched.json"
-        out_path = tmp
+    out_path = args.out or (Path(tempfile.gettempdir()) / "cable-epg.json")
     out_path.parent.mkdir(parents=True, exist_ok=True)
-    out_path.write_text(json.dumps(feed, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    out_path.write_text(json.dumps(sidecar, ensure_ascii=False) + "\n", encoding="utf-8")
     print(f"wrote {out_path} ({out_path.stat().st_size} bytes)")
 
     if args.upload:
         remote = (
-            args.remote_key
-            or os.environ.get("B2_REMOTE_KEY")
-            or "secretfeedfilename.json"
+            args.remote_key or os.environ.get("B2_REMOTE_KEY") or DEFAULT_REMOTE_KEY
         ).strip()
         upload_b2(out_path, remote)
 
+    print("\nPoint cableEpgUrl in PlexConfig.brs at your public sidecar URL, e.g.")
+    print(f"  {DEFAULT_PUBLIC_URL}")
     return 0
 
 

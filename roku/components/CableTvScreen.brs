@@ -295,6 +295,7 @@ end sub
 
 sub loadFeed()
     m.top.loadingMessage = "Loading Cable TV…"
+    m.epgById = {}
     m.gridTask = createObject("roSGNode", "PlexTask")
     m.gridTask.config = m.top.config
     m.gridTask.action = "sportsFeed"
@@ -310,8 +311,8 @@ end function
 
 sub onFeedLoaded()
     response = m.gridTask.response
-    m.top.loadingMessage = ""
     if response = invalid or response.ok <> true then
+        m.top.loadingMessage = ""
         err = "Could not load cable channels"
         if response <> invalid and response.error <> invalid then err = response.error
         m.programTitle.text = "Guide unavailable"
@@ -353,10 +354,58 @@ sub onFeedLoaded()
     rebuildTabChrome()
 
     if m.allChannels.count() = 0 then
+        m.top.loadingMessage = ""
         showGuideStatus("No Entertainment or Cartoons channels in the feed")
         return
     end if
 
+    ' Streams come from the sports feed; listings come from the EPG sidecar
+    loadCableEpg()
+end sub
+
+sub loadCableEpg()
+    cfg = m.top.config
+    epgUrl = ""
+    if cfg <> invalid and cfg.cableEpgUrl <> invalid then epgUrl = cfg.cableEpgUrl
+    if epgUrl = "" then
+        finishGuideLoad()
+        return
+    end if
+    m.top.loadingMessage = "Loading listings…"
+    m.epgTask = createObject("roSGNode", "PlexTask")
+    m.epgTask.config = cfg
+    m.epgTask.action = "cableEpg"
+    m.epgTask.observeField("response", "onCableEpgLoaded")
+    m.epgTask.control = "RUN"
+end sub
+
+sub onCableEpgLoaded()
+    response = m.epgTask.response
+    if response <> invalid and response.ok = true and response.skipped <> true then
+        m.epgById = response.byId
+        if m.epgById = invalid then m.epgById = {}
+        applyEpgToChannels()
+    end if
+    ' Missing sidecar / failed fetch: keep 24/7 placeholders — sports feed still works
+    finishGuideLoad()
+end sub
+
+sub applyEpgToChannels()
+    if m.epgById = invalid then return
+    for each ch in m.allChannels
+        feedId = asString(ch.feedId)
+        if feedId <> "" and m.epgById.DoesExist(feedId) then
+            programs = m.epgById[feedId]
+            if programs <> invalid and programs.count() > 0 then
+                ch.rawPrograms = programs
+                ch.hasEpg = true
+            end if
+        end if
+    end for
+end sub
+
+sub finishGuideLoad()
+    m.top.loadingMessage = ""
     showGuideStatus("")
     m.guideLoaded = true
     applyTab(0, true)
@@ -382,10 +431,14 @@ function makeChannel(item as Object, category as String, number as Integer) as O
     if logo = "" then logo = asString(item.hdBackdropUrl)
     summary = asString(item.description)
     if summary = "" then summary = category + " · 24/7"
+    feedId = ""
+    if item.id <> invalid then feedId = asString(item.id)
+    ' Inline programs[] still work if present; sidecar overwrites in applyEpgToChannels
     rawPrograms = []
     if item.programs <> invalid then rawPrograms = item.programs
     return {
         key: asString(item.streamUrl) + "|" + title,
+        feedId: feedId,
         number: StrI(number).Trim(),
         callSign: title,
         name: title,

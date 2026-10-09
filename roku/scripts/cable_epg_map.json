@@ -1,5 +1,5 @@
 {
-  "_comment": "Maps sports-feed channel ids → epgshare01 US2 XMLTV channel ids (East/national feeds preferred). Unmapped channels keep a 24/7 placeholder in the Cable TV guide.",
+  "_comment": "Maps sports-feed channel ids → epgshare01 US2 XMLTV channel ids (East/national feeds preferred). Used by enrich_cable_epg.py to build the cable-epg.json sidecar. Unmapped channels keep a 24/7 placeholder in the Cable TV guide.",
   "source": "https://epgshare01.online/epgshare01/epg_ripper_US2.xml.gz",
   "channels": {
     "timst-abc": "ABC.National.Feed.us2",
