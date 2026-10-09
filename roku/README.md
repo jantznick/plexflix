@@ -74,21 +74,7 @@ Optional keys:
 
 ### Cable TV listings (EPG)
 
-Entertainment / Cartoons are 24/7 streams. Listings live in a **sidecar** JSON so your 5-minute sports feed publish never wipes them.
-
-On the **home server**, every 6-12 hours:
-
-```bash
-python3 roku/scripts/enrich_cable_epg.py \
-  --env-file /path/to/plexflix-cable-epg.env \
-  --upload
-```
-
-- Writes `plexflix/cable-epg.json` (not `secretfeedfilename.json`)
-- Channel map: `roku/scripts/cable_epg_map.json` (feed `id` → XMLTV id)
-- Env example: `roku/scripts/cable_epg.env.example`
-- Roku loads `cableEpgUrl` from `PlexConfig.brs` and merges by channel id into the Cable TV guide
-- Unmapped channels / missing sidecar → single 24/7 cell; streams still work from the sports feed
+Entertainment / Cartoons are 24/7 streams. Listings live in a **sidecar** JSON (`cable-epg.json`) so your 5-minute sports feed publish never wipes them. Full setup is under [Cable TV EPG sidecar](#cable-tv-epg-sidecar-home-server) below.
 
 Notes:
 
@@ -353,6 +339,94 @@ erroring out.
 - Loading uses a Netflix-style scrolling poster mosaic on home launch (CDN-refreshable)
 - Soft loading banner for in-app fetches — the UI stays navigable
 
+## Cable TV EPG sidecar (home server)
+
+Streams stay in `sportsFeedUrl` (updates as often as every 5 minutes). What’s-on listings are a **separate** object the Roku merges by channel id.
+
+Run this on the **home server** (not this laptop). Every **6–12 hours** is enough — not after every feed publish.
+
+### 1. One-time setup
+
+```bash
+# venv (reuse the splash one if you already have b2sdk there)
+python3 -m venv ~/plexflix-epg-venv
+~/plexflix-epg-venv/bin/pip install b2sdk
+
+# env file
+cp /path/to/repo/roku/scripts/cable_epg.env.example ~/plexflix-cable-epg.env
+chmod 600 ~/plexflix-cable-epg.env
+```
+
+Edit `~/plexflix-cable-epg.env`:
+
+```bash
+# XMLTV source (default is fine for US cable nets)
+EPG_XMLTV_URL=https://epgshare01.online/epgshare01/epg_ripper_US2.xml.gz
+
+# Backblaze B2 — same bucket you already use for the sports feed / splash
+B2_BUCKET=roku-hockey
+B2_KEY_ID=your_key_id
+B2_APPLICATION_KEY=your_application_key
+
+# MUST be the sidecar key — do not point this at secretfeedfilename.json
+B2_REMOTE_KEY=plexflix/cable-epg.json
+```
+
+Channel id map (usually leave as-is): `roku/scripts/cable_epg_map.json`  
+(`timst-cartoon-network` → `Cartoon.Network.HD.us2`, etc.)
+
+### 2. Dry run (no upload)
+
+```bash
+~/plexflix-epg-venv/bin/python /path/to/repo/roku/scripts/enrich_cable_epg.py \
+  --env-file ~/plexflix-cable-epg.env \
+  --out /tmp/cable-epg.json
+```
+
+You should see something like `sidecar mapped=55 withEpg=55 programmes=…` and a ~0.8–1.5 MB JSON file.
+
+Optional: `--days 2` keeps two days ahead (default is **6 hours back + 1 day ahead**).
+
+### 3. Upload to B2
+
+```bash
+~/plexflix-epg-venv/bin/python /path/to/repo/roku/scripts/enrich_cable_epg.py \
+  --env-file ~/plexflix-cable-epg.env \
+  --upload
+```
+
+That writes:
+
+`https://roku-hockey.s3.us-west-004.backblazeb2.com/plexflix/cable-epg.json`
+
+`cableEpgUrl` in `PlexConfig.brs` already points there. If the object isn’t public yet, make that B2 file (or prefix) readable the same way as `secretfeedfilename.json` / splash posters.
+
+### 4. Cron
+
+```cron
+# every 6 hours
+20 */6 * * * ~/plexflix-epg-venv/bin/python /path/to/repo/roku/scripts/enrich_cable_epg.py --env-file ~/plexflix-cable-epg.env --upload >>/var/log/plexflix-cable-epg.log 2>&1
+```
+
+### What the Roku does
+
+1. Load sports feed → Entertainment / Cartoons channels + stream URLs  
+2. Load `cableEpgUrl` → `programs[]` keyed by feed channel `id`  
+3. Merge into the Cable TV grid  
+
+Missing sidecar or unmapped channels (Fox, CBeebies, WAPA Deportes today) show a single 24/7 cell; playback still works.
+
+### Without B2 upload
+
+Build locally and copy however you like:
+
+```bash
+~/plexflix-epg-venv/bin/python /path/to/repo/roku/scripts/enrich_cable_epg.py \
+  --env-file ~/plexflix-cable-epg.env \
+  --out /tmp/cable-epg.json
+# then rclone/aws/cp to your CDN, and set cableEpgUrl to that public URL
+```
+
 ## Daily splash posters (home server)
 
 The channel ships with hardcoded TMDB CDN posters for the scrolling splash. To refresh them from *your* Plex library every day, run this on the home server (not this laptop):
@@ -400,6 +474,9 @@ roku/
   fonts/
   images/
   scripts/update_splash_posters.py
+  scripts/enrich_cable_epg.py
+  scripts/cable_epg_map.json
+  scripts/cable_epg.env.example
   scripts/make_player_assets.py
   package.sh
 ```
