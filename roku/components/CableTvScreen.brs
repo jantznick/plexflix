@@ -37,6 +37,7 @@ sub init()
     m.anchor = 0
     m.minWin = floorSlot(nowSeconds())
     m.winStart = m.minWin
+    m.loadedEnd = m.minWin + m.winLen
     m.rows = []
     m.slotLabels = []
     m.slotTicks = []
@@ -504,9 +505,39 @@ function fillPrograms(raw as Object, startAt as Integer, endAt as Integer) as Ob
     return out
 end function
 
+' Furthest time the guide will show — end of sidecar listings, or 24h for 24/7-only
+function computeLoadedEnd() as Integer
+    endAt = m.minWin + m.winLen
+    hasEpg = false
+    for each ch in m.allChannels
+        if ch.hasEpg = true and ch.rawPrograms <> invalid then
+            for each p in ch.rawPrograms
+                if p.endsAt > endAt then endAt = p.endsAt
+                hasEpg = true
+            end for
+        end if
+    end for
+    if not hasEpg then return m.minWin + (24 * 3600)
+    return endAt
+end function
+
+function maxWinStart() as Integer
+    limit = m.loadedEnd - m.winLen
+    if limit < m.minWin then return m.minWin
+    return limit
+end function
+
+sub clampWinStart()
+    if m.winStart < m.minWin then m.winStart = m.minWin
+    maxStart = maxWinStart()
+    if m.winStart > maxStart then m.winStart = maxStart
+end sub
+
 sub rebuildPrograms()
+    m.loadedEnd = computeLoadedEnd()
     startAt = m.minWin
-    endAt = m.minWin + (48 * 3600)
+    endAt = m.loadedEnd
+    if endAt <= startAt then endAt = startAt + m.winLen
     for each ch in m.allChannels
         if ch.hasEpg = true then
             ch.programs = fillPrograms(ch.rawPrograms, startAt, endAt)
@@ -527,6 +558,7 @@ sub rebuildPrograms()
             }]
         end if
     end for
+    clampWinStart()
 end sub
 
 sub applyTab(index as Integer, force as Boolean)
@@ -782,17 +814,19 @@ sub moveRight()
     ch = focusedChannel()
     if ch = invalid then return
     nextIdx = m.focusProg + 1
-    if nextIdx >= ch.programs.count() then
-        m.winStart = m.winStart + m.slotLen
-        setAnchorFromFocus()
-        afterFocusMove()
-        return
-    end if
+    if nextIdx >= ch.programs.count() then return
+    nextProg = ch.programs[nextIdx]
+    ' Don't step onto trailing empty guide padding past real listings
+    if nextProg.placeholder = true and nextProg.lb >= m.loadedEnd - 60 then return
+    if nextProg.lb >= m.loadedEnd then return
+
     m.focusProg = nextIdx
     p = ch.programs[nextIdx]
     while p.lb >= m.winStart + m.winLen - m.slotLen
+        if m.winStart >= maxWinStart() then exit while
         m.winStart = m.winStart + m.slotLen
     end while
+    clampWinStart()
     setAnchorFromFocus()
     afterFocusMove()
 end sub
