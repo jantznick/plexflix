@@ -1114,15 +1114,8 @@ function onKeyEvent(key as String, press as Boolean) as Boolean
         watchChannel(focusedChannel())
         return true
     else if key = "back" then
-        if m.focusCh <> 0 or m.winStart <> m.minWin then
-            m.focusCh = 0
-            m.topRow = 0
-            m.winStart = m.minWin
-            refocusAnchor(nowSeconds())
-            afterFocusMove()
-        else
-            leaveToMenu()
-        end if
+        ' First Back → filter tabs; Back again from tabs opens the sidebar
+        enterTabs()
         return true
     end if
     return false

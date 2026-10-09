@@ -323,7 +323,7 @@ erroring out.
 ## Remote / focus
 
 - **Left** opens the sidebar from Home, Libraries, Live Sports (and sports detail via Back first); **Right** hides it
-- **Back** in the Live TV guide first jumps to the top channel at the current time; **Back** on a section's main screen (Home, a library, Live TV, Live Sports) opens the sidebar; from deep in Home's shelves or a library's shelves it returns to the top first
+- **Back** on Live TV / Cable TV / Live Sports: first press returns to the top tabs/pills; second press opens the sidebar. On Home or a library, Back opens the sidebar (from deep in shelves it returns to the top first)
 - **Back** with the sidebar open exits the channel
 - Libraries appear as flat items in the sidebar (no wrapping cycle at the ends)
 - Arrow keys move across poster rows
