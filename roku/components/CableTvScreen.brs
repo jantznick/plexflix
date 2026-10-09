@@ -382,6 +382,8 @@ function makeChannel(item as Object, category as String, number as Integer) as O
     if logo = "" then logo = asString(item.hdBackdropUrl)
     summary = asString(item.description)
     if summary = "" then summary = category + " · 24/7"
+    rawPrograms = []
+    if item.programs <> invalid then rawPrograms = item.programs
     return {
         key: asString(item.streamUrl) + "|" + title,
         number: StrI(number).Trim(),
@@ -391,30 +393,86 @@ function makeChannel(item as Object, category as String, number as Integer) as O
         category: prettyCategory(category),
         summary: summary,
         item: item,
+        rawPrograms: rawPrograms,
+        hasEpg: (rawPrograms.count() > 0),
         programs: []
     }
 end function
 
-' Feed channels are continuous 24/7, so each row gets one block for the window
+function gapProgram(b as Integer, e as Integer, title as String) as Object
+    return {
+        title: title,
+        subtitle: "",
+        summary: "",
+        placeholder: true,
+        beginsAt: b,
+        endsAt: e,
+        lb: b,
+        art: "",
+        episodeLabel: "",
+        contentRating: "",
+        isNew: false
+    }
+end function
+
+' Tile the guide window so Left/Right always has a cell to land on
+function fillPrograms(raw as Object, startAt as Integer, endAt as Integer) as Object
+    out = []
+    cursor = startAt
+    if raw = invalid or raw.count() = 0 then
+        out.push(gapProgram(startAt, endAt, "No guide data"))
+        return out
+    end if
+    for each p in raw
+        b = p.beginsAt
+        e = p.endsAt
+        if b <= 0 or e <= b then
+            b = startAt
+            e = endAt
+        end if
+        if e > cursor then
+            if b > cursor + 120 then out.push(gapProgram(cursor, b, "No information"))
+            if out.count() = 0 then
+                p.lb = b
+            else if b < cursor then
+                p.lb = cursor
+            else
+                p.lb = b
+            end if
+            p.endsAt = e
+            if p.beginsAt <= 0 then p.beginsAt = b
+            if p.placeholder = invalid then p.placeholder = false
+            out.push(p)
+            cursor = e
+            if cursor >= endAt then exit for
+        end if
+    end for
+    if cursor < endAt then out.push(gapProgram(cursor, endAt, "No information"))
+    return out
+end function
+
 sub rebuildPrograms()
     startAt = m.minWin
-    endAt = m.minWin + (24 * 3600)
+    endAt = m.minWin + (48 * 3600)
     for each ch in m.allChannels
-        title = ch.name
-        subtitle = "24/7"
-        summary = ch.summary
-        art = ch.logo
-        ch.programs = [{
-            title: title,
-            subtitle: subtitle,
-            summary: summary,
-            placeholder: false,
-            beginsAt: startAt,
-            endsAt: endAt,
-            lb: startAt,
-            art: art,
-            isNew: false
-        }]
+        if ch.hasEpg = true then
+            ch.programs = fillPrograms(ch.rawPrograms, startAt, endAt)
+        else
+            ' Unmapped / not-yet-enriched channels stay one continuous block
+            ch.programs = [{
+                title: ch.name,
+                subtitle: "24/7",
+                summary: ch.summary,
+                placeholder: false,
+                beginsAt: startAt,
+                endsAt: endAt,
+                lb: startAt,
+                art: ch.logo,
+                episodeLabel: "",
+                contentRating: "",
+                isNew: false
+            }]
+        end if
     end for
 end sub
 
@@ -542,6 +600,8 @@ sub paintCell(cell as Object, p as Object, x as Integer, w as Integer, focused a
     live = isOnNow(p)
     if focused then
         cell.bg.color = "0xEDF0F5"
+    else if p.placeholder = true then
+        cell.bg.color = "0x0E131D"
     else if live then
         cell.bg.color = "0x1C2436"
     else
@@ -559,11 +619,18 @@ sub paintCell(cell as Object, p as Object, x as Integer, w as Integer, focused a
     title = p.title
     if clippedLeft then title = "« " + title
     cell.title.text = title
-    cell.subLabel.text = valueOr(p.subtitle, "")
+    subText = ""
+    if p.placeholder <> true then
+        subText = joinStrings([valueOr(p.episodeLabel, ""), valueOr(p.subtitle, "")], "  ·  ")
+    end if
+    cell.subLabel.text = subText
 
     if focused then
         cell.title.color = "0x0A0E18"
         cell.subLabel.color = "0x3A4458"
+    else if p.placeholder = true then
+        cell.title.color = "0x5E6880"
+        cell.subLabel.color = "0x5E6880"
     else
         cell.title.color = "0xE8EEF8"
         cell.subLabel.color = "0x8FA0B8"
@@ -659,21 +726,46 @@ sub pageVertical(delta as Integer)
 end sub
 
 sub moveRight()
-    ' Continuous 24/7 blocks: Right pages the time window forward
-    m.winStart = m.winStart + m.slotLen
+    ch = focusedChannel()
+    if ch = invalid then return
+    nextIdx = m.focusProg + 1
+    if nextIdx >= ch.programs.count() then
+        m.winStart = m.winStart + m.slotLen
+        setAnchorFromFocus()
+        afterFocusMove()
+        return
+    end if
+    m.focusProg = nextIdx
+    p = ch.programs[nextIdx]
+    while p.lb >= m.winStart + m.winLen - m.slotLen
+        m.winStart = m.winStart + m.slotLen
+    end while
     setAnchorFromFocus()
     afterFocusMove()
 end sub
 
 function moveLeft() as Boolean
-    if m.winStart > m.minWin then
+    ch = focusedChannel()
+    p = focusedProgram()
+    if ch = invalid or p = invalid then return false
+    if p.lb < m.winStart and m.winStart > m.minWin then
         m.winStart = m.winStart - m.slotLen
         if m.winStart < m.minWin then m.winStart = m.minWin
         setAnchorFromFocus()
         afterFocusMove()
         return true
     end if
-    return false
+    prevIdx = m.focusProg - 1
+    if prevIdx < 0 or ch.programs[prevIdx].endsAt <= m.minWin then return false
+    m.focusProg = prevIdx
+    pp = ch.programs[prevIdx]
+    while pp.lb < m.winStart and m.winStart > m.minWin
+        m.winStart = m.winStart - m.slotLen
+    end while
+    if m.winStart < m.minWin then m.winStart = m.minWin
+    setAnchorFromFocus()
+    afterFocusMove()
+    return true
 end function
 
 sub afterFocusMove()
@@ -746,30 +838,33 @@ sub updateGridInfo()
     p = focusedProgram()
     if ch = invalid or p = invalid then return
 
-    badges = [{ text: "LIVE", fill: "0xE50914", ink: "0xFFFFFF" }]
+    badges = []
+    live = isOnNow(p)
+    if live and p.placeholder <> true then badges.push({ text: "LIVE", fill: "0xE50914", ink: "0xFFFFFF" })
+
     metaParts = [channelLabel(ch)]
     if ch.category <> invalid and ch.category <> "" then metaParts.push(ch.category)
-    metaParts.push("24/7")
+    if p.placeholder <> true then
+        when = rangeText(p.beginsAt, p.endsAt)
+        if dayKey(p.beginsAt) <> dayKey(nowSeconds()) then when = dayLabel(p.beginsAt) + " " + when
+        if when <> "" then metaParts.push(when)
+        if p.contentRating <> invalid and p.contentRating <> "" then metaParts.push(p.contentRating)
+    else
+        metaParts.push("No listing")
+    end if
 
-    streams = 0
-    if ch.item <> invalid then
-        if ch.item.DoesExist("streamCount") then streams = ch.item.streamCount
-        if streams = 0 and ch.item.streams <> invalid then streams = ch.item.streams.count()
-        if streams = 0 and asString(ch.item.streamUrl) <> "" then streams = 1
-    end if
-    streamText = ""
-    if streams = 1 then
-        streamText = "1 stream available"
-    else if streams > 1 then
-        streamText = StrI(streams).Trim() + " streams available"
-    end if
+    subParts = []
+    if p.episodeLabel <> invalid and p.episodeLabel <> "" then subParts.push(p.episodeLabel)
+    if p.subtitle <> invalid and p.subtitle <> "" then subParts.push(p.subtitle)
+    if subParts.count() = 0 and live then subParts.push("On now")
 
     summary = valueOr(p.summary, "")
-    if streamText <> "" then
-        if summary <> "" then summary = summary + "  ·  " + streamText else summary = streamText
-    end if
+    if p.placeholder = true then summary = "No program information for this time on " + channelLabel(ch) + "."
+    if summary = "" then summary = ch.summary
 
-    paintInfo(p.title, "On now", joinStrings(metaParts, "  ·  "), summary, badges, valueOr(p.art, ""))
+    art = valueOr(p.art, "")
+    if art = "" then art = ch.logo
+    paintInfo(p.title, joinStrings(subParts, "  ·  "), joinStrings(metaParts, "  ·  "), summary, badges, art)
 end sub
 
 ' ---------------------------------------------------------------------------

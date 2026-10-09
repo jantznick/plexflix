@@ -21,7 +21,7 @@ This is intentionally a **design/UX shell** on top of existing Plex data. Creden
   playback), updating only the rows whose items changed
 - Selecting a library in the sidebar opens that library’s shelves
 - **Live TV**: a real grid guide built from your Plex EPG (`/<epg provider>/grid`): channel logo, number and call sign
-- **Cable TV**: same guide layout for Entertainment and Cartoons from the sports JSON feed (24/7 channels); those sections no longer appear under Live Sports
+- **Cable TV**: same guide layout for Entertainment and Cartoons from the sports JSON feed; when the feed is EPG-enriched it shows real what’s-on listings (otherwise 24/7 placeholders). Those sections no longer appear under Live Sports
   down the left, half-hour time slots across the top, program blocks sized by duration, a red now-line, and a live
   preview of the focused channel. Up/Down change channel, Left/Right move through programs (time pages in 30-minute
   steps and later hours load as you go), `<<`/`>>` page channels. OK on something airing now watches it; OK on a future
@@ -70,6 +70,22 @@ Optional keys:
 - `tmdbApiKey` — cast bios / photos / known-for, plus synopsis art for Discover titles not in your library (https://www.themoviedb.org/settings/api)
 - Leave as `REPLACE_WITH_TMDB_API_KEY` to skip TMDB (Plex people data still used when available)
 `sportsFeedUrl` can point at any JSON feed. Category maps like `{ "FOOTBALL": [ { title, thumbnail, content.videos[].url } ] }` are supported.
+
+### Cable TV listings (EPG)
+
+Entertainment / Cartoons are 24/7 streams. To show what’s on at a given time, enrich the published feed on your **home server** with a free XMLTV source (epgshare01 US2 by default):
+
+```bash
+# After your feed publisher finishes (example hourly cron)
+python3 roku/scripts/enrich_cable_epg.py \
+  --env-file /path/to/plexflix.env \
+  --upload
+```
+
+- Channel map: `roku/scripts/cable_epg_map.json` (feed `id` → XMLTV id)
+- Env example: `roku/scripts/cable_epg.env.example`
+- The script writes `programs[]` onto each mapped channel; the Roku Cable TV guide renders those blocks (title, time, episode, art). Unmapped channels stay a single 24/7 cell.
+- Prefer running this as a post-step of whatever publishes `secretfeedfilename.json`, so a fresh feed publish doesn’t wipe listings.
 
 Notes:
 

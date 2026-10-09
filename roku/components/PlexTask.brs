@@ -4651,6 +4651,7 @@ function mapSportsEntries(list as Object) as Object
                 primaryFormat = ""
                 if streams[0].streamFormat <> invalid then primaryFormat = streams[0].streamFormat
                 items.push({
+                    id: firstString(entry, ["id", "channelId"]),
                     title: title,
                     description: league,
                     mediaType: "sport",
@@ -4666,12 +4667,71 @@ function mapSportsEntries(list as Object) as Object
                     viewOffset: 0,
                     year: "",
                     rating: "",
-                    contentRating: ""
+                    contentRating: "",
+                    ' Cable TV EPG blocks from enrich_cable_epg.py (optional)
+                    programs: normalizeFeedPrograms(entry.programs)
                 })
             end if
         end if
     end for
     return items
+end function
+
+' Home-server EPG enrichment attaches programs[] with ISO or epoch times
+function normalizeFeedPrograms(raw as Dynamic) as Object
+    out = []
+    if raw = invalid or GetInterface(raw, "ifArray") = invalid then return out
+    for each p in raw
+        if GetInterface(p, "ifAssociativeArray") <> invalid then
+            beginsAt = feedProgramSeconds(p, ["beginsAt", "start", "startTime"])
+            endsAt = feedProgramSeconds(p, ["endsAt", "end", "endTime", "stop"])
+            title = firstString(p, ["title", "name"])
+            if title = "" then title = "Program"
+            if beginsAt > 0 and endsAt > beginsAt then
+                out.push({
+                    title: title,
+                    subtitle: firstString(p, ["subtitle", "subTitle", "episodeTitle"]),
+                    summary: firstString(p, ["description", "summary", "desc"]),
+                    beginsAt: beginsAt,
+                    endsAt: endsAt,
+                    episodeLabel: firstString(p, ["episodeLabel", "episode", "episodeNum"]),
+                    contentRating: firstString(p, ["contentRating", "rating"]),
+                    art: firstString(p, ["art", "icon", "image", "poster", "thumbnail"]),
+                    placeholder: false
+                })
+            end if
+        end if
+    end for
+    return out
+end function
+
+function feedProgramSeconds(p as Object, keys as Object) as Integer
+    for each keyName in keys
+        if p.DoesExist(keyName) then
+            value = p[keyName]
+            if value = invalid then
+                ' skip
+            else if GetInterface(value, "ifInt") <> invalid or GetInterface(value, "ifLongInt") <> invalid then
+                n = value
+                ' Milliseconds mistaken for seconds
+                if n > 100000000000 then n = Int(n / 1000)
+                if n > 0 then return n
+            else
+                text = safeToStr(value).Trim()
+                if text = "" then
+                    ' skip
+                else if Len(text) >= 10 and Left(text, 1) <> "0" and Val(text) > 1000000000 then
+                    return Int(Val(text))
+                else
+                    dt = CreateObject("roDateTime")
+                    dt.FromISO8601String(text)
+                    secs = dt.AsSeconds()
+                    if secs > 0 then return secs
+                end if
+            end if
+        end if
+    end for
+    return 0
 end function
 
 function extractSportsStreams(entry as Object) as Object
