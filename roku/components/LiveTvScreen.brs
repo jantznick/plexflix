@@ -516,7 +516,7 @@ function makeCableChannel(item as Object, category as String) as Dynamic
         key: key,
         source: "cable",
         feedId: feedId,
-        number: StrI(number).Trim(),
+        number: "",
         sortKey: number * 1.0,
         callSign: title,
         name: title,
@@ -578,9 +578,9 @@ sub finishUnifiedGuide()
         m.byKey[ch.key] = ch
     end for
     for each ch in m.cableChannels
-        ' If a Plex VCN already owns this integer, nudge Cable up so the lineup stays unique
+        ' Sort like a cable lineup, but leave the number column blank (name only)
         ch.sortKey = avoidNumberCollision(usedNumbers, channelSortKey(ch))
-        ch.number = formatChannelNumber(ch.sortKey)
+        ch.number = ""
         markUsedNumber(usedNumbers, ch.sortKey)
         m.channels.push(ch)
         m.byKey[ch.key] = ch
