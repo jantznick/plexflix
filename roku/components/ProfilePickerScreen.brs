@@ -24,7 +24,7 @@ sub init()
     paintTiles()
     m.top.setFocus(true)
 
-    ' Soft entrance — brand and row ease in
+    ' Soft entrance - brand and row ease in
     m.brand.opacity = 0
     m.headline.opacity = 0
     m.sub.opacity = 0
@@ -189,7 +189,7 @@ sub paintTiles()
             tile.glow.opacity = 0
             tile.panel.color = "0x141C2C"
             tile.group.scale = [1.0, 1.0]
-            ' Reset Y relative to row — rebuild stores base in first paint via stored baseY
+            ' Reset Y relative to row - rebuild stores base in first paint via stored baseY
         end if
     end for
     ' Re-apply base translations so unfocused tiles sit on the row
@@ -215,7 +215,7 @@ sub paintPin()
     for i = 0 to 3
         entry = m.pinBoxes[i]
         if i < Len(m.pinValue) then
-            entry.label.text = "•"
+            entry.label.text = "*"
             entry.box.color = "0x1A2438"
         else if i = Len(m.pinValue) then
             entry.label.text = ""
@@ -247,7 +247,7 @@ sub closePin()
     m.pinOverlay.visible = false
     m.pinError.text = ""
     paintTiles()
-    m.hint.text = "OK to select  ·  Left / Right to move"
+    m.hint.text = "OK to select  |  Left / Right to move"
 end sub
 
 sub appendPinDigit(digit as String)
@@ -259,7 +259,7 @@ sub appendPinDigit(digit as String)
 end sub
 
 sub nudgePinDigit(up as Boolean)
-    ' Replace or start the current slot: ▲/▼ cycle 0–9, then OK locks in
+    ' Replace or start the current slot: ^/v cycle 0-9, then OK locks in
     if Len(m.pinValue) >= 4 then return
     if Len(m.pinValue) = 0 then
         appendPinDigit("0")
@@ -325,7 +325,7 @@ end function
 function digitFromKey(key as String) as String
     if key = "0" or key = "1" or key = "2" or key = "3" or key = "4" then return key
     if key = "5" or key = "6" or key = "7" or key = "8" or key = "9" then return key
-    ' Some remotes report lit_0 … lit_9
+    ' Some remotes report lit_0 ... lit_9
     if Left(key, 4) = "lit_" then
         d = Mid(key, 5)
         if Len(d) = 1 and Asc(d) >= 48 and Asc(d) <= 57 then return d
@@ -359,8 +359,10 @@ function onKeyEvent(key as String, press as Boolean) as Boolean
             return true
         end if
         if key = "up" or key = "down" then
-            ' Stick remotes often lack a numpad — nudge the current digit
-            nudgePinDigit(key = "up")
+            ' Stick remotes often lack a numpad - nudge the current digit.
+            ' BrightScript cannot parse "=" inside a call argument list.
+            goingUp = (key = "up")
+            nudgePinDigit(goingUp)
             return true
         end if
         return true
@@ -382,7 +384,7 @@ function onKeyEvent(key as String, press as Boolean) as Boolean
         chooseCurrent()
         return true
     else if key = "back" then
-        ' Stay on picker — exiting the channel is MainScene's job when nothing else is up
+        ' Stay on picker - exiting the channel is MainScene's job when nothing else is up
         return false
     end if
     return false

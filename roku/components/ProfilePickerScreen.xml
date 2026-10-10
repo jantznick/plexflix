@@ -10,7 +10,7 @@
     <script type="text/brightscript" uri="pkg:/source/Profiles.brs" />
 
     <children>
-        <!-- Atmospheric plane — not a flat fill -->
+        <!-- Atmospheric plane - not a flat fill -->
         <Rectangle width="1920" height="1080" color="0x0B1220" />
         <Rectangle width="1920" height="1080" color="0x132033" opacity="0.85" />
         <Rectangle translation="[0, 0]" width="1920" height="420" color="0x1A3A3A" opacity="0.22" />
@@ -28,7 +28,7 @@
             <Label id="brand" translation="[120, 96]" width="1680" height="72" text="PlexFlix" color="0xFFFFFF">
                 <Font role="font" uri="pkg:/fonts/Outfit-Bold.ttf" size="64" />
             </Label>
-            <Label id="headline" translation="[120, 178]" width="1680" height="56" text="Who's watching?" color="0xE8EEF8">
+            <Label id="headline" translation="[120, 178]" width="1680" height="56" text="Who is watching?" color="0xE8EEF8">
                 <Font role="font" uri="pkg:/fonts/Outfit-SemiBold.ttf" size="42" />
             </Label>
             <Label id="sub" translation="[120, 240]" width="900" height="40" text="Pick a profile to personalize libraries and live TV." color="0x8FA0B8">
@@ -38,7 +38,7 @@
 
         <Group id="profileRow" translation="[0, 360]" />
 
-        <Label id="hint" translation="[120, 980]" width="1680" height="36" text="OK to select  ·  Left / Right to move" color="0x5E6880" horizAlign="center">
+        <Label id="hint" translation="[120, 980]" width="1680" height="36" text="OK to select  |  Left / Right to move" color="0x5E6880" horizAlign="center">
             <Font role="font" uri="pkg:/fonts/Outfit-Medium.ttf" size="22" />
         </Label>
 
@@ -57,7 +57,7 @@
             <Label id="pinError" translation="[608, 580]" width="704" height="36" text="" color="0xFF5A64" horizAlign="center">
                 <Font role="font" uri="pkg:/fonts/Outfit-Medium.ttf" size="22" />
             </Label>
-            <Label id="pinHint" translation="[608, 680]" width="704" height="36" text="Numbers or ▲▼ · Right next · OK unlock · Back cancel" color="0x5E6880" horizAlign="center">
+            <Label id="pinHint" translation="[608, 680]" width="704" height="36" text="Numbers or Up/Down | Right next | OK unlock | Back cancel" color="0x5E6880" horizAlign="center">
                 <Font role="font" uri="pkg:/fonts/Outfit-Regular.ttf" size="20" />
             </Label>
         </Group>

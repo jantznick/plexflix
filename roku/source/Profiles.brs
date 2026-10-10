@@ -12,9 +12,7 @@ function GetProfiles() as Object
             allowSports: false,
             allowPlexLiveTv: false,
             allowDiscover: false,
-            ' Library titles containing any of these (case-insensitive) stay visible
             libraryMatch: ["kid", "kids", "children", "child", "family", "cartoon", "disney", "nick"],
-            ' Cable feed ids / name fragments allowed on the TV guide
             cableAllow: [
                 "timst-abc", "timst-nbc", "timst-cbs", "timst-fox", "timst-cw",
                 "timst-cartoon-network", "timst-boomerang", "timst-cbeebies",
