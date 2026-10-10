@@ -33,8 +33,7 @@ sub buildStaticEntries()
     m.entries = [
         { id: "home", kind: "nav", title: "Home" },
         { id: "search", kind: "nav", title: "Search" },
-        { id: "livetv", kind: "nav", title: "Live TV" },
-        { id: "cable", kind: "nav", title: "Cable TV" },
+        { id: "livetv", kind: "nav", title: "TV" },
         { id: "sports", kind: "nav", title: "Live Sports" }
     ]
     rebuildItems()
@@ -66,8 +65,7 @@ sub onLibrariesLoaded()
             library: lib
         })
     end for
-    m.entries.push({ id: "livetv", kind: "nav", title: "Live TV" })
-    m.entries.push({ id: "cable", kind: "nav", title: "Cable TV" })
+    m.entries.push({ id: "livetv", kind: "nav", title: "TV" })
     m.entries.push({ id: "sports", kind: "nav", title: "Live Sports" })
     rebuildItems()
     syncActiveIndex()

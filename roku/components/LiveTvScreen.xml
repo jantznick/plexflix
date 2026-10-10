@@ -21,7 +21,7 @@
         <Poster translation="[880, 184]" width="1040" height="200" uri="pkg:/images/guide_fade_v.png" />
 
         <Group id="tabRow" translation="[120, 36]">
-            <Label width="200" height="48" vertAlign="center" text="LIVE TV" color="0xE50914">
+            <Label width="200" height="48" vertAlign="center" text="TV" color="0xE50914">
                 <Font role="font" uri="pkg:/fonts/Outfit-Bold.ttf" size="36" />
             </Label>
         </Group>
