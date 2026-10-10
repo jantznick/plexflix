@@ -2282,7 +2282,8 @@ function fetchPinnedSources(cfg as Object) as Object
 
     for each dir in dirs
         sectionType = safeToStr(dir.type)
-        if sectionType = "movie" or sectionType = "show" then
+        ' movie/show plus extras like YouTube / clips / artist video libs
+        if sectionType = "movie" or sectionType = "show" or sectionType = "artist" or sectionType = "photo" or sectionType = "clip" then
             key = safeToStr(dir.key)
             sectionId = sectionIdFromKey(key)
             if sectionId <> "" then
@@ -2294,6 +2295,30 @@ function fetchPinnedSources(cfg as Object) as Object
                     title: safeToStr(dir.title),
                     mediaType: "library",
                     sectionType: sectionType,
+                    sectionId: sectionId,
+                    key: key,
+                    ratingKey: sectionId,
+                    description: safeToStr(dir.summary),
+                    hdPosterUrl: imageUrl(cfg, thumb, 360, 540),
+                    hdBackdropUrl: imageUrl(cfg, art, 1920, 1080),
+                    childCount: dir.count
+                })
+            end if
+        else if Instr(1, LCase(safeToStr(dir.title)), "youtube") > 0 then
+            ' Some YouTube agents use odd section types — still pin them
+            key = safeToStr(dir.key)
+            sectionId = sectionIdFromKey(key)
+            if sectionId <> "" then
+                thumb = ""
+                if dir.thumb <> invalid then thumb = safeToStr(dir.thumb)
+                art = ""
+                if dir.art <> invalid then art = safeToStr(dir.art)
+                st = sectionType
+                if st = "" then st = "movie"
+                items.push({
+                    title: safeToStr(dir.title),
+                    mediaType: "library",
+                    sectionType: st,
                     sectionId: sectionId,
                     key: key,
                     ratingKey: sectionId,
