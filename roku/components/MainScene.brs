@@ -795,6 +795,7 @@ end sub
 
 sub showVideo(item as Object)
     if m.videoScreen <> invalid then
+        forceStopVideoScreen(m.videoScreen)
         m.screens.removeChild(m.videoScreen)
         m.videoScreen = invalid
     end if
@@ -811,6 +812,18 @@ sub showVideo(item as Object)
     m.videoScreen.content = item
     m.videoScreen.setFocus(true)
     updateNavRail()
+end sub
+
+' Belt-and-suspenders: sports HLS can keep decoding audio after removeChild
+' if the Video node was not muted/cleared first.
+sub forceStopVideoScreen(screen as Object)
+    if screen = invalid then return
+    vid = screen.findNode("video")
+    if vid = invalid then return
+    vid.mute = true
+    vid.control = "stop"
+    vid.content = invalid
+    vid.visible = false
 end sub
 
 sub onPlaybackReport(event as Object)
@@ -846,6 +859,7 @@ sub onVideoClosed()
     failure = ""
     if m.videoScreen <> invalid then
         failure = asString(m.videoScreen.failure)
+        forceStopVideoScreen(m.videoScreen)
         m.screens.removeChild(m.videoScreen)
         m.videoScreen = invalid
     end if

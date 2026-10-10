@@ -1693,11 +1693,18 @@ sub stopAndClose()
     m.seekTimer.control = "stop"
     m.stallTimer.control = "stop"
     sendPlaybackActions([timelineAction("stopped"), releaseAction()])
-    if m.video <> invalid then
-        m.video.control = "stop"
-        m.video.content = invalid
-    end if
+    hardStopVideo()
     m.top.closed = true
+end sub
+
+' Sports HLS (and some live feeds) can keep audible after the screen is
+' removed if we only flip control=stop. Mute + clear content first.
+sub hardStopVideo()
+    if m.video = invalid then return
+    m.video.mute = true
+    m.video.control = "stop"
+    m.video.content = invalid
+    m.video.visible = false
 end sub
 
 '--------------------------------------------------------------------
