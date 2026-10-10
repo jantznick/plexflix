@@ -49,8 +49,14 @@
             <Label id="metaLabel" translation="[248, 92]" width="1100" height="32" color="0xD0D0D6">
                 <Font role="font" uri="pkg:/fonts/Outfit-Medium.ttf" size="22" />
             </Label>
-            <Label id="summaryLabel" translation="[248, 136]" width="1000" height="88" color="0xFFFFFF" wrap="true" maxLines="3" lineSpacing="5">
+            <Label id="ratingLabel" translation="[248, 126]" width="1100" height="28" color="0xE5A00D" text="">
+                <Font role="font" uri="pkg:/fonts/Outfit-Medium.ttf" size="20" />
+            </Label>
+            <Label id="summaryLabel" translation="[248, 158]" width="1000" height="72" color="0xFFFFFF" wrap="true" maxLines="2" lineSpacing="5">
                 <Font role="font" uri="pkg:/fonts/Outfit-Regular.ttf" size="22" />
+            </Label>
+            <Label id="reviewLabel" translation="[248, 236]" width="1100" height="48" color="0xA8A8B2" wrap="true" maxLines="2" text="">
+                <Font role="font" uri="pkg:/fonts/Outfit-Regular.ttf" size="18" />
             </Label>
 
             <!-- Shown for Discover titles that aren't in the local Plex library -->
@@ -67,39 +73,61 @@
                 </Label>
             </Group>
 
-            <Group id="movieActions" translation="[248, 240]" visible="true">
+            <!-- Action row is laid out in code so optional buttons (From Start / Trailer / …) pack tightly -->
+            <Group id="movieActions" translation="[248, 292]" visible="true">
                 <Group id="playBtn" translation="[0, 0]">
-                    <Rectangle id="playShadow" width="228" height="60" translation="[4, 5]" color="0x000000" opacity="0.45" />
-                    <Rectangle id="playBg" width="220" height="56" color="0xE50914" />
-                    <Label id="playLabel" width="220" height="56" horizAlign="center" vertAlign="center" text="Play" color="0xFFFFFF">
-                        <Font role="font" uri="pkg:/fonts/Outfit-SemiBold.ttf" size="26" />
-                    </Label>
-                </Group>
-                <Group id="watchlistBtn" translation="[0, 0]" visible="false">
-                    <Rectangle id="watchlistShadow" width="328" height="60" translation="[4, 5]" color="0x000000" opacity="0.0" />
-                    <Rectangle id="watchlistBg" width="320" height="56" color="0x2A2A32" />
-                    <Label id="watchlistLabel" width="320" height="56" horizAlign="center" vertAlign="center" text="Add to Watchlist" color="0xFFFFFF">
+                    <Rectangle id="playShadow" width="208" height="56" translation="[3, 4]" color="0x000000" opacity="0.45" />
+                    <Rectangle id="playBg" width="200" height="52" color="0xE50914" />
+                    <Label id="playLabel" width="200" height="52" horizAlign="center" vertAlign="center" text="Play" color="0xFFFFFF">
                         <Font role="font" uri="pkg:/fonts/Outfit-SemiBold.ttf" size="24" />
                     </Label>
                 </Group>
-                <Group id="backBtn" translation="[248, 0]">
-                    <Rectangle id="backShadow" width="168" height="60" translation="[4, 5]" color="0x000000" opacity="0.0" />
-                    <Rectangle id="backBg" width="160" height="56" color="0x2A2A32" />
-                    <Label id="backLabel" width="160" height="56" horizAlign="center" vertAlign="center" text="Back" color="0xFFFFFF">
-                        <Font role="font" uri="pkg:/fonts/Outfit-Medium.ttf" size="24" />
+                <Group id="startOverBtn" translation="[0, 0]" visible="false">
+                    <Rectangle id="startOverShadow" width="208" height="56" translation="[3, 4]" color="0x000000" opacity="0.0" />
+                    <Rectangle id="startOverBg" width="200" height="52" color="0x2A2A32" />
+                    <Label id="startOverLabel" width="200" height="52" horizAlign="center" vertAlign="center" text="From Start" color="0xFFFFFF">
+                        <Font role="font" uri="pkg:/fonts/Outfit-Medium.ttf" size="22" />
+                    </Label>
+                </Group>
+                <Group id="trailerBtn" translation="[0, 0]" visible="false">
+                    <Rectangle id="trailerShadow" width="178" height="56" translation="[3, 4]" color="0x000000" opacity="0.0" />
+                    <Rectangle id="trailerBg" width="170" height="52" color="0x2A2A32" />
+                    <Label id="trailerLabel" width="170" height="52" horizAlign="center" vertAlign="center" text="Trailer" color="0xFFFFFF">
+                        <Font role="font" uri="pkg:/fonts/Outfit-Medium.ttf" size="22" />
+                    </Label>
+                </Group>
+                <Group id="watchedBtn" translation="[0, 0]" visible="false">
+                    <Rectangle id="watchedShadow" width="228" height="56" translation="[3, 4]" color="0x000000" opacity="0.0" />
+                    <Rectangle id="watchedBg" width="220" height="52" color="0x2A2A32" />
+                    <Label id="watchedLabel" width="220" height="52" horizAlign="center" vertAlign="center" text="Mark Watched" color="0xFFFFFF">
+                        <Font role="font" uri="pkg:/fonts/Outfit-Medium.ttf" size="20" />
+                    </Label>
+                </Group>
+                <Group id="watchlistBtn" translation="[0, 0]" visible="false">
+                    <Rectangle id="watchlistShadow" width="308" height="56" translation="[3, 4]" color="0x000000" opacity="0.0" />
+                    <Rectangle id="watchlistBg" width="300" height="52" color="0x2A2A32" />
+                    <Label id="watchlistLabel" width="300" height="52" horizAlign="center" vertAlign="center" text="Add to Watchlist" color="0xFFFFFF">
+                        <Font role="font" uri="pkg:/fonts/Outfit-SemiBold.ttf" size="22" />
+                    </Label>
+                </Group>
+                <Group id="backBtn" translation="[0, 0]">
+                    <Rectangle id="backShadow" width="148" height="56" translation="[3, 4]" color="0x000000" opacity="0.0" />
+                    <Rectangle id="backBg" width="140" height="52" color="0x2A2A32" />
+                    <Label id="backLabel" width="140" height="52" horizAlign="center" vertAlign="center" text="Back" color="0xFFFFFF">
+                        <Font role="font" uri="pkg:/fonts/Outfit-Medium.ttf" size="22" />
                     </Label>
                 </Group>
                 <!-- Shows only — hidden for movies / unavailable Discover titles -->
-                <Group id="randomBtn" translation="[436, 0]" visible="false">
-                    <Rectangle id="randomShadow" width="208" height="60" translation="[4, 5]" color="0x000000" opacity="0.0" />
-                    <Rectangle id="randomBg" width="200" height="56" color="0x2A2A32" />
-                    <Label id="randomLabel" width="200" height="56" horizAlign="center" vertAlign="center" text="Random" color="0xFFFFFF">
-                        <Font role="font" uri="pkg:/fonts/Outfit-Medium.ttf" size="24" />
+                <Group id="randomBtn" translation="[0, 0]" visible="false">
+                    <Rectangle id="randomShadow" width="178" height="56" translation="[3, 4]" color="0x000000" opacity="0.0" />
+                    <Rectangle id="randomBg" width="170" height="52" color="0x2A2A32" />
+                    <Label id="randomLabel" width="170" height="52" horizAlign="center" vertAlign="center" text="Random" color="0xFFFFFF">
+                        <Font role="font" uri="pkg:/fonts/Outfit-Medium.ttf" size="22" />
                     </Label>
                 </Group>
             </Group>
 
-            <Label id="softStatus" translation="[248, 346]" width="1200" height="28" text="" color="0x666670">
+            <Label id="softStatus" translation="[248, 360]" width="1200" height="28" text="" color="0x666670">
                 <Font role="font" uri="pkg:/fonts/Outfit-Regular.ttf" size="18" />
             </Label>
 

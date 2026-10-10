@@ -74,6 +74,11 @@
                 uri="pkg:/images/player_scrim.png"
             />
 
+            <!-- Wall clock — top right while the overlay is up (same 12h/24h as Ends at) -->
+            <Label id="clockLabel" width="400" height="40" translation="[1424, 40]" horizAlign="right" color="0xFFFFFF" text="">
+                <Font role="font" uri="pkg:/fonts/Outfit-Medium.ttf" size="28" />
+            </Label>
+
             <Group id="castPanel" translation="[96, 548]" visible="false">
                 <Label id="castHeading" width="400" height="26" text="Cast" color="0x9A9AA4">
                     <Font role="font" uri="pkg:/fonts/Outfit-Medium.ttf" size="20" />

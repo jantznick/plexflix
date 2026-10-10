@@ -630,14 +630,21 @@ function metadataToItem(cfg as Object, meta as Object) as Object
     end if
 
     description = safeToStr(meta.summary)
+    tagline = safeToStr(meta.tagline)
     year = safeToStr(meta.year)
 
-    rating = ""
-    if meta.audienceRating <> invalid then
-        rating = safeToStr(meta.audienceRating)
-    else if meta.rating <> invalid then
-        rating = safeToStr(meta.rating)
-    end if
+    ' Prefer audience for the single "rating" chip; keep critic separate when both exist
+    criticRating = ""
+    audienceRating = ""
+    if meta.rating <> invalid then criticRating = safeToStr(meta.rating)
+    if meta.audienceRating <> invalid then audienceRating = safeToStr(meta.audienceRating)
+    rating = audienceRating
+    if rating = "" then rating = criticRating
+    ratingImage = safeToStr(meta.ratingImage)
+    audienceRatingImage = safeToStr(meta.audienceRatingImage)
+
+    genres = metaGenreLabels(meta)
+    primaryExtraKey = safeToStr(meta.primaryExtraKey)
 
     contentRating = safeToStr(meta.contentRating)
 
@@ -716,8 +723,15 @@ function metadataToItem(cfg as Object, meta as Object) as Object
         title: title,
         shortTitle: rawTitle,
         description: description,
+        tagline: tagline,
         year: year,
         rating: rating,
+        criticRating: criticRating,
+        audienceRating: audienceRating,
+        ratingImage: ratingImage,
+        audienceRatingImage: audienceRatingImage,
+        genres: genres,
+        primaryExtraKey: primaryExtraKey,
         contentRating: contentRating,
         mediaType: mediaType,
         ratingKey: ratingKey,
@@ -743,6 +757,24 @@ function metadataToItem(cfg as Object, meta as Object) as Object
         parentRatingKey: parentRatingKey,
         grandparentTitle: grandparentTitle
     }
+end function
+
+function metaGenreLabels(meta as Object) as Object
+    labels = []
+    if meta = invalid or meta.Genre = invalid then return labels
+    list = meta.Genre
+    if GetInterface(list, "ifArray") = invalid then list = [list]
+    for each g in list
+        tag = ""
+        if GetInterface(g, "ifAssociativeArray") <> invalid then
+            tag = safeToStr(g.tag)
+        else
+            tag = safeToStr(g)
+        end if
+        if tag <> "" then labels.push(tag)
+        if labels.count() >= 3 then exit for
+    end for
+    return labels
 end function
 
 function preferShowPosters(items as Object) as Object
@@ -1816,9 +1848,12 @@ function fetchExtras(cfg as Object, item as Object) as Object
     similarItems = []
     onDeckKey = ""
     onDeckSeasonKey = ""
+    trailer = invalid
+    reviews = []
+    primaryExtraKey = ""
 
     ' One request covers the header refresh, the cast and next-up
-    details = plexGet(cfg, "/library/metadata/" + ratingKey + "?includeOnDeck=1")
+    details = plexGet(cfg, "/library/metadata/" + ratingKey + "?includeOnDeck=1&includeExtras=1&includeReviews=1")
     if details.ok = true and details.json <> invalid and details.json.MediaContainer <> invalid then
         meta = details.json.MediaContainer.Metadata
         if meta <> invalid then
@@ -1835,12 +1870,25 @@ function fetchExtras(cfg as Object, item as Object) as Object
                     onDeckSeasonKey = safeToStr(upNext.parentRatingKey)
                 end if
             end if
+            primaryExtraKey = safeToStr(meta.primaryExtraKey)
             castItems = rolesToCast(cfg, meta)
             ' Episodes usually only list guest stars, so borrow the series cast
             if castItems.count() = 0 and safeToStr(meta.grandparentRatingKey) <> "" then
                 castItems = fetchShowCast(cfg, safeToStr(meta.grandparentRatingKey))
             end if
+            reviews = parseMetaReviews(meta)
+            trailer = pickPrimaryTrailer(cfg, meta)
         end if
+    end if
+
+    ' Dedicated extras endpoint when includeExtras didn't embed a trailer
+    if trailer = invalid then
+        trailer = fetchTrailerExtra(cfg, ratingKey, primaryExtraKey)
+    end if
+
+    ' Reviews sometimes only exist on the dedicated endpoint
+    if reviews.count() = 0 then
+        reviews = fetchMetadataReviews(cfg, ratingKey)
     end if
 
     similar = plexGet(cfg, "/library/metadata/" + ratingKey + "/similar")
@@ -1859,9 +1907,126 @@ function fetchExtras(cfg as Object, item as Object) as Object
         cast: castItems,
         similar: similarItems,
         detail: detail,
+        trailer: trailer,
+        reviews: reviews,
         onDeckKey: onDeckKey,
         onDeckSeasonKey: onDeckSeasonKey
     }
+end function
+
+function pickPrimaryTrailer(cfg as Object, meta as Object) as Object
+    if meta = invalid then return invalid
+
+    ' Embedded Extras from includeExtras=1
+    extras = meta.Extras
+    if extras <> invalid then
+        list = extras.Metadata
+        if list = invalid then list = extras
+        if GetInterface(list, "ifArray") = invalid then list = [list]
+        for each extra in list
+            mapped = metadataToItem(cfg, extra)
+            if mapped <> invalid and isTrailerItem(mapped, extra) then return mapped
+        end for
+    end if
+    return invalid
+end function
+
+function fetchTrailerExtra(cfg as Object, ratingKey as String, primaryExtraKey as String) as Object
+    if primaryExtraKey <> "" then
+        ' primaryExtraKey is a metadata path like /library/metadata/123
+        path = primaryExtraKey
+        if Left(path, 1) <> "/" then path = "/library/metadata/" + path
+        result = plexGet(cfg, path)
+        if result.ok = true then
+            mapped = collectMetadata(cfg, result.json)
+            if mapped.count() > 0 then return mapped[0]
+        end if
+    end if
+
+    if ratingKey = "" then return invalid
+    result = plexGet(cfg, "/library/metadata/" + ratingKey + "/extras")
+    if result.ok <> true then return invalid
+    mapped = collectMetadata(cfg, result.json)
+    for each extra in mapped
+        if isTrailerItem(extra, invalid) then return extra
+    end for
+    if mapped.count() > 0 then return mapped[0]
+    return invalid
+end function
+
+function isTrailerItem(item as Object, raw as Object) as Boolean
+    if item = invalid then return false
+    mt = LCase(safeToStr(item.mediaType))
+    if mt = "trailer" or mt = "clip" then
+        ' Prefer real trailers over other clip subtypes when we can tell
+        if raw <> invalid then
+            subtype = LCase(safeToStr(raw.subtype))
+            if subtype = "" then subtype = LCase(safeToStr(raw.extraType))
+            if subtype = "" then return true
+            return subtype = "trailer" or subtype = "primaryTrailer"
+        end if
+        return true
+    end if
+    if raw <> invalid then
+        subtype = LCase(safeToStr(raw.subtype))
+        if subtype = "" then subtype = LCase(safeToStr(raw.extraType))
+        if subtype = "trailer" or subtype = "primaryTrailer" then return true
+    end if
+    return false
+end function
+
+function parseMetaReviews(meta as Object) as Object
+    reviews = []
+    if meta = invalid or meta.Review = invalid then return reviews
+    list = meta.Review
+    if GetInterface(list, "ifArray") = invalid then list = [list]
+    for each rev in list
+        if GetInterface(rev, "ifAssociativeArray") <> invalid then
+            text = safeToStr(rev.text)
+            if text = "" then text = safeToStr(rev.tag)
+            if text <> "" then
+                source = safeToStr(rev.source)
+                if source = "" then source = safeToStr(rev.image)
+                ' image is often "rottentomatoes://image.review.fresh" — trim to a label
+                if Instr(1, source, "://") > 0 then
+                    parts = source.Tokenize("/")
+                    if parts.count() > 0 then source = parts[parts.count() - 1]
+                    source = source.Replace("image.review.", "")
+                    source = source.Replace("image.rating.", "")
+                    source = source.Replace("-", " ")
+                end if
+                author = safeToStr(rev.tag)
+                reviews.push({
+                    text: text,
+                    source: source,
+                    author: author
+                })
+                if reviews.count() >= 3 then exit for
+            end if
+        end if
+    end for
+    return reviews
+end function
+
+function fetchMetadataReviews(cfg as Object, ratingKey as String) as Object
+    if ratingKey = "" then return []
+    result = plexGet(cfg, "/library/metadata/" + ratingKey + "/reviews")
+    if result.ok <> true or result.json = invalid then return []
+    container = result.json.MediaContainer
+    if container = invalid then return []
+    ' Reviews endpoint may nest under Review or Metadata
+    if container.Review <> invalid then
+        return parseMetaReviews({ Review: container.Review })
+    end if
+    if container.Metadata <> invalid then
+        meta = container.Metadata
+        if GetInterface(meta, "ifArray") <> invalid then
+            if meta.count() = 0 then return []
+            meta = meta[0]
+        end if
+        return parseMetaReviews(meta)
+    end if
+    return []
 end function
 
 function fetchUnavailableDetail(cfg as Object, item as Object) as Object

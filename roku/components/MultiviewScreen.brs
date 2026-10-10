@@ -691,7 +691,7 @@ sub showError(message as String)
     m.spinner.control = "stop"
     m.spinner.visible = false
     m.statusLabel.visible = true
-    m.statusLabel.text = message + Chr(10) + "Press Back to return"
+    m.statusLabel.text = message
 end sub
 
 ' Shown until the overlay next hides, without the spinner
