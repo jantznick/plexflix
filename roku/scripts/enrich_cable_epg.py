@@ -63,7 +63,24 @@ TMDB_CAST_LIMIT = 8
 TMDB_DESC_LIMIT = 320
 
 
+def _strip_inline_comment(val: str) -> str:
+    """Drop unquoted trailing ` # comment` (common .env mistake)."""
+    in_single = False
+    in_double = False
+    for i, ch in enumerate(val):
+        if ch == "'" and not in_double:
+            in_single = not in_single
+        elif ch == '"' and not in_single:
+            in_double = not in_double
+        elif ch == "#" and not in_single and not in_double:
+            # allow `#` only when preceded by whitespace (or start)
+            if i == 0 or val[i - 1].isspace():
+                return val[:i]
+    return val
+
+
 def load_env_file(path: Path) -> None:
+    """Load KEY=VALUE pairs. Explicit --env-file values always win over the shell."""
     if not path.is_file():
         raise SystemExit(f"env file not found: {path}")
     for raw in path.read_text(encoding="utf-8").splitlines():
@@ -72,8 +89,10 @@ def load_env_file(path: Path) -> None:
             continue
         key, val = line.split("=", 1)
         key = key.strip()
-        val = val.strip().strip('"').strip("'")
-        if key and key not in os.environ:
+        val = _strip_inline_comment(val)
+        # strip quotes + CR (Windows/edited-on-Mac line endings)
+        val = val.strip().strip('"').strip("'").strip("\r")
+        if key:
             os.environ[key] = val
 
 
@@ -84,16 +103,44 @@ def require_env(name: str) -> str:
     return val
 
 
+class TmdbAuthError(Exception):
+    """TMDB rejected the API key (HTTP 401)."""
+
+
 def http_get(url: str, timeout: int = 120) -> bytes:
+    # Browser-like UA: some hosts treat custom agents differently than curl.
+    ua = (
+        "Mozilla/5.0 (compatible; PlexFlix-CableEPG/1.2; +https://github.com/jantznick/plexflix)"
+        if "api.themoviedb.org" in url
+        else "PlexFlix-CableEPG/1.2"
+    )
     req = urllib.request.Request(
         url,
         headers={
-            "Accept": "*/*",
-            "User-Agent": "PlexFlix-CableEPG/1.1",
+            "Accept": "application/json, */*",
+            "User-Agent": ua,
         },
     )
-    with urllib.request.urlopen(req, timeout=timeout) as resp:
-        return resp.read()
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            return resp.read()
+    except urllib.error.HTTPError as exc:
+        if exc.code == 401 and "api.themoviedb.org" in url:
+            raise TmdbAuthError(
+                "TMDB HTTP 401 Unauthorized — key rejected by api.themoviedb.org.\n"
+                "Check: unset TMDB_API_KEY (shell override), then re-run with --env-file.\n"
+                "Or pass --skip-tmdb to upload listings without art/cast."
+            ) from exc
+        raise
+
+
+def tmdb_key_fingerprint(api_key: str) -> str:
+    key = (api_key or "").strip()
+    if not key:
+        return "len=0"
+    if len(key) <= 8:
+        return f"len={len(key)} value={key[:2]}…"
+    return f"len={len(key)} prefix={key[:4]}…suffix={key[-4:]}"
 
 
 def load_map(path: Path) -> dict[str, str]:
@@ -297,13 +344,34 @@ def tmdb_get(api_key: str, path: str, params: dict[str, str] | None = None) -> A
     url = "https://api.themoviedb.org/3" + path + "?" + urllib.parse.urlencode(q)
     try:
         raw = http_get(url, timeout=30)
-    except (urllib.error.URLError, TimeoutError, OSError) as exc:
+    except TmdbAuthError:
+        raise
+    except (urllib.error.URLError, TimeoutError, OSError, urllib.error.HTTPError) as exc:
         print(f"  tmdb error {path}: {exc}")
         return None
     try:
         return json.loads(raw.decode("utf-8"))
     except json.JSONDecodeError:
         return None
+
+
+def validate_tmdb_key(api_key: str) -> None:
+    """Fail fast before looping hundreds of titles (one request max on bad auth)."""
+    print(f"tmdb: validating API key ({tmdb_key_fingerprint(api_key)})…")
+    data = tmdb_get(api_key, "/configuration")
+    if data is None or not isinstance(data, dict):
+        raise TmdbAuthError(
+            "TMDB key validation failed (empty/invalid JSON). "
+            "Pass --skip-tmdb for listings without show art/cast."
+        )
+    # /configuration returns images + change_keys; accept either so we don't
+    # false-fail on response shape changes.
+    if "images" not in data and "change_keys" not in data:
+        raise TmdbAuthError(
+            "TMDB key validation failed (unexpected /configuration body). "
+            "Pass --skip-tmdb for listings without show art/cast."
+        )
+    print("tmdb: API key ok")
 
 
 def tmdb_search_best(api_key: str, title: str) -> tuple[str, dict[str, Any]] | None:
@@ -470,6 +538,7 @@ def apply_tmdb_to_programmes(
                 unique_titles.append(str(prog.get("title") or ""))
     stats["titles"] = len(unique_titles)
     print(f"tmdb: enriching {len(unique_titles)} unique titles (cache {cache_path})")
+    validate_tmdb_key(api_key)
 
     title_meta: dict[str, dict[str, Any] | None] = {}
     for title in unique_titles:
@@ -521,14 +590,38 @@ def upload_b2(local_path: Path, remote_key: str) -> None:
     key_id = require_env("B2_KEY_ID")
     app_key = require_env("B2_APPLICATION_KEY")
     bucket_name = require_env("B2_BUCKET")
+    remote_key = remote_key.strip().lstrip("/")
+    if not remote_key:
+        raise SystemExit("B2_REMOTE_KEY is empty")
+    if "#" in remote_key or " " in remote_key:
+        raise SystemExit(
+            f"B2_REMOTE_KEY looks polluted (inline comment?): {remote_key!r}\n"
+            "Fix ~/plexflix-cable-epg.env to exactly:\n"
+            "  B2_REMOTE_KEY=plexflix/cable-epg.json"
+        )
 
     info = InMemoryAccountInfo()
     api = B2Api(info)
     api.authorize_account("production", key_id, app_key)
     bucket = api.get_bucket_by_name(bucket_name)
     print(f"upload {local_path.name} -> b2://{bucket_name}/{remote_key}")
-    bucket.upload_local_file(local_file=str(local_path), file_name=remote_key)
-    print("upload complete")
+    print(f"  local bytes {local_path.stat().st_size}")
+    uploaded = bucket.upload_local_file(
+        local_file=str(local_path),
+        file_name=remote_key,
+        content_type="application/json",
+    )
+    # Confirm the object is actually addressable under that name (catches wrong bucket/key).
+    info_by_name = bucket.get_file_info_by_name(remote_key)
+    download_url = bucket.get_download_url(remote_key)
+    public_guess = (
+        os.environ.get("B2_PUBLIC_URL")
+        or DEFAULT_PUBLIC_URL
+    ).strip()
+    print(f"upload complete fileId={uploaded.id_}")
+    print(f"  verified name={info_by_name.file_name} size={info_by_name.size}")
+    print(f"  b2 download URL: {download_url}")
+    print(f"  expected public URL: {public_guess}")
 
 
 def main() -> int:
@@ -609,23 +702,32 @@ def main() -> int:
         tmdb_key = ""
     if args.skip_tmdb:
         tmdb_key = ""
+    tmdb_ok = False
     if tmdb_key:
+        print(f"tmdb: env key {tmdb_key_fingerprint(tmdb_key)}")
         cache_path = (
             args.tmdb_cache
             or Path(os.environ.get("TMDB_CACHE_PATH") or DEFAULT_TMDB_CACHE)
         )
-        tmdb_stats = apply_tmdb_to_programmes(programmes, tmdb_key, cache_path)
-        print(
-            f"tmdb: titles={tmdb_stats['titles']} lookups={tmdb_stats['lookups']} "
-            f"cacheHits={tmdb_stats['cacheHits']} hits={tmdb_stats['hits']} "
-            f"misses={tmdb_stats['misses']} tagged={tmdb_stats['programmesTagged']}"
-        )
+        try:
+            tmdb_stats = apply_tmdb_to_programmes(programmes, tmdb_key, cache_path)
+            print(
+                f"tmdb: titles={tmdb_stats['titles']} lookups={tmdb_stats['lookups']} "
+                f"cacheHits={tmdb_stats['cacheHits']} hits={tmdb_stats['hits']} "
+                f"misses={tmdb_stats['misses']} tagged={tmdb_stats['programmesTagged']}"
+            )
+            tmdb_ok = True
+        except TmdbAuthError as exc:
+            # One failed auth check — do not retry titles; still write/upload EPG.
+            print(f"tmdb: aborted after auth failure (no further TMDB requests)\n{exc}")
+            print("tmdb: continuing with XMLTV listings only")
+            tmdb_key = ""
     else:
         print("tmdb: skipped (set TMDB_API_KEY to enrich overview/art/cast)")
 
     sidecar, stats = build_sidecar(id_map, programmes, source)
     sidecar["windowDaysAhead"] = max(1, args.days)
-    if tmdb_key:
+    if tmdb_ok:
         sidecar["tmdbEnriched"] = True
     print(
         f"sidecar mapped={stats['mapped']} withEpg={stats['withEpg']} "

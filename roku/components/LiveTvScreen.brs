@@ -1431,18 +1431,35 @@ end sub
 
 sub launchWatch(ch as Object, p as Dynamic, url as String)
     m.watching = { key: ch.key, url: url }
-    title = channelLabel(ch)
+    channelName = channelLabel(ch)
+    title = channelName
+    shortTitle = channelName
     description = ""
     art = ""
+    year = ""
+    contentRating = ""
+    programKind = ""
+    episodeLabel = ""
     if p <> invalid and p.placeholder <> true then
-        title = p.title + "  ·  " + channelLabel(ch)
+        if valueOr(p.title, "") <> "" then
+            shortTitle = valueOr(p.title, "")
+            title = shortTitle + "  ·  " + channelName
+        end if
         description = valueOr(p.summary, "")
         art = valueOr(p.art, "")
+        year = valueOr(p.year, "")
+        contentRating = valueOr(p.contentRating, "")
+        programKind = valueOr(p.kind, "")
+        episodeLabel = valueOr(p.episodeLabel, "")
+        if episodeLabel <> "" and description = "" then description = episodeLabel
     end if
+    ' Player pulls cast/year/rating from TMDB while tuning if tmdbApiKey is set
     m.top.selectedItem = {
         title: title,
+        shortTitle: shortTitle,
         description: description,
         mediaType: "livetv",
+        programKind: programKind,
         ratingKey: "",
         key: "",
         channelId: ch.tuneId,
@@ -1452,6 +1469,10 @@ sub launchWatch(ch as Object, p as Dynamic, url as String)
         streamFormat: "hls",
         hdPosterUrl: art,
         hdBackdropUrl: art,
+        year: year,
+        contentRating: contentRating,
+        rating: "",
+        cast: [],
         duration: 0,
         viewOffset: 0
     }

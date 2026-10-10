@@ -34,6 +34,9 @@ sub init()
 
     m.events = []
     m.currentIndex = 0
+    m.feedLoading = false
+    m.feedDialog = invalid
+    m.feedDialogActions = []
 
     ' Games picked for multiview, kept across sport filters and the game page
     m.multi = []
@@ -48,6 +51,7 @@ sub init()
     m.guideList.observeField("escapeUp", "onGuideEscapeUp")
     m.guideList.observeField("escapeLeft", "onGuideEscapeLeft")
     m.guideList.observeField("escapeBack", "onGuideEscapeBack")
+    m.guideList.observeField("escapeOptions", "onGuideEscapeOptions")
 
     m.clockTimer = createObject("roSGNode", "Timer")
     m.clockTimer.repeat = true
@@ -91,6 +95,8 @@ sub onConfigReady()
 end sub
 
 sub loadFeed()
+    if m.feedLoading = true then return
+    m.feedLoading = true
     m.statusLabel.text = "Loading…"
     m.top.loadingMessage = "Loading sports feed…"
     m.task = createObject("roSGNode", "PlexTask")
@@ -102,6 +108,7 @@ end sub
 
 sub onFeedLoaded()
     response = m.task.response
+    m.feedLoading = false
     m.top.loadingMessage = ""
     if response = invalid or response.ok <> true then
         err = "Could not load sports feed"
@@ -418,11 +425,97 @@ sub paintMultiTray()
     end for
     m.multiList.text = names
     if m.multi.count() = 0 then
-        m.multiHint.text = "Press * on a game to add it"
+        m.multiHint.text = "* opens options (add / refresh)"
     else if m.multi.count() = 1 then
-        m.multiHint.text = "Add one more game with *"
+        m.multiHint.text = "* to add another, or refresh"
     else
-        m.multiHint.text = "Press Play to watch together"
+        m.multiHint.text = "Play = watch · * = options"
+    end if
+end sub
+
+' ---------------------------------------------------------------------------
+' * (options) — refresh feed and Multiview actions
+' ---------------------------------------------------------------------------
+
+sub openFeedOptions()
+    scene = m.top.getScene()
+    if scene = invalid then return
+    if m.feedDialog <> invalid then return
+
+    buttons = ["Refresh feed"]
+    actions = ["refresh"]
+    if m.multiEnabled = true and m.zone = "list" and m.events.count() > 0 then
+        if m.currentIndex >= 0 and m.currentIndex < m.events.count() then
+            item = m.events[m.currentIndex]
+            if eventInMultiview(item) then
+                buttons.push("Remove from Multiview")
+            else
+                buttons.push("Add to Multiview")
+            end if
+            actions.push("multi")
+        end if
+        if m.multi.count() >= 2 then
+            buttons.push("Watch Multiview")
+            actions.push("watchMulti")
+        end if
+    end if
+    buttons.push("Cancel")
+    actions.push("cancel")
+
+    dialog = createObject("roSGNode", "Dialog")
+    dialog.title = "Live Sports"
+    if m.feedLoading = true then
+        dialog.message = "A feed refresh is already running."
+    else
+        dialog.message = "Reload the sports feed from the CDN, or manage Multiview."
+    end if
+    dialog.buttons = buttons
+    dialog.observeField("buttonSelected", "onFeedDialogButton")
+    dialog.observeField("wasClosed", "onFeedDialogClosed")
+    m.feedDialog = dialog
+    m.feedDialogActions = actions
+    scene.dialog = dialog
+end sub
+
+sub onFeedDialogButton()
+    dialog = m.feedDialog
+    if dialog = invalid then return
+    idx = dialog.buttonSelected
+    act = "cancel"
+    if m.feedDialogActions <> invalid and idx <> invalid and idx >= 0 and idx < m.feedDialogActions.count() then
+        act = m.feedDialogActions[idx]
+    end if
+    closeFeedDialog()
+    if act = "refresh" then
+        if m.feedLoading = true then
+            m.statusLabel.text = "Refresh already in progress"
+        else
+            loadFeed()
+        end if
+    else if act = "multi" then
+        toggleFocusedEvent()
+    else if act = "watchMulti" then
+        message = requestMultiview()
+        if message <> "" then m.statusLabel.text = message
+    end if
+end sub
+
+sub onFeedDialogClosed()
+    closeFeedDialog()
+end sub
+
+sub closeFeedDialog()
+    dialog = m.feedDialog
+    m.feedDialog = invalid
+    m.feedDialogActions = []
+    if dialog <> invalid then dialog.close = true
+    scene = m.top.getScene()
+    if scene <> invalid and scene.dialog <> invalid then scene.dialog = invalid
+    ' Put focus back where the remote left off
+    if m.zone = "list" and m.events.count() > 0 then
+        m.guideList.setFocus(true)
+    else
+        m.top.setFocus(true)
     end if
 end sub
 
@@ -509,6 +602,10 @@ sub onGuideEscapeBack()
     focusPills()
 end sub
 
+sub onGuideEscapeOptions()
+    openFeedOptions()
+end sub
+
 sub onRefocus()
     if m.top.refocus <> true then return
     if m.zone = "pills" then
@@ -530,11 +627,12 @@ end sub
 
 function onKeyEvent(key as String, press as Boolean) as Boolean
     if not press then return false
+    if key = "options" then
+        openFeedOptions()
+        return true
+    end if
     if m.multiEnabled and m.zone = "list" then
-        if key = "options" then
-            toggleFocusedEvent()
-            return true
-        else if key = "play" then
+        if key = "play" then
             message = requestMultiview()
             if message <> "" then m.statusLabel.text = message
             return true

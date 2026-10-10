@@ -138,6 +138,8 @@ sub onContentSet()
         playDirect(directUrl, item)
         ' Cable/sports may ship TMDB cast on the item; Plex cast needs a ratingKey
         loadCast()
+        ' Cable without sidecar enrichment can still fill cast from TMDB
+        maybeEnrichLiveMeta()
         return
     end if
 
@@ -151,6 +153,8 @@ sub onContentSet()
         m.task.observeField("response", "onStreamReady")
         m.task.control = "RUN"
         loadCast()
+        ' Plex EPG rarely includes cast — pull from TMDB while the tune starts
+        maybeEnrichLiveMeta()
         return
     end if
 
@@ -782,8 +786,64 @@ sub restartStream(message as String)
 end sub
 
 '--------------------------------------------------------------------
-' Cast peek
+' Cast peek + live-program TMDB enrich
 '--------------------------------------------------------------------
+
+sub maybeEnrichLiveMeta()
+    if m.item = invalid then return
+    mediaType = valueOrEmpty(m.item.mediaType)
+    ' Live TV always; Cable (sport) only when the sidecar didn't already ship cast.
+    ' Skip sports-game titles — TMDB matches those poorly.
+    if mediaType <> "livetv" and mediaType <> "sport" then return
+    if m.item.cast <> invalid and GetInterface(m.item.cast, "ifArray") <> invalid then
+        if m.item.cast.count() > 0 then return
+    end if
+    cfg = m.top.config
+    if cfg = invalid or cfg.tmdbApiKey = invalid then return
+    key = valueOrEmpty(cfg.tmdbApiKey)
+    if key = "" or key = "REPLACE_WITH_TMDB_API_KEY" then return
+
+    title = valueOrEmpty(m.item.shortTitle)
+    if title = "" then title = valueOrEmpty(m.item.title)
+    if title = "" then return
+    if mediaType = "sport" then
+        low = LCase(title)
+        if Instr(1, low, " vs ") > 0 or Instr(1, low, " @ ") > 0 then return
+    end if
+
+    m.enrichTask = createObject("roSGNode", "PlexTask")
+    m.enrichTask.config = cfg
+    m.enrichTask.action = "tmdbEnrich"
+    m.enrichTask.item = m.item
+    m.enrichTask.observeField("response", "onLiveMetaEnriched")
+    m.enrichTask.control = "RUN"
+end sub
+
+sub onLiveMetaEnriched()
+    if m.enrichTask = invalid then return
+    response = m.enrichTask.response
+    if response = invalid or response.ok <> true or response.tmdb = invalid then return
+    if m.item = invalid then return
+
+    tmdb = response.tmdb
+    if valueOrEmpty(m.item.description) = "" and valueOrEmpty(tmdb.description) <> "" then
+        m.item.description = tmdb.description
+    end if
+    if valueOrEmpty(tmdb.year) <> "" then m.item.year = tmdb.year
+    if valueOrEmpty(tmdb.contentRating) <> "" then m.item.contentRating = tmdb.contentRating
+    if valueOrEmpty(tmdb.rating) <> "" then m.item.rating = tmdb.rating
+    if valueOrEmpty(tmdb.hdBackdropUrl) <> "" then m.item.hdBackdropUrl = tmdb.hdBackdropUrl
+    if valueOrEmpty(m.item.hdPosterUrl) = "" and valueOrEmpty(tmdb.hdPosterUrl) <> "" then
+        m.item.hdPosterUrl = tmdb.hdPosterUrl
+    end if
+    if tmdb.cast <> invalid and GetInterface(tmdb.cast, "ifArray") <> invalid then
+        if tmdb.cast.count() > 0 then
+            m.item.cast = tmdb.cast
+            paintCastRow(tmdb.cast)
+        end if
+    end if
+    paintMeta()
+end sub
 
 sub loadCast()
     if m.item = invalid then return
