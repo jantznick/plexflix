@@ -68,6 +68,8 @@ sub exec()
         m.top.response = fetchSportsFeed(cfg)
     else if action = "cableEpg" then
         m.top.response = fetchCableEpg(cfg)
+    else if action = "tmdbEnrich" then
+        m.top.response = enrichItemFromTmdb(cfg, m.top.item)
     else if action = "streamUrl" then
         m.top.response = buildStreamUrl(cfg, m.top.item)
     else if action = "reportProgress" then
@@ -1950,8 +1952,40 @@ function fetchUnavailableDetail(cfg as Object, item as Object) as Object
     }
 end function
 
+' Live TV (and other plays without pre-baked cast) — look up overview/art/cast
+' while the stream is already starting. Uses the same TMDB helpers as Discover.
+function enrichItemFromTmdb(cfg as Object, item as Object) as Object
+    if item = invalid then return { ok: false, error: "No item" }
+    tmdbKey = ""
+    if cfg <> invalid and cfg.tmdbApiKey <> invalid then tmdbKey = safeToStr(cfg.tmdbApiKey)
+    if tmdbKey = "" or tmdbKey = "REPLACE_WITH_TMDB_API_KEY" then
+        return { ok: false, skipped: true, error: "TMDB not configured (tmdbApiKey in PlexConfig.brs)" }
+    end if
+
+    title = safeToStr(item.shortTitle)
+    if title = "" then title = safeToStr(item.title)
+    ' "Show · Channel" → search the show only
+    sep = Instr(1, title, "·")
+    if sep > 1 then title = Left(title, sep - 1).Trim()
+    title = title.Trim()
+    if title = "" then return { ok: false, error: "No title to enrich" }
+
+    year = safeToStr(item.year)
+    kindHint = LCase(safeToStr(item.programKind))
+    mediaType = "tv"
+    if kindHint = "movie" then
+        mediaType = "movie"
+    else if kindHint = "episode" or kindHint = "show" or kindHint = "series" or kindHint = "tv" then
+        mediaType = "tv"
+    end if
+
+    tmdb = fetchTmdbTitle(tmdbKey, title, year, mediaType)
+    if tmdb = invalid then return { ok: false, error: "No TMDB match for " + title }
+    return { ok: true, tmdb: tmdb }
+end function
+
 function fetchTmdbTitle(apiKey as String, title as String, year as String, mediaType as String) as Object
-    isShow = (mediaType = "show" or mediaType = "tv" or mediaType = "series")
+    isShow = (mediaType = "show" or mediaType = "tv" or mediaType = "series" or mediaType = "episode")
     kind = "movie"
     if isShow then kind = "tv"
 
@@ -2065,6 +2099,7 @@ function fetchTmdbTitle(apiKey as String, title as String, year as String, media
                         ratingKey: "",
                         key: "",
                         personId: "",
+                        tmdbPersonId: safeToStr(c.id),
                         hdPosterUrl: thumb,
                         hdBackdropUrl: "",
                         duration: 0,
@@ -2663,7 +2698,12 @@ function fetchPersonDetail(cfg as Object, item as Object) as Object
     tmdbKey = ""
     if cfg.tmdbApiKey <> invalid then tmdbKey = safeToStr(cfg.tmdbApiKey)
     if tmdbKey <> "" and tmdbKey <> "REPLACE_WITH_TMDB_API_KEY" and name <> "" then
-        tmdb = fetchTmdbPerson(tmdbKey, name)
+        tmdbPersonId = safeToStr(item.tmdbPersonId)
+        if tmdbPersonId <> "" then
+            tmdb = fetchTmdbPersonById(tmdbKey, tmdbPersonId)
+        else
+            tmdb = fetchTmdbPerson(tmdbKey, name)
+        end if
         if tmdb <> invalid then
             if tmdb.bio <> "" then bio = tmdb.bio
             if tmdb.poster <> "" then poster = tmdb.poster
@@ -2728,6 +2768,11 @@ function fetchTmdbPerson(apiKey as String, name as String) as Object
     person = search.results[0]
     personId = safeToStr(person.id)
     if personId = "" then return invalid
+    return fetchTmdbPersonById(apiKey, personId, person)
+end function
+
+function fetchTmdbPersonById(apiKey as String, personId as String, hint = invalid as Dynamic) as Object
+    if personId = "" then return invalid
 
     detailUrl = "https://api.themoviedb.org/3/person/" + personId + "?api_key=" + apiKey
     detail = httpGetJson(detailUrl)
@@ -2760,7 +2805,8 @@ function fetchTmdbPerson(apiKey as String, name as String) as Object
         end if
         metaLine = joinBits(bits, "  ·  ")
     end if
-    if person.profile_path <> invalid and poster = "" then
+    person = hint
+    if person <> invalid and person.profile_path <> invalid and poster = "" then
         poster = "https://image.tmdb.org/t/p/w500" + safeToStr(person.profile_path)
     end if
 

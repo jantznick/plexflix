@@ -21,13 +21,14 @@ This is intentionally a **design/UX shell** on top of existing Plex data. Creden
   playback), updating only the rows whose items changed
 - Selecting a library in the sidebar opens that library’s shelves
 - **Live TV**: a real grid guide built from your Plex EPG (`/<epg provider>/grid`): channel logo, number and call sign
-- **Cable TV**: same guide layout for Entertainment and Cartoons from the sports JSON feed; optional `cableEpgUrl` sidecar supplies what’s-on listings (otherwise 24/7 placeholders). Those sections no longer appear under Live Sports
   down the left, half-hour time slots across the top, program blocks sized by duration, a red now-line, and a live
   preview of the focused channel. Up/Down change channel, Left/Right move through programs (time pages in 30-minute
-  steps and later hours load as you go), `<<`/`>>` page channels. OK watches the focused channel. `*` opens **Refresh**
-  (reloads streams + EPG sidecar). Back from the grid goes to the filter tabs; Back again opens the sidebar
-- **Live TV** record menus: OK on a future show (or `*` on anything) opens **Record this episode / Record series / Cancel recording**. Back from a channel
+  steps and later hours load as you go), `<<`/`>>` page channels. OK on something airing now watches it; OK on a future
+  show (or `*` on anything) opens **Record this episode / Record series / Cancel recording**. Back from a channel
   you were watching returns to the guide with that channel still playing in the preview
+- **Cable TV**: same guide layout for Entertainment and Cartoons from the sports JSON feed; optional `cableEpgUrl`
+  sidecar supplies what’s-on listings (otherwise 24/7 placeholders). Those sections no longer appear under Live Sports.
+  `*` opens **Refresh** (reloads streams + EPG sidecar). Back from the grid → filter tabs; Back again → sidebar
 - **DVR**: Upcoming lists scheduled recordings (OK cancels one). Rules lists each show with a rule; OK opens an editor for
   its Plex recording settings (quality, replace lower quality, padding, commercial detection, episodes to keep, …;
   OK on a setting opens its choices to pick from), plus Save and Delete. "Edit series rule" is also on the guide and Upcoming menus.
@@ -51,6 +52,8 @@ This is intentionally a **design/UX shell** on top of existing Plex data. Creden
   stay in sync with every other Plex client
 - Live sports from a configurable JSON feed URL (event detail + stream picker). `*` opens options: **Refresh feed**,
   Multiview add/remove (when enabled), and Watch Multiview
+- **Live TV player**: while a channel tunes, the custom player can enrich the current program from **TMDB**
+  (cast strip, year, rating, overview) when `tmdbApiKey` is set in `PlexConfig.brs` — same chrome as Cable TV
 - **Multiview**: 2–4 live games at once in Grid, Spotlight or Picture in picture,
   tiled on your home server (see [Multiview](#multiview))
 - Optional **TMDB** enrichment for cast pages and Discover titles missing from your library (`tmdbApiKey` in config)
@@ -295,7 +298,8 @@ cd multiview && python3 -m unittest discover -s tests
 
 ### Using it
 
-- On the **Live Sports guide**, **\*** adds or removes the highlighted game
+- On the **Live Sports guide**, **\*** opens options (**Refresh feed**, add/remove Multiview, Watch Multiview).
+  Choosing add/remove toggles the highlighted game
   (its first stream); the panel top right lists the picks, and a picked row
   says **Multiview** in its streams column
 - On a **game page**, **\*** adds the highlighted stream, for when an alternate
