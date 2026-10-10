@@ -54,7 +54,7 @@ sub onContentSet()
         child.title = label
         quality = ""
         if stream.DoesExist("quality") then quality = asString(stream.quality)
-        setStreamCols(child, StrI(i + 1).Trim(), label, quality, "Play →")
+        setStreamCols(child, StrI(i + 1).Trim(), label, quality, "")
     end for
     m.streamList.content = root
     if m.streams.count() > 0 then
@@ -147,9 +147,9 @@ end sub
 sub showHint()
     m.summaryLabel.color = "0xC8C8D0"
     if m.top.multiviewEnabled = true then
-        m.summaryLabel.text = "OK a stream to play, * to add it to multiview, Play to watch your multiview. Back returns to the guide."
+        m.summaryLabel.text = "Add streams to multiview, or play one fullscreen."
     else
-        m.summaryLabel.text = "OK a stream to play. Remote Back returns to the guide."
+        m.summaryLabel.text = ""
     end if
 end sub
 

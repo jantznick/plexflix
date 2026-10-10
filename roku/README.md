@@ -166,6 +166,13 @@ fetches, so there are no extra requests:
 - `viewedLeafCount` vs `leafCount` on a show or season gives the amber
   remaining-episode count, and the `7 of 10 watched` line on the detail header
 - **Play** reads **Resume** whenever there is something to pick up
+- **From Start** appears next to Resume when there is progress to clear
+- **Mark Watched / Unwatched** scrobbles via `/:/scrobble` and `/:/unscrobble`
+  (focused episode on a show page, otherwise the title)
+- **Trailer** plays the primary extra when Plex has one
+  (`primaryExtraKey` / `/extras`)
+- Critic and audience ratings, genres, and a short review pull-quote land on
+  the detail header when the agent supplied them
 
 A movie that is both watched and part-way through a rewatch counts as in
 progress, not watched, which matches what Plex's own clients show.
@@ -186,7 +193,8 @@ swallows the remote).
 - **Down**, **OK** or **Pause** raises the panel; it stays up while paused and
   auto-hides after five seconds of silence while playing
 - the panel shows elapsed, remaining, and **the clock time the title ends at**,
-  formatted against the TV's own 12h/24h setting (`roDeviceInfo.GetClockFormat`)
+  plus the **current wall clock** in the top-right while the overlay is up —
+  both use the TV's 12h/24h setting (`roDeviceInfo.GetClockFormat`)
 - **Down** again moves to the button row: Pause, Restart, and Audio / Subtitles /
   Version whenever the file offers more than one
 - **Left / Right** on the scrubber seeks 10s, the transport keys seek 30s; a run

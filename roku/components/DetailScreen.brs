@@ -3,19 +3,30 @@ sub init()
     m.poster = m.top.findNode("poster")
     m.titleLabel = m.top.findNode("titleLabel")
     m.metaLabel = m.top.findNode("metaLabel")
+    m.ratingLabel = m.top.findNode("ratingLabel")
     m.summaryLabel = m.top.findNode("summaryLabel")
+    m.reviewLabel = m.top.findNode("reviewLabel")
 
     m.movieActions = m.top.findNode("movieActions")
     m.playBtn = m.top.findNode("playBtn")
+    m.startOverBtn = m.top.findNode("startOverBtn")
+    m.trailerBtn = m.top.findNode("trailerBtn")
+    m.watchedBtn = m.top.findNode("watchedBtn")
     m.backBtn = m.top.findNode("backBtn")
     m.randomBtn = m.top.findNode("randomBtn")
     m.watchlistBtn = m.top.findNode("watchlistBtn")
     m.watchlistBg = m.top.findNode("watchlistBg")
     m.watchlistLabel = m.top.findNode("watchlistLabel")
     m.playBg = m.top.findNode("playBg")
+    m.startOverBg = m.top.findNode("startOverBg")
+    m.trailerBg = m.top.findNode("trailerBg")
+    m.watchedBg = m.top.findNode("watchedBg")
     m.backBg = m.top.findNode("backBg")
     m.randomBg = m.top.findNode("randomBg")
     m.playLabel = m.top.findNode("playLabel")
+    m.startOverLabel = m.top.findNode("startOverLabel")
+    m.trailerLabel = m.top.findNode("trailerLabel")
+    m.watchedLabel = m.top.findNode("watchedLabel")
     m.unavailablePanel = m.top.findNode("unavailablePanel")
     m.unavailableBody = m.top.findNode("unavailableBody")
 
@@ -34,10 +45,16 @@ sub init()
     m.softStatus = m.top.findNode("softStatus")
 
     m.focusIndex = 0
+    m.actionIds = []
     m.isShow = false
     m.isUnavailable = false
     m.onWatchlist = false
     m.watchlistBusy = false
+    m.watchedBusy = false
+    m.itemWatched = false
+    m.canResume = false
+    m.trailer = invalid
+    m.reviews = []
     m.seasons = []
     m.seasonQueue = 0
     m.seasonContent = invalid
@@ -48,7 +65,7 @@ sub init()
     m.showHeader = invalid
     m.headerMode = "show"
 
-    updateMovieButtonFocus()
+    rebuildActionRow()
 end sub
 
 sub onContentSet()
@@ -61,6 +78,11 @@ sub onContentSet()
     m.isUnavailable = false
     m.onWatchlist = false
     m.watchlistBusy = false
+    m.watchedBusy = false
+    m.trailer = invalid
+    m.reviews = []
+    m.canResume = false
+    m.itemWatched = (item.DoesExist("watched") and item.watched = true)
     if item.DoesExist("onWatchlist") and item.onWatchlist = true then m.onWatchlist = true
     if item.DoesExist("isDiscover") and item.isDiscover = true then m.isUnavailable = true
     if item.DoesExist("unavailable") and item.unavailable = true then m.isUnavailable = true
@@ -98,12 +120,15 @@ sub onContentSet()
         loadExtras(item)
     end if
 
-    refreshPlayLabel(item)
+    refreshPlayState(item)
 end sub
 
-sub refreshPlayLabel(item as Object)
-    if m.isUnavailable = true then return
-    if m.playLabel = invalid or item = invalid then return
+sub refreshPlayState(item as Object)
+    if m.isUnavailable = true then
+        m.canResume = false
+        return
+    end if
+    if item = invalid then return
 
     resume = false
     mediaType = asString(item.mediaType)
@@ -111,17 +136,37 @@ sub refreshPlayLabel(item as Object)
         leaves = asInteger(item.leafCount)
         viewed = asInteger(item.viewedLeafCount)
         resume = (viewed > 0 and viewed < leaves)
+        if asInteger(item.viewOffset) > 0 then resume = true
     else
         resume = (asInteger(item.viewOffset) > 0)
     end if
 
-    if resume then m.playLabel.text = "Resume" else m.playLabel.text = "Play"
+    m.canResume = resume
+    if m.playLabel <> invalid then
+        if resume then m.playLabel.text = "Resume" else m.playLabel.text = "Play"
+    end if
+    if item.DoesExist("watched") then m.itemWatched = (item.watched = true)
+    paintWatchedLabel()
+    rebuildActionRow()
+end sub
+
+sub paintWatchedLabel()
+    if m.watchedLabel = invalid then return
+    if m.itemWatched = true then
+        m.watchedLabel.text = "Mark Unwatched"
+    else
+        m.watchedLabel.text = "Mark Watched"
+    end if
 end sub
 
 sub applyShowHeader(item as Object)
     if item = invalid then return
     m.titleLabel.text = asString(item.title)
-    m.summaryLabel.text = asString(item.description)
+    summary = asString(item.description)
+    tagline = ""
+    if item.DoesExist("tagline") then tagline = asString(item.tagline)
+    if summary = "" and tagline <> "" then summary = tagline
+    m.summaryLabel.text = summary
     if m.softStatus <> invalid then m.softStatus.text = ""
 
     metaBits = []
@@ -129,23 +174,114 @@ sub applyShowHeader(item as Object)
     if year <> "" then metaBits.push(year)
     contentRating = asString(item.contentRating)
     if contentRating <> "" then metaBits.push(contentRating)
-    rating = asString(item.rating)
-    if rating <> "" then metaBits.push(rating + " ★")
+    durationBit = durationMeta(item)
+    if durationBit <> "" then metaBits.push(durationBit)
     mediaType = asString(item.mediaType)
     if mediaType <> "" then metaBits.push(titleCaseType(mediaType))
+    genreBit = genreSummary(item)
+    if genreBit <> "" then metaBits.push(genreBit)
     watchBit = watchedSummary(item)
     if watchBit <> "" then metaBits.push(watchBit)
     m.metaLabel.text = joinStrings(metaBits, "  ·  ")
+    paintRatingLine(item)
+    if m.reviews = invalid or m.reviews.count() = 0 then
+        if m.reviewLabel <> invalid then m.reviewLabel.text = ""
+    end if
     m.headerMode = "show"
 end sub
+
+sub paintRatingLine(item as Object)
+    if m.ratingLabel = invalid then return
+    if item = invalid then
+        m.ratingLabel.text = ""
+        return
+    end if
+
+    bits = []
+    audience = ""
+    critic = ""
+    if item.DoesExist("audienceRating") then audience = asString(item.audienceRating)
+    if item.DoesExist("criticRating") then critic = asString(item.criticRating)
+    if audience = "" then audience = asString(item.rating)
+    if audience <> "" and critic <> "" and audience <> critic then
+        bits.push("Audience " + audience)
+        bits.push("Critic " + critic)
+    else if audience <> "" then
+        bits.push(audience + " ★")
+    else if critic <> "" then
+        bits.push(critic + " ★")
+    end if
+    m.ratingLabel.text = joinStrings(bits, "  ·  ")
+end sub
+
+sub paintReviews(reviews as Object)
+    m.reviews = reviews
+    if m.reviewLabel = invalid then return
+    if reviews = invalid or reviews.count() = 0 then
+        m.reviewLabel.text = ""
+        return
+    end if
+
+    rev = reviews[0]
+    text = asString(rev.text)
+    if text = "" then
+        m.reviewLabel.text = ""
+        return
+    end if
+    ' Keep the detail chrome short — one clipped pull-quote
+    if Len(text) > 160 then text = Left(text, 157) + "…"
+    source = asString(rev.source)
+    author = asString(rev.author)
+    prefix = ""
+    if source <> "" then
+        prefix = source
+    else if author <> "" then
+        prefix = author
+    end if
+    if prefix <> "" then
+        m.reviewLabel.text = Chr(34) + text + Chr(34) + " — " + prefix
+    else
+        m.reviewLabel.text = Chr(34) + text + Chr(34)
+    end if
+end sub
+
+function genreSummary(item as Object) as String
+    if item = invalid or not item.DoesExist("genres") then return ""
+    genres = item.genres
+    if genres = invalid or GetInterface(genres, "ifArray") = invalid then return ""
+    if genres.count() = 0 then return ""
+    limit = genres.count()
+    if limit > 2 then limit = 2
+    parts = []
+    for i = 0 to limit - 1
+        parts.push(asString(genres[i]))
+    end for
+    return joinStrings(parts, ", ")
+end function
+
+function durationMeta(item as Object) as String
+    ms = asInteger(item.duration)
+    if ms <= 0 then return ""
+    minutes = Int(ms / 60000)
+    if minutes < 1 then return ""
+    if minutes < 60 then return asString(minutes) + " min"
+    hours = Int(minutes / 60)
+    rem = minutes - hours * 60
+    if rem = 0 then return asString(hours) + " hr"
+    return asString(hours) + " hr " + asString(rem) + " min"
+end function
 
 sub rememberShowHeader()
     m.showHeader = {
         title: m.titleLabel.text,
         meta: m.metaLabel.text,
+        rating: "",
         summary: m.summaryLabel.text,
+        review: "",
         backdrop: ""
     }
+    if m.ratingLabel <> invalid then m.showHeader.rating = m.ratingLabel.text
+    if m.reviewLabel <> invalid then m.showHeader.review = m.reviewLabel.text
     if m.backdrop <> invalid and m.backdrop.uri <> invalid then
         m.showHeader.backdrop = m.backdrop.uri
     end if
@@ -155,7 +291,9 @@ sub restoreShowHeader()
     if m.showHeader = invalid then return
     m.titleLabel.text = asString(m.showHeader.title)
     m.metaLabel.text = asString(m.showHeader.meta)
+    if m.ratingLabel <> invalid then m.ratingLabel.text = asString(m.showHeader.rating)
     m.summaryLabel.text = asString(m.showHeader.summary)
+    if m.reviewLabel <> invalid then m.reviewLabel.text = asString(m.showHeader.review)
     if asString(m.showHeader.backdrop) <> "" and m.backdrop <> invalid then
         m.backdrop.uri = m.showHeader.backdrop
     end if
@@ -193,8 +331,13 @@ sub applyEpisodeHeader(ep as Object)
     if seasonNo <> "" and epNo <> "" then
         metaBits.push("S" + seasonNo + " · E" + epNo)
     end if
+    durationBit = durationMeta(ep)
+    if durationBit <> "" then metaBits.push(durationBit)
     metaBits.push("Episode")
+    watchBit = watchedSummary(ep)
+    if watchBit <> "" then metaBits.push(watchBit)
     m.metaLabel.text = joinStrings(metaBits, "  ·  ")
+    paintRatingLine(ep)
 
     summary = asString(ep.description)
     if summary = "" and m.showHeader <> invalid then summary = asString(m.showHeader.summary)
@@ -204,6 +347,15 @@ sub applyEpisodeHeader(ep as Object)
         m.backdrop.uri = ep.hdBackdropUrl
     end if
     m.headerMode = "episode"
+
+    ' Episode focus drives Resume / From Start / Mark Watched for the leaf
+    m.itemWatched = (ep.DoesExist("watched") and ep.watched = true)
+    m.canResume = (asInteger(ep.viewOffset) > 0)
+    if m.playLabel <> invalid then
+        if m.canResume then m.playLabel.text = "Resume" else m.playLabel.text = "Play"
+    end if
+    paintWatchedLabel()
+    rebuildActionRow()
 end sub
 
 sub onSeasonItemFocused()
@@ -221,6 +373,7 @@ sub onSeasonItemFocused()
     else
         ' Cast / other rows under the same list — show synopsis again
         restoreShowHeader()
+        if m.top.content <> invalid then refreshPlayState(m.top.content)
     end if
 end sub
 
@@ -228,52 +381,47 @@ sub showTvMode()
     m.isUnavailable = false
     m.movieActions.visible = true
     if m.unavailablePanel <> invalid then m.unavailablePanel.visible = false
-    if m.watchlistBtn <> invalid then m.watchlistBtn.visible = false
-    if m.playBtn <> invalid then m.playBtn.visible = true
-    if m.backBtn <> invalid then m.backBtn.translation = [248, 0]
-    if m.randomBtn <> invalid then m.randomBtn.visible = true
-    m.movieActions.translation = [248, 240]
-    if m.softStatus <> invalid then m.softStatus.translation = [248, 346]
-    if m.relatedPanel <> invalid then m.relatedPanel.translation = [0, 400]
+    if m.relatedPanel <> invalid then m.relatedPanel.translation = [0, 420]
     m.relatedPanel.visible = false
     m.tvPanel.visible = true
-    m.playLabel.text = "Play"
+    if m.tvPanel <> invalid then m.tvPanel.translation = [0, 420]
     m.poster.width = 210
     m.poster.height = 315
     m.poster.translation = [0, 0]
     m.titleLabel.translation = [248, 12]
     m.metaLabel.translation = [248, 92]
-    m.summaryLabel.translation = [248, 136]
-    m.summaryLabel.height = 88
+    if m.ratingLabel <> invalid then m.ratingLabel.translation = [248, 126]
+    m.summaryLabel.translation = [248, 158]
+    m.summaryLabel.height = 72
+    if m.reviewLabel <> invalid then m.reviewLabel.translation = [248, 236]
+    m.movieActions.translation = [248, 292]
+    if m.softStatus <> invalid then m.softStatus.translation = [248, 360]
     m.focusIndex = 0
-    updateMovieButtonFocus()
+    rebuildActionRow()
 end sub
 
 sub showMovieMode()
     m.isUnavailable = false
     m.movieActions.visible = true
     if m.unavailablePanel <> invalid then m.unavailablePanel.visible = false
-    if m.watchlistBtn <> invalid then m.watchlistBtn.visible = false
-    if m.playBtn <> invalid then m.playBtn.visible = true
-    if m.backBtn <> invalid then m.backBtn.translation = [248, 0]
-    if m.randomBtn <> invalid then m.randomBtn.visible = false
-    m.movieActions.translation = [248, 240]
-    if m.softStatus <> invalid then m.softStatus.translation = [248, 346]
-    if m.relatedPanel <> invalid then m.relatedPanel.translation = [0, 400]
+    if m.relatedPanel <> invalid then m.relatedPanel.translation = [0, 420]
     m.tvPanel.visible = false
     m.relatedPanel.visible = false
-    m.playLabel.text = "Play"
     m.poster.width = 210
     m.poster.height = 315
     m.poster.translation = [0, 0]
     m.titleLabel.translation = [248, 12]
     m.metaLabel.translation = [248, 92]
-    m.summaryLabel.translation = [248, 136]
-    m.summaryLabel.height = 88
+    if m.ratingLabel <> invalid then m.ratingLabel.translation = [248, 126]
+    m.summaryLabel.translation = [248, 158]
+    m.summaryLabel.height = 72
+    if m.reviewLabel <> invalid then m.reviewLabel.translation = [248, 236]
+    m.movieActions.translation = [248, 292]
+    if m.softStatus <> invalid then m.softStatus.translation = [248, 360]
     m.relatedContent = createObject("roSGNode", "ContentNode")
     m.relatedRows.content = m.relatedContent
     m.focusIndex = 0
-    updateMovieButtonFocus()
+    rebuildActionRow()
     m.top.setFocus(true)
 end sub
 
@@ -283,14 +431,14 @@ sub showUnavailableMode(item as Object)
     m.tvPanel.visible = false
     m.relatedPanel.visible = false
     m.movieActions.visible = true
-    if m.playBtn <> invalid then m.playBtn.visible = false
-    if m.randomBtn <> invalid then m.randomBtn.visible = false
-    if m.watchlistBtn <> invalid then m.watchlistBtn.visible = true
-    if m.backBtn <> invalid then m.backBtn.translation = [340, 0]
-    m.movieActions.translation = [248, 348]
-    if m.softStatus <> invalid then m.softStatus.translation = [248, 412]
+    m.trailer = invalid
+    m.canResume = false
+    if m.ratingLabel <> invalid then m.ratingLabel.text = ""
+    if m.reviewLabel <> invalid then m.reviewLabel.text = ""
     if m.relatedPanel <> invalid then m.relatedPanel.translation = [0, 440]
     if m.unavailablePanel <> invalid then m.unavailablePanel.visible = true
+    m.movieActions.translation = [248, 348]
+    if m.softStatus <> invalid then m.softStatus.translation = [248, 412]
 
     if m.unavailableBody <> invalid then m.unavailableBody.text = unavailableMessage(item)
     if m.softStatus <> invalid then m.softStatus.text = "Looking up details & similar titles…"
@@ -299,7 +447,7 @@ sub showUnavailableMode(item as Object)
     m.relatedContent = createObject("roSGNode", "ContentNode")
     m.relatedRows.content = m.relatedContent
     m.focusIndex = 0
-    updateMovieButtonFocus()
+    rebuildActionRow()
     m.top.setFocus(true)
 end sub
 
@@ -403,7 +551,7 @@ sub onUnavailableLoaded()
         m.relatedPanel.visible = true
         if m.softStatus <> invalid then
             if similarItems.count() > 0 then
-                m.softStatus.text = "Similar titles already in your library ↓"
+                m.softStatus.text = "Similar titles already in your library"
             else
                 m.softStatus.text = ""
             end if
@@ -413,7 +561,7 @@ sub onUnavailableLoaded()
     end if
 
     m.focusIndex = 0
-    updateMovieButtonFocus()
+    rebuildActionRow()
     m.top.setFocus(true)
 end sub
 
@@ -636,7 +784,7 @@ sub onExtrasLoaded()
         applyShowHeader(detail)
         if asString(detail.hdBackdropUrl) <> "" then m.backdrop.uri = detail.hdBackdropUrl
         rememberShowHeader()
-        refreshPlayLabel(detail)
+        refreshPlayState(detail)
         if prevMode = "episode" then
             ' Re-apply episode copy after the show cache refresh
             info = invalid
@@ -654,6 +802,32 @@ sub onExtrasLoaded()
     end if
 
     adoptOnDeck(response, detail)
+
+    if response.trailer <> invalid then m.trailer = response.trailer
+    ' Reviews belong on the show/movie chrome; stash them even if an episode is focused
+    paintReviews(response.reviews)
+    if detail <> invalid then
+        if m.headerMode = "episode" then
+            ' Temporarily restore show copy so the cached header keeps the review
+            restoreShowHeader()
+            paintReviews(response.reviews)
+            rememberShowHeader()
+            info = invalid
+            if m.seasonRows <> invalid then info = m.seasonRows.rowItemFocused
+            if info <> invalid and info.count() >= 2 and m.seasonRows.content <> invalid then
+                row = m.seasonRows.content.getChild(info[0])
+                if row <> invalid then
+                    ep = row.getChild(info[1])
+                    if ep <> invalid and asString(ep.mediaType) = "episode" then
+                        applyEpisodeHeader(ep)
+                    end if
+                end if
+            end if
+        else
+            rememberShowHeader()
+        end if
+    end if
+    rebuildActionRow()
 
     castItems = response.cast
     similarItems = response.similar
@@ -802,7 +976,7 @@ end sub
 function nodeToItem(item as Object) as Object
     isDiscover = false
     if item.DoesExist("isDiscover") and item.isDiscover = true then isDiscover = true
-    return {
+    out = {
         title: item.title,
         description: item.description,
         year: item.year,
@@ -826,61 +1000,154 @@ function nodeToItem(item as Object) as Object
         parentIndex: item.parentIndex,
         isDiscover: isDiscover
     }
+    if item.DoesExist("tagline") then out.tagline = item.tagline
+    if item.DoesExist("criticRating") then out.criticRating = item.criticRating
+    if item.DoesExist("audienceRating") then out.audienceRating = item.audienceRating
+    if item.DoesExist("genres") then out.genres = item.genres
+    return out
 end function
 
 sub onCloseRequested()
     if m.top.close = true then m.top.closed = true
 end sub
 
-sub updateMovieButtonFocus()
+sub rebuildActionRow()
+    ' Pack visible buttons left-to-right; focus order matches left→right
+    specs = []
     if m.isUnavailable = true then
-        ' Watchlist (0) + Back (1)
-        if m.playBg <> invalid then m.playBg.color = "0x2A2A32"
-        if m.watchlistBg <> invalid then m.watchlistBg.color = "0x2A2A32"
-        m.backBg.color = "0x2A2A32"
-        if m.randomBg <> invalid then m.randomBg.color = "0x2A2A32"
-        if m.top.findNode("playShadow") <> invalid then m.top.findNode("playShadow").opacity = 0.0
-        if m.top.findNode("watchlistShadow") <> invalid then m.top.findNode("watchlistShadow").opacity = 0.0
-        if m.top.findNode("backShadow") <> invalid then m.top.findNode("backShadow").opacity = 0.0
-        if m.top.findNode("randomShadow") <> invalid then m.top.findNode("randomShadow").opacity = 0.0
-
-        if m.focusIndex = 0 then
-            if m.watchlistBg <> invalid then m.watchlistBg.color = "0xE50914"
-            if m.top.findNode("watchlistShadow") <> invalid then m.top.findNode("watchlistShadow").opacity = 0.5
-        else
-            m.focusIndex = 1
-            m.backBg.color = "0xE50914"
-            if m.top.findNode("backShadow") <> invalid then m.top.findNode("backShadow").opacity = 0.5
+        specs.push({ id: "watchlist", node: m.watchlistBtn, width: 300 })
+        specs.push({ id: "back", node: m.backBtn, width: 140 })
+    else
+        specs.push({ id: "play", node: m.playBtn, width: 200 })
+        if m.canResume = true then
+            specs.push({ id: "startOver", node: m.startOverBtn, width: 200 })
         end if
-        return
+        if m.trailer <> invalid then
+            specs.push({ id: "trailer", node: m.trailerBtn, width: 170 })
+        end if
+        specs.push({ id: "watched", node: m.watchedBtn, width: 220 })
+        specs.push({ id: "back", node: m.backBtn, width: 140 })
+        if m.isShow = true then
+            specs.push({ id: "random", node: m.randomBtn, width: 170 })
+        end if
     end if
 
-    m.playBg.color = "0x2A2A32"
-    m.backBg.color = "0x2A2A32"
-    if m.watchlistBg <> invalid then m.watchlistBg.color = "0x2A2A32"
-    if m.randomBg <> invalid then m.randomBg.color = "0x2A2A32"
-    if m.top.findNode("playShadow") <> invalid then m.top.findNode("playShadow").opacity = 0.0
-    if m.top.findNode("backShadow") <> invalid then m.top.findNode("backShadow").opacity = 0.0
-    if m.top.findNode("randomShadow") <> invalid then m.top.findNode("randomShadow").opacity = 0.0
-    if m.top.findNode("watchlistShadow") <> invalid then m.top.findNode("watchlistShadow").opacity = 0.0
+    ' Hide every optional control first, then reveal the ones in specs
+    hideActionNode(m.playBtn)
+    hideActionNode(m.startOverBtn)
+    hideActionNode(m.trailerBtn)
+    hideActionNode(m.watchedBtn)
+    hideActionNode(m.watchlistBtn)
+    hideActionNode(m.backBtn)
+    hideActionNode(m.randomBtn)
 
-    if m.focusIndex = 0 then
-        m.playBg.color = "0xE50914"
-        if m.top.findNode("playShadow") <> invalid then m.top.findNode("playShadow").opacity = 0.5
-    else if m.focusIndex = 1 then
-        m.backBg.color = "0xE50914"
-        if m.top.findNode("backShadow") <> invalid then m.top.findNode("backShadow").opacity = 0.5
-    else
-        if m.randomBg <> invalid then m.randomBg.color = "0xE50914"
-        if m.top.findNode("randomShadow") <> invalid then m.top.findNode("randomShadow").opacity = 0.5
+    m.actionIds = []
+    x = 0
+    gap = 16
+    for each spec in specs
+        if spec.node <> invalid then
+            spec.node.visible = true
+            spec.node.translation = [x, 0]
+            m.actionIds.push(spec.id)
+            x = x + spec.width + gap
+        end if
+    end for
+
+    if m.focusIndex < 0 then m.focusIndex = 0
+    if m.actionIds.count() = 0 then
+        m.focusIndex = 0
+    else if m.focusIndex >= m.actionIds.count() then
+        m.focusIndex = m.actionIds.count() - 1
+    end if
+    updateMovieButtonFocus()
+end sub
+
+sub hideActionNode(node as Object)
+    if node = invalid then return
+    node.visible = false
+end sub
+
+sub updateMovieButtonFocus()
+    clearActionFocus()
+    if m.actionIds = invalid or m.actionIds.count() = 0 then return
+    if m.focusIndex < 0 or m.focusIndex >= m.actionIds.count() then m.focusIndex = 0
+    id = m.actionIds[m.focusIndex]
+    setActionFocused(id, true)
+end sub
+
+sub clearActionFocus()
+    setActionFocused("play", false)
+    setActionFocused("startOver", false)
+    setActionFocused("trailer", false)
+    setActionFocused("watched", false)
+    setActionFocused("watchlist", false)
+    setActionFocused("back", false)
+    setActionFocused("random", false)
+end sub
+
+sub setActionFocused(id as String, focused as Boolean)
+    bg = invalid
+    shadow = invalid
+    if id = "play" then
+        bg = m.playBg
+        shadow = m.top.findNode("playShadow")
+    else if id = "startOver" then
+        bg = m.startOverBg
+        shadow = m.top.findNode("startOverShadow")
+    else if id = "trailer" then
+        bg = m.trailerBg
+        shadow = m.top.findNode("trailerShadow")
+    else if id = "watched" then
+        bg = m.watchedBg
+        shadow = m.top.findNode("watchedShadow")
+    else if id = "watchlist" then
+        bg = m.watchlistBg
+        shadow = m.top.findNode("watchlistShadow")
+    else if id = "back" then
+        bg = m.backBg
+        shadow = m.top.findNode("backShadow")
+    else if id = "random" then
+        bg = m.randomBg
+        shadow = m.top.findNode("randomShadow")
+    end if
+
+    if bg <> invalid then
+        if focused then bg.color = "0xE50914" else bg.color = "0x2A2A32"
+    end if
+    if shadow <> invalid then
+        if focused then shadow.opacity = 0.5 else shadow.opacity = 0.0
     end if
 end sub
 
 function actionButtonCount() as Integer
-    if m.isUnavailable = true then return 2
-    if m.isShow = true and m.randomBtn <> invalid and m.randomBtn.visible = true then return 3
-    return 2
+    if m.actionIds = invalid then return 0
+    return m.actionIds.count()
 end function
+
+function focusedActionId() as String
+    if m.actionIds = invalid or m.actionIds.count() = 0 then return ""
+    if m.focusIndex < 0 or m.focusIndex >= m.actionIds.count() then return ""
+    return m.actionIds[m.focusIndex]
+end function
+
+sub activateFocusedAction()
+    id = focusedActionId()
+    if id = "play" then
+        requestMoviePlay(false)
+    else if id = "startOver" then
+        requestMoviePlay(true)
+    else if id = "trailer" then
+        requestTrailerPlay()
+    else if id = "watched" then
+        toggleWatched()
+    else if id = "watchlist" then
+        toggleWatchlist()
+    else if id = "back" then
+        m.top.closed = true
+    else if id = "random" then
+        requestRandomEpisode()
+    end if
+end sub
 
 sub toggleWatchlist()
     if m.watchlistBusy = true then return
@@ -934,7 +1201,7 @@ end sub
 
 sub focusActionButtons()
     m.focusIndex = 0
-    updateMovieButtonFocus()
+    rebuildActionRow()
     ' Drop shelf focus so cast/episode rings cannot linger while Play is active
     if m.relatedRows <> invalid then
         m.relatedRows.setFocus(false)
@@ -958,7 +1225,7 @@ sub onSeasonEscapeUp()
     focusActionButtons()
 end sub
 
-sub requestMoviePlay()
+sub requestMoviePlay(startOver = false as Boolean)
     if m.isUnavailable = true then return
     item = m.top.content
     if item = invalid then return
@@ -972,7 +1239,9 @@ sub requestMoviePlay()
                 if row <> invalid then
                     ep = row.getChild(info[1])
                     if ep <> invalid and asString(ep.mediaType) = "episode" then
-                        m.top.playRequested = nodeToItem(ep)
+                        payload = nodeToItem(ep)
+                        if startOver = true then payload.viewOffset = 0
+                        m.top.playRequested = payload
                         return
                     end if
                 end if
@@ -980,7 +1249,109 @@ sub requestMoviePlay()
         end if
     end if
 
-    m.top.playRequested = item
+    payload = nodeToItem(item)
+    if startOver = true then payload.viewOffset = 0
+    m.top.playRequested = payload
+end sub
+
+sub requestTrailerPlay()
+    if m.trailer = invalid then return
+    m.top.playRequested = nodeToItem(m.trailer)
+end sub
+
+sub toggleWatched()
+    if m.isUnavailable = true then return
+    if m.watchedBusy = true then return
+
+    target = watchedTargetItem()
+    if target = invalid then return
+    ratingKey = asString(target.ratingKey)
+    if ratingKey = "" then return
+
+    m.watchedBusy = true
+    markingWatched = not m.itemWatched
+    if m.softStatus <> invalid then
+        if markingWatched then
+            m.softStatus.text = "Marking watched…"
+        else
+            m.softStatus.text = "Marking unwatched…"
+        end if
+    end if
+
+    m.watchedTask = createObject("roSGNode", "PlexTask")
+    m.watchedTask.config = m.top.config
+    m.watchedTask.action = "scrobble"
+    m.watchedTask.item = {
+        ratingKey: ratingKey,
+        unwatch: not markingWatched
+    }
+    m.watchedTask.observeField("response", "onWatchedMutated")
+    m.watchedTask.control = "RUN"
+end sub
+
+function watchedTargetItem() as Object
+    ' Prefer the focused episode on a show page; otherwise the title itself
+    if m.isShow = true and m.seasonRows <> invalid and m.seasonRows.content <> invalid then
+        info = m.seasonRows.rowItemFocused
+        if info <> invalid and info.count() >= 2 then
+            row = m.seasonRows.content.getChild(info[0])
+            if row <> invalid then
+                ep = row.getChild(info[1])
+                if ep <> invalid and asString(ep.mediaType) = "episode" then
+                    return nodeToItem(ep)
+                end if
+            end if
+        end if
+    end if
+    return m.top.content
+end function
+
+sub onWatchedMutated()
+    m.watchedBusy = false
+    response = m.watchedTask.response
+    if response = invalid or response.ok <> true then
+        err = "Couldn't update watched state"
+        if response <> invalid and response.error <> invalid then err = asString(response.error)
+        if m.softStatus <> invalid then m.softStatus.text = err
+        return
+    end if
+
+    m.itemWatched = not m.itemWatched
+    ' Clearing progress when marking watched; restoring resume when unwatching isn't available
+    if m.itemWatched = true then m.canResume = false
+    content = m.top.content
+    if content <> invalid then
+        content.watched = m.itemWatched
+        if m.itemWatched = true then content.viewOffset = 0
+    end if
+
+    ' Keep the focused episode tile in sync when we marked a leaf
+    if m.isShow = true and m.seasonRows <> invalid and m.seasonRows.content <> invalid then
+        info = m.seasonRows.rowItemFocused
+        if info <> invalid and info.count() >= 2 then
+            row = m.seasonRows.content.getChild(info[0])
+            if row <> invalid then
+                ep = row.getChild(info[1])
+                if ep <> invalid and asString(ep.mediaType) = "episode" then
+                    ep.watched = m.itemWatched
+                    if m.itemWatched = true then ep.viewOffset = 0
+                end if
+            end if
+        end if
+    end if
+
+    paintWatchedLabel()
+    if m.playLabel <> invalid then
+        if m.canResume then m.playLabel.text = "Resume" else m.playLabel.text = "Play"
+    end if
+    rebuildActionRow()
+    if m.softStatus <> invalid then
+        if m.itemWatched then
+            m.softStatus.text = "Marked watched"
+        else
+            m.softStatus.text = "Marked unwatched"
+        end if
+    end if
 end sub
 
 sub requestRandomEpisode()
@@ -1045,25 +1416,11 @@ function onKeyEvent(key as String, press as Boolean) as Boolean
     else if key = "up"
         return true
     else if key = "OK"
-        if m.isUnavailable = true then
-            if m.focusIndex = 0 then
-                toggleWatchlist()
-            else
-                m.top.closed = true
-            end if
-            return true
-        end if
-        if m.focusIndex = 0 then
-            requestMoviePlay()
-        else if m.focusIndex = 1 then
-            m.top.closed = true
-        else
-            requestRandomEpisode()
-        end if
+        activateFocusedAction()
         return true
     else if key = "play"
         if m.isUnavailable = true then return true
-        requestMoviePlay()
+        requestMoviePlay(false)
         return true
     end if
 

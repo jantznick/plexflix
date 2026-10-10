@@ -17,6 +17,7 @@ sub init()
     m.elapsedLabel = m.top.findNode("elapsedLabel")
     m.endsAtLabel = m.top.findNode("endsAtLabel")
     m.remainingLabel = m.top.findNode("remainingLabel")
+    m.clockLabel = m.top.findNode("clockLabel")
     m.buttonRow = m.top.findNode("buttonRow")
 
     m.castPanel = m.top.findNode("castPanel")
@@ -449,7 +450,7 @@ sub showPlaybackError(reason as String)
     m.spinner.visible = false
     hideBuffer()
     m.statusLabel.visible = true
-    m.statusLabel.text = message + Chr(10) + "Press Back to return"
+    m.statusLabel.text = message
 end sub
 
 ' Whatever the firmware is willing to tell us about why a stream died. Worth
@@ -598,6 +599,7 @@ sub hidePreview()
 end sub
 
 sub onReportTimer()
+    if m.controls.visible then paintClock()
     if m.paused then
         reportProgress("paused")
     else
@@ -1416,6 +1418,7 @@ sub paintMeta()
 end sub
 
 sub paintScrubber(atSeconds as Integer)
+    paintClock()
     if m.duration <= 0 or m.isLive then return
 
     pct = atSeconds / m.duration
@@ -1430,6 +1433,13 @@ sub paintScrubber(atSeconds as Integer)
     m.elapsedLabel.text = formatRuntime(atSeconds)
     m.remainingLabel.text = "-" + formatRuntime(remaining)
     m.endsAtLabel.text = endsAtText(remaining)
+end sub
+
+sub paintClock()
+    if m.clockLabel = invalid then return
+    now = CreateObject("roDateTime")
+    now.ToLocalTime()
+    m.clockLabel.text = clockTime(now.GetHours(), now.GetMinutes(), m.clock24)
 end sub
 
 ' "Ends at 10:45 PM" — the one number you actually want when deciding
@@ -1587,6 +1597,7 @@ sub showControls(zone as String)
     ' The preview belongs to an in-flight seek, so it does not follow the viewer
     ' into a zone that cannot seek — least of all the cast strip it covers
     if zone <> "scrubber" and zone <> "buttons" then hidePreview()
+    paintClock()
     paintScrubber(m.position)
     paintButtons()
     paintButtonFocus()
