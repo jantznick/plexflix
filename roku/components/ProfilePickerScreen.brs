@@ -8,7 +8,7 @@ sub init()
     m.pinError = m.top.findNode("pinError")
     m.brand = m.top.findNode("brand")
     m.headline = m.top.findNode("headline")
-    m.sub = m.top.findNode("sub")
+    m.tagline = m.top.findNode("tagline")
 
     m.profiles = GetProfiles()
     m.index = 0
@@ -17,7 +17,6 @@ sub init()
     m.pinValue = ""
     m.pinTarget = invalid
     m.pinBoxes = []
-    m.appearOpacity = 0.0
 
     buildTiles()
     buildPinDigits()
@@ -27,7 +26,7 @@ sub init()
     ' Soft entrance - brand and row ease in
     m.brand.opacity = 0
     m.headline.opacity = 0
-    m.sub.opacity = 0
+    m.tagline.opacity = 0
     m.profileRow.opacity = 0
     m.hint.opacity = 0
     m.enterTimer = createObject("roSGNode", "Timer")
@@ -42,7 +41,7 @@ sub onEnterTick()
     m.enterStep = m.enterStep + 1
     if m.enterStep = 1 then m.brand.opacity = 1
     if m.enterStep = 4 then m.headline.opacity = 1
-    if m.enterStep = 7 then m.sub.opacity = 1
+    if m.enterStep = 7 then m.tagline.opacity = 1
     if m.enterStep = 10 then
         m.profileRow.opacity = 1
         m.hint.opacity = 1
@@ -105,14 +104,14 @@ sub buildTiles()
         initial.color = "0xFFFFFF"
         initial.font = MakeFont("pkg:/fonts/Outfit-Bold.ttf", 72)
 
-        name = g.createChild("Label")
-        name.translation = [24, 270]
-        name.width = tileW - 48
-        name.height = 48
-        name.horizAlign = "center"
-        name.text = valueOr(p.title, "Profile")
-        name.color = "0xFFFFFF"
-        name.font = MakeFont("pkg:/fonts/Outfit-Bold.ttf", 36)
+        titleLbl = g.createChild("Label")
+        titleLbl.translation = [24, 270]
+        titleLbl.width = tileW - 48
+        titleLbl.height = 48
+        titleLbl.horizAlign = "center"
+        titleLbl.text = valueOr(p.title, "Profile")
+        titleLbl.color = "0xFFFFFF"
+        titleLbl.font = MakeFont("pkg:/fonts/Outfit-Bold.ttf", 36)
 
         blurb = g.createChild("Label")
         blurb.translation = [32, 328]
@@ -125,19 +124,19 @@ sub buildTiles()
         blurb.color = "0x8FA0B8"
         blurb.font = MakeFont("pkg:/fonts/Outfit-Regular.ttf", 22)
 
-        lock = g.createChild("Label")
-        lock.translation = [24, 400]
-        lock.width = tileW - 48
-        lock.height = 28
-        lock.horizAlign = "center"
+        lockLbl = g.createChild("Label")
+        lockLbl.translation = [24, 400]
+        lockLbl.width = tileW - 48
+        lockLbl.height = 28
+        lockLbl.horizAlign = "center"
         if valueOr(p.pin, "") <> "" then
-            lock.text = "Passcode required"
-            lock.color = "0xC5CCD8"
+            lockLbl.text = "Passcode required"
+            lockLbl.color = "0xC5CCD8"
         else
-            lock.text = "No passcode"
-            lock.color = "0x5E6880"
+            lockLbl.text = "No passcode"
+            lockLbl.color = "0x5E6880"
         end if
-        lock.font = MakeFont("pkg:/fonts/Outfit-Medium.ttf", 20)
+        lockLbl.font = MakeFont("pkg:/fonts/Outfit-Medium.ttf", 20)
 
         m.tiles.push({
             group: g,
@@ -384,7 +383,7 @@ function onKeyEvent(key as String, press as Boolean) as Boolean
         chooseCurrent()
         return true
     else if key = "back" then
-        ' Stay on picker - exiting the channel is MainScene's job when nothing else is up
+        ' Stay on picker; MainScene exits the channel when nothing else is up
         return false
     end if
     return false

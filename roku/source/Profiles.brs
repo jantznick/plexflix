@@ -6,7 +6,7 @@ function GetProfiles() as Object
         {
             id: "kids",
             title: "Kids",
-            subtitle: "Cartoons, family libraries & basic TV",
+            subtitle: "Cartoons, family libraries and basic TV",
             accent: "0x2BB0A6",
             pin: "",
             allowSports: false,
@@ -24,7 +24,7 @@ function GetProfiles() as Object
         {
             id: "adults",
             title: "Adults",
-            subtitle: "Full library, live TV & sports",
+            subtitle: "Full library, live TV and sports",
             accent: "0xE50914",
             pin: "1990",
             allowSports: true,

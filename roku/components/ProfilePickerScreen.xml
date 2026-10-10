@@ -31,7 +31,7 @@
             <Label id="headline" translation="[120, 178]" width="1680" height="56" text="Who is watching?" color="0xE8EEF8">
                 <Font role="font" uri="pkg:/fonts/Outfit-SemiBold.ttf" size="42" />
             </Label>
-            <Label id="sub" translation="[120, 240]" width="900" height="40" text="Pick a profile to personalize libraries and live TV." color="0x8FA0B8">
+            <Label id="tagline" translation="[120, 240]" width="900" height="40" text="Pick a profile to personalize libraries and live TV." color="0x8FA0B8">
                 <Font role="font" uri="pkg:/fonts/Outfit-Regular.ttf" size="26" />
             </Label>
         </Group>
