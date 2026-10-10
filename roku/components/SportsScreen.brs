@@ -38,6 +38,13 @@ sub init()
     m.feedDialog = invalid
     m.feedDialogActions = []
 
+    ' Scores sidecar (optional). Failures leave the guide exactly as before.
+    m.scoresEnabled = false
+    m.scoresLoading = false
+    m.scoresVisible = false
+    m.scoreHeader = m.top.findNode("scoreHeader")
+    if m.scoreHeader <> invalid then m.scoreHeader.visible = false
+
     ' Games picked for multiview, kept across sport filters and the game page
     m.multi = []
     m.multiEnabled = false
@@ -59,6 +66,13 @@ sub init()
     m.clockTimer.observeField("fire", "updateClock")
     m.clockTimer.control = "start"
     updateClock()
+
+    m.scoresTimer = createObject("roSGNode", "Timer")
+    m.scoresTimer.repeat = true
+    m.scoresTimer.duration = 45
+    m.scoresTimer.observeField("fire", "onScoresTimer")
+    m.scoresTimer.control = "stop"
+
     showSkeleton()
 end sub
 
@@ -90,6 +104,9 @@ sub onConfigReady()
     if m.top.config = invalid then return
     url = m.top.config.multiviewUrl
     m.multiEnabled = (url <> invalid and url <> "")
+    scoresUrl = ""
+    if m.top.config.scoresUrl <> invalid then scoresUrl = m.top.config.scoresUrl.Trim()
+    m.scoresEnabled = (scoresUrl <> "")
     paintMultiTray()
     loadFeed()
 end sub
@@ -154,6 +171,8 @@ sub onFeedLoaded()
     buildPills()
     applyCategory(keep)
     if m.zone = "list" then m.guideList.setFocus(true)
+    ' Soft enrichment — never blocks or fails the feed itself
+    loadScores()
 end sub
 
 function isCableCategory(title as String) as Boolean
@@ -326,7 +345,166 @@ sub applySportsLine(node as Object, item as Object, league as String)
     streamsCol = StrI(n).Trim() + " streams"
     if n = 1 then streamsCol = "1 stream"
     if eventInMultiview(item) then streamsCol = streamsCol + "  ·  Multiview"
-    setGuideCols(node, lg, title, "", streamsCol)
+    scoreCol = sportsScoreCol(item)
+    setGuideCols(node, lg, title, scoreCol, streamsCol)
+end sub
+
+function sportsScoreCol(item as Object) as String
+    if item = invalid then return ""
+    if item.DoesExist("scoreMatched") and item.scoreMatched = true then
+        line = asString(item.scoreLine)
+        if Len(line) > 22 then line = Mid(line, 1, 22)
+        return line
+    end if
+    return ""
+end function
+
+function sportsScoreSummary(item as Object) as String
+    if item = invalid then return ""
+    if item.DoesExist("scoreMatched") <> true or item.scoreMatched <> true then return ""
+    line = asString(item.scoreLine)
+    status = asString(item.scoreStatus)
+    if line = "" then return status
+    if status = "" or status = line then return line
+    return line + "  ·  " + status
+end function
+
+function scoreKeyForItem(item as Object, index as Integer) as String
+    if item = invalid then return "i" + StrI(index).Trim()
+    key = asString(item.id)
+    if key = "" then key = asString(item.key)
+    if key = "" then key = "i" + StrI(index).Trim()
+    return key
+end function
+
+function scoresEnabled() as Boolean
+    return m.scoresEnabled = true
+end function
+
+sub setScoreHeaderVisible(show as Boolean)
+    m.scoresVisible = show
+    if m.scoreHeader <> invalid then m.scoreHeader.visible = show
+end sub
+
+sub clearItemScores(item as Object)
+    if item = invalid then return
+    item.scoreMatched = false
+    item.scoreLine = ""
+    item.scoreStatus = ""
+    item.scoreEventId = ""
+end sub
+
+sub loadScores()
+    if not scoresEnabled() then
+        setScoreHeaderVisible(false)
+        if m.scoresTimer <> invalid then m.scoresTimer.control = "stop"
+        return
+    end if
+    if m.scoresLoading = true then return
+    if m.categories.count() = 0 then return
+
+    ' "All" is always first and holds the shared item objects
+    source = m.categories[0].items
+    if source = invalid then source = []
+    payloadItems = []
+    for i = 0 to source.count() - 1
+        item = source[i]
+        if item <> invalid then
+            key = scoreKeyForItem(item, i)
+            item.scoreKey = key
+            payloadItems.push({
+                id: key,
+                title: asString(item.title),
+                league: asString(item.league)
+            })
+        end if
+    end for
+    if payloadItems.count() = 0 then return
+
+    m.scoresLoading = true
+    m.scoresTask = createObject("roSGNode", "PlexTask")
+    m.scoresTask.config = m.top.config
+    m.scoresTask.action = "resolveScores"
+    m.scoresTask.item = { items: payloadItems }
+    m.scoresTask.observeField("response", "onScoresLoaded")
+    m.scoresTask.control = "RUN"
+end sub
+
+sub onScoresLoaded()
+    response = invalid
+    if m.scoresTask <> invalid then response = m.scoresTask.response
+    m.scoresLoading = false
+
+    ' Soft fail: feed UI stays as-is; hide score chrome if we never matched
+    if response = invalid or response.ok <> true then
+        if m.scoresVisible <> true then setScoreHeaderVisible(false)
+        if m.scoresTimer <> invalid then m.scoresTimer.control = "start"
+        return
+    end if
+
+    byId = {}
+    results = response.results
+    if results = invalid then results = []
+    matchedCount = 0
+    for each row in results
+        if GetInterface(row, "ifAssociativeArray") <> invalid then
+            id = asString(row.id)
+            if id <> "" then byId[id] = row
+            if row.matched = true then matchedCount = matchedCount + 1
+        end if
+    end for
+
+    if m.categories.count() = 0 then return
+    source = m.categories[0].items
+    if source = invalid then return
+
+    for i = 0 to source.count() - 1
+        item = source[i]
+        if item <> invalid then
+            key = asString(item.scoreKey)
+            if key = "" then key = scoreKeyForItem(item, i)
+            row = invalid
+            if byId.DoesExist(key) then row = byId[key]
+            if row <> invalid and row.matched = true then
+                item.scoreMatched = true
+                item.scoreLine = asString(row.scoreLine)
+                status = asString(row.displayStatus)
+                if status = "" then status = asString(row.shortDetail)
+                item.scoreStatus = status
+                item.scoreEventId = asString(row.eventId)
+            else
+                clearItemScores(item)
+            end if
+        end if
+    end for
+
+    if matchedCount > 0 then
+        setScoreHeaderVisible(true)
+    else
+        setScoreHeaderVisible(false)
+    end if
+    refreshScoreRows()
+    if m.currentIndex >= 0 and m.currentIndex < m.events.count() then updateInfo(m.currentIndex)
+    if m.scoresTimer <> invalid then m.scoresTimer.control = "start"
+end sub
+
+sub onScoresTimer()
+    if m.feedLoading = true then return
+    if not scoresEnabled() then return
+    loadScores()
+end sub
+
+' Rebuild visible guide rows so col2 picks up fresh score lines
+sub refreshScoreRows()
+    root = m.guideList.content
+    if root = invalid then return
+    for i = 0 to m.events.count() - 1
+        if i < root.getChildCount() then
+            fresh = createObject("roSGNode", "ContentNode")
+            applySportsLine(fresh, m.events[i], asString(m.events[i].league))
+            root.replaceChild(fresh, i)
+        end if
+    end for
 end sub
 
 '--------------------------------------------------------------------
@@ -555,6 +733,8 @@ sub updateInfo(idx as Integer)
     meta = asString(item.league)
     if meta = "" then meta = asString(item.description)
     if meta = "" then meta = "Live sports"
+    scoreBits = sportsScoreSummary(item)
+    if scoreBits <> "" then meta = meta + "  ·  " + scoreBits
     m.eventMeta.text = meta
     n = 0
     if item.DoesExist("streamCount") then n = item.streamCount

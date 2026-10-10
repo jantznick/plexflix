@@ -103,7 +103,9 @@ Defaults:
 | `IDLE_REFRESH_SECONDS` | `300` | Poll when slate is all pre/post |
 | `SCORES_TOKEN` | empty | Optional shared secret |
 
-Point the Roku at `http://<home-server-ip>:8096` (config wiring comes next).
+Point the Roku at it with `scoresUrl` in `roku/source/PlexConfig.brs`
+(`http://<home-server-ip>:8096`). Leave that key empty to disable scores in the
+channel.
 
 ## How matching works
 

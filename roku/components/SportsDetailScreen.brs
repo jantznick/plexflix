@@ -22,7 +22,21 @@ sub onContentSet()
     m.titleLabel.text = asString(item.title)
     league = asString(item.description)
     if league = "" and item.DoesExist("league") then league = asString(item.league)
-    m.metaLabel.text = league
+    meta = league
+    if item.DoesExist("scoreMatched") and item.scoreMatched = true then
+        scoreLine = asString(item.scoreLine)
+        scoreStatus = asString(item.scoreStatus)
+        bits = scoreLine
+        if scoreStatus <> "" and scoreStatus <> scoreLine then
+            if bits <> "" then bits = bits + "  ·  "
+            bits = bits + scoreStatus
+        end if
+        if bits <> "" then
+            if meta <> "" then meta = meta + "  ·  "
+            meta = meta + bits
+        end if
+    end if
+    m.metaLabel.text = meta
     showHint()
 
     art = asString(item.hdPosterUrl)
