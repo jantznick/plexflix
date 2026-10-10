@@ -24,8 +24,9 @@ This is intentionally a **design/UX shell** on top of existing Plex data. Creden
 - **Cable TV**: same guide layout for Entertainment and Cartoons from the sports JSON feed; optional `cableEpgUrl` sidecar supplies what’s-on listings (otherwise 24/7 placeholders). Those sections no longer appear under Live Sports
   down the left, half-hour time slots across the top, program blocks sized by duration, a red now-line, and a live
   preview of the focused channel. Up/Down change channel, Left/Right move through programs (time pages in 30-minute
-  steps and later hours load as you go), `<<`/`>>` page channels. OK on something airing now watches it; OK on a future
-  show (or `*` on anything) opens **Record this episode / Record series / Cancel recording**. Back from a channel
+  steps and later hours load as you go), `<<`/`>>` page channels. OK watches the focused channel. `*` opens **Refresh**
+  (reloads streams + EPG sidecar). Back from the grid goes to the filter tabs; Back again opens the sidebar
+- **Live TV** record menus: OK on a future show (or `*` on anything) opens **Record this episode / Record series / Cancel recording**. Back from a channel
   you were watching returns to the guide with that channel still playing in the preview
 - **DVR**: Upcoming lists scheduled recordings (OK cancels one). Rules lists each show with a rule; OK opens an editor for
   its Plex recording settings (quality, replace lower quality, padding, commercial detection, episodes to keep, …;
@@ -48,7 +49,8 @@ This is intentionally a **design/UX shell** on top of existing Plex data. Creden
   and an **inline cast panel** that pauses rather than leaving playback
 - **Progress is written back to Plex**, so resume points and Continue Watching
   stay in sync with every other Plex client
-- Live sports from a configurable JSON feed URL (event detail + stream picker)
+- Live sports from a configurable JSON feed URL (event detail + stream picker). `*` opens options: **Refresh feed**,
+  Multiview add/remove (when enabled), and Watch Multiview
 - **Multiview**: 2–4 live games at once in Grid, Spotlight or Picture in picture,
   tiled on your home server (see [Multiview](#multiview))
 - Optional **TMDB** enrichment for cast pages and Discover titles missing from your library (`tmdbApiKey` in config)

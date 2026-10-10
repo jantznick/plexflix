@@ -15,6 +15,9 @@ function onKeyEvent(key as String, press as Boolean) as Boolean
     else if key = "back" then
         m.top.escapeBack = true
         return true
+    else if key = "options" then
+        m.top.escapeOptions = true
+        return true
     end if
     return false
 end function

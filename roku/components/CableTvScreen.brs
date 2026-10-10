@@ -45,6 +45,10 @@ sub init()
     m.tab = 0
     m.zone = "grid"
     m.guideLoaded = false
+    m.feedLoading = false
+    m.reloadTabTitle = ""
+    m.feedDialog = invalid
+    m.feedDialogActions = []
 
     buildTabs()
     buildSlotHeader()
@@ -295,6 +299,12 @@ sub onConfigReady()
 end sub
 
 sub loadFeed()
+    if m.feedLoading = true then return
+    m.feedLoading = true
+    m.reloadTabTitle = ""
+    if m.tabNames <> invalid and m.tab >= 0 and m.tab < m.tabNames.count() then
+        m.reloadTabTitle = m.tabNames[m.tab]
+    end if
     m.top.loadingMessage = "Loading Cable TV…"
     m.epgById = {}
     m.gridTask = createObject("roSGNode", "PlexTask")
@@ -313,6 +323,7 @@ end function
 sub onFeedLoaded()
     response = m.gridTask.response
     if response = invalid or response.ok <> true then
+        m.feedLoading = false
         m.top.loadingMessage = ""
         err = "Could not load cable channels"
         if response <> invalid and response.error <> invalid then err = response.error
@@ -355,6 +366,7 @@ sub onFeedLoaded()
     rebuildTabChrome()
 
     if m.allChannels.count() = 0 then
+        m.feedLoading = false
         m.top.loadingMessage = ""
         showGuideStatus("No Entertainment or Cartoons channels in the feed")
         return
@@ -406,10 +418,69 @@ sub applyEpgToChannels()
 end sub
 
 sub finishGuideLoad()
+    m.feedLoading = false
     m.top.loadingMessage = ""
     showGuideStatus("")
     m.guideLoaded = true
-    applyTab(0, true)
+    keep = 0
+    if m.reloadTabTitle <> "" then
+        for i = 0 to m.tabNames.count() - 1
+            if m.tabNames[i] = m.reloadTabTitle then keep = i
+        end for
+    end if
+    applyTab(keep, true)
+end sub
+
+' ---------------------------------------------------------------------------
+' * (options) — refresh channels + EPG sidecar
+' ---------------------------------------------------------------------------
+
+sub openFeedOptions()
+    scene = m.top.getScene()
+    if scene = invalid then return
+    if m.feedDialog <> invalid then return
+
+    dialog = createObject("roSGNode", "Dialog")
+    dialog.title = "Cable TV"
+    if m.feedLoading = true then
+        dialog.message = "A refresh is already running."
+        dialog.buttons = ["OK"]
+        m.feedDialogActions = ["cancel"]
+    else
+        dialog.message = "Reload channel streams and guide listings from the CDN."
+        dialog.buttons = ["Refresh", "Cancel"]
+        m.feedDialogActions = ["refresh", "cancel"]
+    end if
+    dialog.observeField("buttonSelected", "onFeedDialogButton")
+    dialog.observeField("wasClosed", "onFeedDialogClosed")
+    m.feedDialog = dialog
+    scene.dialog = dialog
+end sub
+
+sub onFeedDialogButton()
+    dialog = m.feedDialog
+    if dialog = invalid then return
+    idx = dialog.buttonSelected
+    act = "cancel"
+    if m.feedDialogActions <> invalid and idx <> invalid and idx >= 0 and idx < m.feedDialogActions.count() then
+        act = m.feedDialogActions[idx]
+    end if
+    closeFeedDialog()
+    if act = "refresh" then loadFeed()
+end sub
+
+sub onFeedDialogClosed()
+    closeFeedDialog()
+end sub
+
+sub closeFeedDialog()
+    dialog = m.feedDialog
+    m.feedDialog = invalid
+    m.feedDialogActions = []
+    if dialog <> invalid then dialog.close = true
+    scene = m.top.getScene()
+    if scene <> invalid and scene.dialog <> invalid then scene.dialog = invalid
+    m.top.setFocus(true)
 end sub
 
 function prettyCategory(raw as String) as String
@@ -1054,6 +1125,11 @@ end sub
 
 function onKeyEvent(key as String, press as Boolean) as Boolean
     if not press then return false
+
+    if key = "options" then
+        openFeedOptions()
+        return true
+    end if
 
     if m.zone = "tabs" then
         if key = "left" then
