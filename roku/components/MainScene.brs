@@ -124,10 +124,10 @@ sub onNavSelected()
         showHome()
     else if section = "search" then
         showSearch()
-    else if section = "livetv" then
+    else if section = "livetv" or section = "cable" then
+        ' "cable" kept as an alias so older nav state still opens the unified guide
+        m.section = "livetv"
         showLiveTv()
-    else if section = "cable" then
-        showCableTv()
     else if section = "sports" then
         showSports()
     end if
@@ -138,8 +138,7 @@ end sub
 function sectionScreenExists(section as String) as Boolean
     if section = "home" then return m.homeScreen <> invalid
     if section = "search" then return m.searchScreen <> invalid
-    if section = "livetv" then return m.liveTvScreen <> invalid
-    if section = "cable" then return m.cableTvScreen <> invalid
+    if section = "livetv" or section = "cable" then return m.liveTvScreen <> invalid
     if section = "sports" then return m.sportsScreen <> invalid
     return false
 end function
@@ -275,24 +274,6 @@ sub showLiveTv()
     m.liveTvScreen.setFocus(true)
 end sub
 
-sub showCableTv()
-    clearScreens()
-    m.sideNav.active = "cable"
-    m.cableTvScreen = createObject("roSGNode", "CableTvScreen")
-    m.cableTvScreen.config = m.config
-    m.cableTvScreen.observeField("selectedItem", "onCableTvSelected")
-    m.cableTvScreen.observeField("loadingMessage", "onSoftLoading")
-    m.cableTvScreen.observeField("openMenu", "onOpenMenu")
-    m.screens.appendChild(m.cableTvScreen)
-    m.cableTvScreen.setFocus(true)
-end sub
-
-sub onCableTvSelected()
-    item = m.cableTvScreen.selectedItem
-    if item = invalid then return
-    showVideo(item)
-end sub
-
 sub showSearch()
     clearScreens()
     m.sideNav.active = "search"
@@ -344,8 +325,6 @@ sub onSoftLoading()
         msg = m.searchScreen.loadingMessage
     else if m.liveTvScreen <> invalid then
         msg = m.liveTvScreen.loadingMessage
-    else if m.cableTvScreen <> invalid then
-        msg = m.cableTvScreen.loadingMessage
     else if m.sportsScreen <> invalid then
         msg = m.sportsScreen.loadingMessage
     else if m.homeScreen <> invalid then
@@ -734,12 +713,9 @@ sub restoreSectionFocus()
     else if m.section = "search" and m.searchScreen <> invalid then
         m.searchScreen.setFocus(true)
         m.searchScreen.refocus = true
-    else if m.section = "livetv" and m.liveTvScreen <> invalid then
+    else if (m.section = "livetv" or m.section = "cable") and m.liveTvScreen <> invalid then
         m.liveTvScreen.setFocus(true)
         m.liveTvScreen.refocus = true
-    else if m.section = "cable" and m.cableTvScreen <> invalid then
-        m.cableTvScreen.setFocus(true)
-        m.cableTvScreen.refocus = true
     else if m.section = "sports" and m.sportsScreen <> invalid then
         m.sportsScreen.setFocus(true)
         m.sportsScreen.refocus = true
