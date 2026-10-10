@@ -84,6 +84,10 @@ def require_env(name: str) -> str:
     return val
 
 
+class TmdbAuthError(SystemExit):
+    """TMDB rejected the API key (HTTP 401)."""
+
+
 def http_get(url: str, timeout: int = 120) -> bytes:
     req = urllib.request.Request(
         url,
@@ -92,8 +96,17 @@ def http_get(url: str, timeout: int = 120) -> bytes:
             "User-Agent": "PlexFlix-CableEPG/1.1",
         },
     )
-    with urllib.request.urlopen(req, timeout=timeout) as resp:
-        return resp.read()
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            return resp.read()
+    except urllib.error.HTTPError as exc:
+        if exc.code == 401 and "api.themoviedb.org" in url:
+            raise TmdbAuthError(
+                "TMDB HTTP 401 Unauthorized — check TMDB_API_KEY in your env file.\n"
+                "Use the API Key (v3 auth) from https://www.themoviedb.org/settings/api\n"
+                "(not the v4 Read Access Token). Or pass --skip-tmdb to upload EPG only."
+            ) from exc
+        raise
 
 
 def load_map(path: Path) -> dict[str, str]:
@@ -297,13 +310,27 @@ def tmdb_get(api_key: str, path: str, params: dict[str, str] | None = None) -> A
     url = "https://api.themoviedb.org/3" + path + "?" + urllib.parse.urlencode(q)
     try:
         raw = http_get(url, timeout=30)
-    except (urllib.error.URLError, TimeoutError, OSError) as exc:
+    except TmdbAuthError:
+        raise
+    except (urllib.error.URLError, TimeoutError, OSError, urllib.error.HTTPError) as exc:
         print(f"  tmdb error {path}: {exc}")
         return None
     try:
         return json.loads(raw.decode("utf-8"))
     except json.JSONDecodeError:
         return None
+
+
+def validate_tmdb_key(api_key: str) -> None:
+    """Fail fast before looping hundreds of titles."""
+    print("tmdb: validating API key…")
+    data = tmdb_get(api_key, "/configuration")
+    if data is None or not isinstance(data, dict) or "images" not in data:
+        raise TmdbAuthError(
+            "TMDB key validation failed. Check TMDB_API_KEY (v3 auth), "
+            "or pass --skip-tmdb for listings without show art/cast."
+        )
+    print("tmdb: API key ok")
 
 
 def tmdb_search_best(api_key: str, title: str) -> tuple[str, dict[str, Any]] | None:
@@ -470,6 +497,7 @@ def apply_tmdb_to_programmes(
                 unique_titles.append(str(prog.get("title") or ""))
     stats["titles"] = len(unique_titles)
     print(f"tmdb: enriching {len(unique_titles)} unique titles (cache {cache_path})")
+    validate_tmdb_key(api_key)
 
     title_meta: dict[str, dict[str, Any] | None] = {}
     for title in unique_titles:
