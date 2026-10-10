@@ -2,12 +2,11 @@ sub init()
     m.profileRow = m.top.findNode("profileRow")
     m.pinOverlay = m.top.findNode("pinOverlay")
     m.pinTitle = m.top.findNode("pinTitle")
-    m.pinSub = m.top.findNode("pinSub")
     m.pinDigits = m.top.findNode("pinDigits")
+    m.pinKeypad = m.top.findNode("pinKeypad")
     m.pinError = m.top.findNode("pinError")
     m.brand = m.top.findNode("brand")
     m.headline = m.top.findNode("headline")
-    m.tagline = m.top.findNode("tagline")
 
     m.profiles = GetProfiles()
     m.index = 0
@@ -16,15 +15,17 @@ sub init()
     m.pinValue = ""
     m.pinTarget = invalid
     m.pinSlots = []
+    m.pinKeys = []
+    m.pinKeyIndex = 0
 
     buildTiles()
     buildPinDigits()
+    buildPinKeypad()
     paintTiles()
     m.top.setFocus(true)
 
     m.brand.opacity = 0
     m.headline.opacity = 0
-    m.tagline.opacity = 0
     m.profileRow.opacity = 0
     m.enterTimer = createObject("roSGNode", "Timer")
     m.enterTimer.repeat = true
@@ -38,8 +39,7 @@ sub onEnterTick()
     m.enterStep = m.enterStep + 1
     if m.enterStep = 1 then m.brand.opacity = 1
     if m.enterStep = 4 then m.headline.opacity = 1
-    if m.enterStep = 7 then m.tagline.opacity = 1
-    if m.enterStep = 10 then
+    if m.enterStep = 8 then
         m.profileRow.opacity = 1
         m.enterTimer.control = "stop"
     end if
@@ -62,18 +62,18 @@ sub buildTiles()
         p = m.profiles[i]
         g = m.profileRow.createChild("Group")
         g.translation = [startX + i * (tileW + gap), 0]
-        g.scaleRotateCenter = [Int(tileW / 2), 220]
+        g.scaleRotateCenter = [Int(tileW / 2), 200]
 
         glow = g.createChild("Rectangle")
         glow.width = tileW + 16
-        glow.height = 456
+        glow.height = 400
         glow.translation = [-8, -8]
         glow.color = valueOr(p.accent, "0xE50914")
         glow.opacity = 0
 
         panel = g.createChild("Rectangle")
         panel.width = tileW
-        panel.height = 440
+        panel.height = 384
         panel.color = "0x141C2C"
 
         accentBar = g.createChild("Rectangle")
@@ -84,14 +84,14 @@ sub buildTiles()
         avatar = g.createChild("Rectangle")
         avatar.width = 160
         avatar.height = 160
-        avatar.translation = [Int((tileW - 160) / 2), 72]
+        avatar.translation = [Int((tileW - 160) / 2), 56]
         avatar.color = valueOr(p.accent, "0xE50914")
         avatar.opacity = 0.92
 
         initial = g.createChild("Label")
         initial.width = 160
         initial.height = 160
-        initial.translation = [Int((tileW - 160) / 2), 72]
+        initial.translation = [Int((tileW - 160) / 2), 56]
         initial.horizAlign = "center"
         initial.vertAlign = "center"
         initial.text = UCase(Left(valueOr(p.title, "?"), 1))
@@ -99,38 +99,14 @@ sub buildTiles()
         initial.font = MakeFont("pkg:/fonts/Outfit-Bold.ttf", 72)
 
         titleLbl = g.createChild("Label")
-        titleLbl.translation = [24, 270]
+        titleLbl.translation = [24, 248]
         titleLbl.width = tileW - 48
-        titleLbl.height = 48
+        titleLbl.height = 56
         titleLbl.horizAlign = "center"
+        titleLbl.vertAlign = "center"
         titleLbl.text = valueOr(p.title, "Profile")
         titleLbl.color = "0xFFFFFF"
-        titleLbl.font = MakeFont("pkg:/fonts/Outfit-Bold.ttf", 36)
-
-        blurb = g.createChild("Label")
-        blurb.translation = [32, 328]
-        blurb.width = tileW - 64
-        blurb.height = 72
-        blurb.horizAlign = "center"
-        blurb.wrap = true
-        blurb.maxLines = 2
-        blurb.text = valueOr(p.subtitle, "")
-        blurb.color = "0x8FA0B8"
-        blurb.font = MakeFont("pkg:/fonts/Outfit-Regular.ttf", 22)
-
-        lockLbl = g.createChild("Label")
-        lockLbl.translation = [24, 400]
-        lockLbl.width = tileW - 48
-        lockLbl.height = 28
-        lockLbl.horizAlign = "center"
-        if valueOr(p.pin, "") <> "" then
-            lockLbl.text = "Passcode required"
-            lockLbl.color = "0xC5CCD8"
-        else
-            lockLbl.text = "No passcode"
-            lockLbl.color = "0x5E6880"
-        end if
-        lockLbl.font = MakeFont("pkg:/fonts/Outfit-Medium.ttf", 20)
+        titleLbl.font = MakeFont("pkg:/fonts/Outfit-Bold.ttf", 40)
 
         m.tiles.push({
             group: g,
@@ -167,6 +143,121 @@ sub buildPinDigits()
             txt: digitTxt
         })
     end for
+end sub
+
+sub buildPinKeypad()
+    while m.pinKeypad.getChildCount() > 0
+        m.pinKeypad.removeChildIndex(0)
+    end while
+    m.pinKeys = []
+
+    ' Phone layout: 1-9, then Del + 0
+    labels = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "Del", "0"]
+    actions = ["", "", "", "", "", "", "", "", "", "del", ""]
+    cellW = 96
+    cellH = 72
+    gapX = 16
+    gapY = 14
+    gridW = 3 * cellW + 2 * gapX
+    startX = Int((880 - 8 - gridW) / 2) - 88
+
+    for i = 0 to labels.count() - 1
+        row = Int(i / 3)
+        col = i mod 3
+        if i = 9 then
+            row = 3
+            col = 0
+        else if i = 10 then
+            row = 3
+            col = 1
+        end if
+
+        g = m.pinKeypad.createChild("Group")
+        g.translation = [startX + col * (cellW + gapX), row * (cellH + gapY)]
+
+        bg = g.createChild("Rectangle")
+        bg.width = cellW
+        bg.height = cellH
+        bg.color = "0x1A2438"
+
+        lbl = g.createChild("Label")
+        lbl.width = cellW
+        lbl.height = cellH
+        lbl.horizAlign = "center"
+        lbl.vertAlign = "center"
+        lbl.text = labels[i]
+        lbl.color = "0xFFFFFF"
+        if labels[i] = "Del" then
+            lbl.font = MakeFont("pkg:/fonts/Outfit-SemiBold.ttf", 26)
+        else
+            lbl.font = MakeFont("pkg:/fonts/Outfit-Bold.ttf", 36)
+        end if
+
+        entry = {
+            group: g,
+            bg: bg,
+            row: row,
+            col: col,
+            label: labels[i]
+        }
+        if actions[i] = "del" then
+            entry.action = "del"
+        else
+            entry.digit = labels[i]
+        end if
+        m.pinKeys.push(entry)
+    end for
+    m.pinKeyIndex = 4
+    paintPinKeypad()
+end sub
+
+sub paintPinKeypad()
+    for i = 0 to m.pinKeys.count() - 1
+        keyEntry = m.pinKeys[i]
+        if i = m.pinKeyIndex then
+            keyEntry.bg.color = "0xE50914"
+        else
+            keyEntry.bg.color = "0x1A2438"
+        end if
+    end for
+end sub
+
+function pinKeyIndexAt(row as Integer, col as Integer) as Integer
+    for i = 0 to m.pinKeys.count() - 1
+        keyEntry = m.pinKeys[i]
+        if keyEntry.row = row and keyEntry.col = col then return i
+    end for
+    return -1
+end function
+
+sub movePinKey(deltaRow as Integer, deltaCol as Integer)
+    if m.pinKeys.count() = 0 then return
+    keyEntry = m.pinKeys[m.pinKeyIndex]
+    row = keyEntry.row + deltaRow
+    col = keyEntry.col + deltaCol
+    if row < 0 or row > 3 then return
+    if col < 0 or col > 2 then return
+    idx = pinKeyIndexAt(row, col)
+    if idx >= 0 then
+        m.pinKeyIndex = idx
+        paintPinKeypad()
+    end if
+end sub
+
+sub activatePinKey()
+    if m.pinKeyIndex < 0 or m.pinKeyIndex >= m.pinKeys.count() then return
+    keyEntry = m.pinKeys[m.pinKeyIndex]
+    if keyEntry.action = "del" then
+        if Len(m.pinValue) > 0 then
+            m.pinValue = Left(m.pinValue, Len(m.pinValue) - 1)
+            m.pinError.text = ""
+            paintPin()
+        end if
+        return
+    end if
+    if keyEntry.digit <> invalid and keyEntry.digit <> "" then
+        appendPinDigit(keyEntry.digit)
+    end if
 end sub
 
 sub paintTiles()
@@ -217,10 +308,10 @@ sub openPin(profile as Object)
     m.pinTarget = profile
     m.pinValue = ""
     m.pinError.text = ""
-    m.pinTitle.text = "Enter passcode"
-    m.pinSub.text = valueOr(profile.title, "Adults") + " profile"
     m.pinOverlay.visible = true
+    m.pinKeyIndex = 4
     paintPin()
+    paintPinKeypad()
     paintTiles()
 end sub
 
@@ -239,36 +330,6 @@ sub appendPinDigit(digit as String)
     m.pinError.text = ""
     paintPin()
     if Len(m.pinValue) = 4 then tryUnlock()
-end sub
-
-sub nudgePinDigit(goingUp as Boolean)
-    if Len(m.pinValue) >= 4 then return
-    if Len(m.pinValue) = 0 then
-        appendPinDigit("0")
-        return
-    end if
-    last = Mid(m.pinValue, Len(m.pinValue), 1)
-    n = Asc(last) - 48
-    if n < 0 or n > 9 then n = 0
-    if goingUp = true then
-        n = n + 1
-        if n > 9 then n = 0
-    else
-        n = n - 1
-        if n < 0 then n = 9
-    end if
-    m.pinValue = Left(m.pinValue, Len(m.pinValue) - 1) + Chr(48 + n)
-    m.pinError.text = ""
-    paintPin()
-end sub
-
-sub backspacePin()
-    if Len(m.pinValue) = 0 then
-        closePin()
-        return
-    end if
-    m.pinValue = Left(m.pinValue, Len(m.pinValue) - 1)
-    paintPin()
 end sub
 
 sub tryUnlock()
@@ -324,25 +385,24 @@ function onKeyEvent(key as String, press as Boolean) as Boolean
             return true
         end if
         if key = "OK" or key = "play" then
-            if Len(m.pinValue) = 4 then tryUnlock()
+            activatePinKey()
             return true
         end if
-        if key = "back" or key = "rewind" then
-            backspacePin()
-            return true
-        end if
-        if key = "right" then
-            if Len(m.pinValue) < 4 then appendPinDigit("0")
+        if key = "back" then
+            closePin()
             return true
         end if
         if key = "left" then
-            backspacePin()
+            movePinKey(0, -1)
             return true
-        end if
-        if key = "up" or key = "down" then
-            goingUp = false
-            if key = "up" then goingUp = true
-            nudgePinDigit(goingUp)
+        else if key = "right" then
+            movePinKey(0, 1)
+            return true
+        else if key = "up" then
+            movePinKey(-1, 0)
+            return true
+        else if key = "down" then
+            movePinKey(1, 0)
             return true
         end if
         return true

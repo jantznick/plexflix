@@ -30,25 +30,20 @@
             <Label id="headline" translation="[120, 178]" width="1680" height="56" text="Who is watching?" color="0xE8EEF8">
                 <Font role="font" uri="pkg:/fonts/Outfit-SemiBold.ttf" size="42" />
             </Label>
-            <Label id="tagline" translation="[120, 240]" width="900" height="40" text="Pick a profile to personalize libraries and live TV." color="0x8FA0B8">
-                <Font role="font" uri="pkg:/fonts/Outfit-Regular.ttf" size="26" />
-            </Label>
         </Group>
 
-        <Group id="profileRow" translation="[0, 360]" />
+        <Group id="profileRow" translation="[0, 380]" />
 
         <Group id="pinOverlay" visible="false">
             <Rectangle width="1920" height="1080" color="0x05070C" opacity="0.72" />
-            <Rectangle id="pinPanel" translation="[560, 280]" width="800" height="420" color="0x121A2A" />
-            <Rectangle translation="[560, 280]" width="8" height="420" color="0xE50914" />
-            <Label id="pinTitle" translation="[608, 320]" width="704" height="48" text="Enter passcode" color="0xFFFFFF">
+            <Rectangle id="pinPanel" translation="[520, 240]" width="880" height="600" color="0x121A2A" />
+            <Rectangle translation="[520, 240]" width="8" height="600" color="0xE50914" />
+            <Label id="pinTitle" translation="[568, 280]" width="784" height="48" text="Passcode" color="0xFFFFFF" horizAlign="center">
                 <Font role="font" uri="pkg:/fonts/Outfit-Bold.ttf" size="36" />
             </Label>
-            <Label id="pinSub" translation="[608, 372]" width="704" height="36" text="Adults profile" color="0x8FA0B8">
-                <Font role="font" uri="pkg:/fonts/Outfit-Regular.ttf" size="24" />
-            </Label>
-            <Group id="pinDigits" translation="[680, 460]" />
-            <Label id="pinError" translation="[608, 580]" width="704" height="36" text="" color="0xFF5A64" horizAlign="center">
+            <Group id="pinDigits" translation="[680, 360]" />
+            <Group id="pinKeypad" translation="[608, 460]" />
+            <Label id="pinError" translation="[568, 760]" width="784" height="36" text="" color="0xFF5A64" horizAlign="center">
                 <Font role="font" uri="pkg:/fonts/Outfit-Medium.ttf" size="22" />
             </Label>
         </Group>
