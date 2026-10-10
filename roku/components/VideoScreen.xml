@@ -24,6 +24,8 @@
         <!-- Live streams that never start usually sit in buffering forever
              rather than erroring; restarted on every bit of buffer progress -->
         <Timer id="stallTimer" duration="30" repeat="false" />
+        <!-- Cable / Live TV: advance title + cast when the current airing ends -->
+        <Timer id="liveMetaTimer" duration="15" repeat="true" />
 
         <Animation id="fade" duration="0.22" easeFunction="outQuad">
             <FloatFieldInterpolator id="fadeInterp" key="[0.0, 1.0]" keyValue="[0.0, 1.0]" fieldToInterp="controls.opacity" />
