@@ -10,7 +10,7 @@ This is intentionally a **separate product** from PlexFlix (the Roku channel in 
 | --- | --- |
 | Product shape | Early-Roku style **stick** we eventually sell — not a TV manufacturer, not ads/platform sprawl |
 | Base OS | **Linux kiosk** image (boots straight to our UI) |
-| Shell toolkit | **Native from day one** (not a web kiosk shell) |
+| Shell toolkit | **Native from day one** (not a web kiosk shell); Flutter vs Qt vs Slint still open — see [shell-toolkit.md](./shell-toolkit.md) |
 | Channels | **Web viewer** runtime (HTML/CSS/JS + TV APIs) — no custom BrightScript-like language |
 | Sideload (MVP) | Developer-mode **web UI**, Roku-style; **one sideloaded channel** at a time |
 | Updates for channels | Auto-update / multi-channel distribution → **channel store** (after sideload prototype) |
@@ -22,8 +22,9 @@ This is intentionally a **separate product** from PlexFlix (the Roku channel in 
 | Doc | Contents |
 | --- | --- |
 | [architecture.md](./architecture.md) | Layers: hardware → image → media → runtime → native shell |
+| [shell-toolkit.md](./shell-toolkit.md) | Native shell shortlist (Flutter / Qt / Slint) in plain language |
 | [channels.md](./channels.md) | Web channel model, APIs, packaging, sideload, store later |
-| [hardware.md](./hardware.md) | How to find boards/sticks (AliExpress, Alibaba, ODMs), what to buy, red flags |
+| [hardware.md](./hardware.md) | Finding boards/sticks; will a Pi/Radxa prototype translate? |
 | [roadmap.md](./roadmap.md) | Prototype → sideload MVP → branding/store → sellable stick |
 
 ## One-sentence vision

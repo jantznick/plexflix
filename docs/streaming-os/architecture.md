@@ -53,7 +53,7 @@ Details: [channels.md](./channels.md).
 
 ### 5. Native home shell
 
-Chosen toolkit should be **native from the start** (candidates to evaluate at implementation time: Flutter, Qt, Slint, or similar — pick one when the repo spins up).
+Chosen toolkit should be **native from the start**. Shortlist and plain-language pros/cons: [shell-toolkit.md](./shell-toolkit.md) (Flutter, Qt/QML, Slint — pick with a spike, not a guess).
 
 Shell owns:
 

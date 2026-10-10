@@ -4,9 +4,9 @@ Phased so software learning is not blocked on retail hardware, and store/brandin
 
 ## Phase 0 — Docs & decisions (this folder)
 
-- Vision, architecture, channel model, hardware shopping guide  
+- Vision, architecture, channel model, shell toolkit shortlist, hardware shopping guide  
 - Locked: Linux kiosk, native shell, web channels, single-slot sideload  
-- Open: exact shell toolkit, browser engine, SoC winner, trust/signing  
+- Open: Flutter vs Qt vs Slint (see [shell-toolkit.md](./shell-toolkit.md)), browser engine, SoC winner, trust/signing  
 
 ## Phase 1 — Dev-mule prototype
 

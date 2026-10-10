@@ -39,6 +39,54 @@ These show up constantly in sticks and cheap TV boxes. Prefer a chip with **some
 
 For “we sell a stick,” plan on **Amlogic or Rockchip ODM stick**. For “we boot our shell this quarter,” a **Pi 5 or Radxa board** is a legitimate development mule.
 
+## Will a Pi 5 / Radxa prototype translate to a stick?
+
+**Short answer:** Yes for *your app and product logic*. No for *the disk image and drivers*. Both being Linux is why the mule is worth it — it is not a magic “compile once, run on any stick” machine.
+
+Think of two layers:
+
+| Layer | Examples | Ports Pi → stick? |
+| --- | --- | --- |
+| **Product software** | Native shell UI, focus behavior, sideload web UI, channel packages, “play this HLS URL,” settings screens | **Mostly yes** — this is why we prototype here |
+| **Board enablement** | Bootloader, kernel, Wi‑Fi driver, video decode plugins, HDMI hotplug, CEC quirks, thermal limits | **Mostly no** — redo / re-test per SoC family |
+
+### What you get to keep
+
+- Shell screens, navigation model, and toolkit choice (Flutter/Qt/Slint)  
+- Channel manifest format, developer sideload flow, JS bridge shape  
+- How the shell launches the web runtime and asks the system player to play  
+- A huge amount of “what should this product feel like?” learning  
+
+Same Linux userspace ideas (systemd, Wayland/X, files on disk, network manager concepts) show up on Pi and on sticks. Your mental model transfers.
+
+### What you do *not* get for free
+
+- A Pi SD card image will not boot an Amlogic stick  
+- Wi‑Fi/BT chips differ → pairing a remote may need another pass  
+- Hardware video decode APIs differ by vendor → the **player** often needs stick-specific glue even if the UI stays identical  
+- Sticks are slower and hotter → UI jank and 4K decode limits appear only on the real device  
+- CEC/remote edge cases are per TV + per board  
+
+So: prototyping on Pi/Radxa is still the right move. You are not wasting work — you are building the **portable middle**, then paying a known “porting tax” to put that middle on stick silicon.
+
+### How to make translation easier
+
+1. **Keep board-specific junk in one place** — player backend, key input device paths, Wi‑Fi setup hooks. Shell UI should not import Pi-only APIs.  
+2. **Prefer a Radxa (or similar) Rockchip board if you already lean Rockchip sticks** — closer SoC family than Pi → smaller port later. Pi remains fine if you value docs/community over SoC similarity.  
+3. **Buy the AliExpress stick early, even if software starts on the mule** — run the *same* shell + webview + HLS test on both as soon as a minimal image exists.  
+4. **Treat “works on Pi” as Phase 1 exit, not product exit** — Phase 3 in [roadmap.md](./roadmap.md) is specifically stick dogfood.
+
+### Pi vs Radxa as the mule
+
+| | **Raspberry Pi 5** | **Radxa (RK3566/RK3588 class)** |
+| --- | --- | --- |
+| Docs / beginner path | Best | Good |
+| Closeness to cheap TV sticks | Low (different silicon vendor) | Higher if you pick Rockchip sticks |
+| Risk of “works on mule, dies on stick” | Higher for decode/GPU assumptions | Lower within same SoC family |
+| As a product you sell | Poor stick story | Still usually a board, not a retail stick — but closer |
+
+**Rule of thumb:** Pi 5 if you want the smoothest learning curve. Radxa Rockchip if you want the mule to resemble the stick you might sell. Either beats trying to develop *only* on a locked Android stick from day one.
+
 ## How to search AliExpress
 
 Try queries like:
