@@ -37,7 +37,22 @@ These show up constantly in sticks and cheap TV boxes. Prefer a chip with **some
 | **Allwinner** | Budget sticks | Hit-or-miss Linux; only if docs/BSP are clear |
 | **Raspberry Pi / CM4 / CM5** | Dev kits, custom carriers | Best docs; great **prototype**. Weak as a long-term retail stick (cost, thermals, supply, “not an ODM stick line”) |
 
-For “we sell a stick,” plan on **Amlogic or Rockchip ODM stick**. For “we boot our shell this quarter,” a **Pi 5 or Radxa board** is a legitimate development mule.
+For “we sell a stick,” plan on **Amlogic or Rockchip ODM stick**. For “we boot our shell this quarter,” a **Pi 5, Radxa, or Libre Computer Amlogic board** is a legitimate development mule.
+
+### Already own a Libre Computer Le Potato?
+
+**[AML-S905X-CC (“Le Potato”)](https://libre.computer/products/aml-s905x-cc/)** is **Amlogic S905X**, not Rockchip. The `AML-` prefix and `S905X` name are the giveaway — same silicon vendor as a huge fraction of cheap TV sticks/boxes.
+
+| | Le Potato (AML-S905X-CC) |
+| --- | --- |
+| SoC | Amlogic S905X (GXL), 4× Cortex-A53 |
+| RAM | 1 GB or 2 GB variants (prefer **2 GB** for shell + web runtime) |
+| Video | Hardware decode path for H.264/H.265/VP9; HDMI 2.0 / 4K-class claims |
+| Why it’s useful | **Mainline-friendly Amlogic** board from a real vendor (images, docs, long support story) — rarer than random sticks |
+| Bonus | Onboard IR receiver, Pi-like form factor/GPIO, CoreELEC/LibreELEC/Armbian-class options exist |
+| Limits vs a 2024 stick | Older than S905X4/Y4-class sticks; 100 Mbit Ethernet; 1 GB models will feel tight next to Chromium |
+
+**For our project:** this is an excellent **Amlogic mule** if you already have one — closer to Avenue A stick silicon than a Pi 5. Start OS/shell/player experiments here before buying more boards. Still re-test on a modern stick later (decode/Wi‑Fi/thermals differ), but you’re not starting from the wrong vendor family.
 
 ## Will a Pi 5 / Radxa prototype translate to a stick?
 
@@ -72,20 +87,21 @@ So: prototyping on Pi/Radxa is still the right move. You are not wasting work �
 ### How to make translation easier
 
 1. **Keep board-specific junk in one place** — player backend, key input device paths, Wi‑Fi setup hooks. Shell UI should not import Pi-only APIs.  
-2. **Prefer a Radxa (or similar) Rockchip board if you already lean Rockchip sticks** — closer SoC family than Pi → smaller port later. Pi remains fine if you value docs/community over SoC similarity.  
+2. **Match mule vendor to likely stick vendor when you can** — Le Potato / other Amlogic boards if you lean Amlogic sticks; Radxa if you lean Rockchip; Pi if you prioritize docs over SoC similarity.  
 3. **Buy the AliExpress stick early, even if software starts on the mule** — run the *same* shell + webview + HLS test on both as soon as a minimal image exists.  
-4. **Treat “works on Pi” as Phase 1 exit, not product exit** — Phase 3 in [roadmap.md](./roadmap.md) is specifically stick dogfood.
+4. **Treat “works on mule” as Phase 1 exit, not product exit** — Phase 3 in [roadmap.md](./roadmap.md) is specifically stick dogfood.
 
-### Pi vs Radxa as the mule
+### Mule board comparison
 
-| | **Raspberry Pi 5** | **Radxa (RK3566/RK3588 class)** |
-| --- | --- | --- |
-| Docs / beginner path | Best | Good |
-| Closeness to cheap TV sticks | Low (different silicon vendor) | Higher if you pick Rockchip sticks |
-| Risk of “works on mule, dies on stick” | Higher for decode/GPU assumptions | Lower within same SoC family |
-| As a product you sell | Poor stick story | Still usually a board, not a retail stick — but closer |
+| | **Raspberry Pi 5** | **Radxa (RK3566/RK3588 class)** | **Libre Computer Le Potato (S905X)** |
+| --- | --- | --- | --- |
+| Vendor family | Broadcom | Rockchip | **Amlogic** |
+| Docs / beginner path | Best | Good | Good (Libre Computer + community images) |
+| Closeness to cheap TV sticks | Low | Higher if you pick Rockchip sticks | **Higher if you pick Amlogic sticks** (common) |
+| Risk of “works on mule, dies on stick” | Higher for decode/GPU assumptions | Lower within Rockchip | Lower within Amlogic; still re-test on newer S905X4/Y4 |
+| As a product you sell | Poor stick story | Board, not retail stick | Board, not retail stick — great learning platform |
 
-**Rule of thumb:** Pi 5 if you want the smoothest learning curve. Radxa Rockchip if you want the mule to resemble the stick you might sell. Either beats trying to develop *only* on a locked Android stick from day one.
+**Rule of thumb:** Use the Le Potato if you already own it (especially 2 GB). Pi 5 for gentlest Linux learning. Radxa if you deliberately bet Rockchip. Any of these beats developing *only* on a locked Android stick.
 
 ## How to search AliExpress
 
@@ -187,8 +203,8 @@ A **smart-home universal remote** (ESPHome / Home Assistant, AVR + lights + scen
 
 ## Suggested buying plan (concrete)
 
-1. **Now:** one comfortable Linux board (Pi 5 or Radxa RK board) for shell + runtime bring-up.  
-2. **In parallel:** 1–2 AliExpress **Amlogic** sticks and 1 **Rockchip** stick/box with named SoCs — use as evaluation vehicles.  
+1. **Now:** one comfortable Linux board for shell + runtime bring-up — **Le Potato if you have it**, else Pi 5 / Radxa.  
+2. **In parallel:** 1–2 AliExpress **Amlogic** sticks (natural next step after Le Potato) and optionally 1 **Rockchip** stick/box — evaluation vehicles.  
 3. **Score them** on: serial boot, Wi‑Fi under Linux, 1080p HLS decode, CEC, thermals under load, remote options.  
 4. **Winner:** chase that SoC’s ODM on Alibaba for a white-label reference.  
 5. **Family MVP:** flash your image onto that reference stick; dogfood daily.  

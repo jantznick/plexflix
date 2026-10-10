@@ -10,7 +10,7 @@ Phased so software learning is not blocked on retail hardware, and store/brandin
 
 ## Phase 1 — Dev-mule prototype
 
-**Hardware:** Pi 5 / Radxa / mini PC (see [hardware.md](./hardware.md)).
+**Hardware:** Libre Computer Le Potato (Amlogic) if available, else Pi 5 / Radxa / mini PC (see [hardware.md](./hardware.md)).
 
 **Software goals:**
 
