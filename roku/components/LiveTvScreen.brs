@@ -95,7 +95,7 @@ sub init()
     m.feedDialogActions = []
     m.cableLineup = loadCableLineup()
     m.cableTitles = GetHardcodedCableTitleNumbers()
-    m.cableFallbackNum = 800
+    m.cableFallbackNum = 67.1
 
     buildTabs()
     buildSlotHeader()
@@ -503,53 +503,50 @@ function loadCableLineup() as Object
     if GetInterface(channels, "ifAssociativeArray") = invalid then return out
     for each feedId in channels
         n = channels[feedId]
-        if n <> invalid then out[LCase(valueOr(feedId, ""))] = Int(n)
+        if n <> invalid then out[LCase(valueOr(feedId, ""))] = n * 1.0
     end for
     return out
 end function
 
-function cableLineupLookup(feedId as String, title as String) as Integer
+function cableLineupLookup(feedId as String, title as String) as Float
     fid = LCase(valueOr(feedId, "").Trim())
     t = LCase(valueOr(title, "").Trim())
 
-    ' 1) Exact feed id against hardcoded / JSON map (no DoesExist — loop compare)
+    ' 1) Exact feed id against hardcoded / JSON map
     if fid <> "" and m.cableLineup <> invalid then
         for each key in m.cableLineup
-            if LCase(valueOr(key, "")) = fid then return Int(m.cableLineup[key])
+            if LCase(valueOr(key, "")) = fid then return m.cableLineup[key] * 1.0
         end for
-        ' Bare id: "abc" ↔ "timst-abc"
         for each key in m.cableLineup
             bare = LCase(valueOr(key, ""))
             if Left(bare, 6) = "timst-" then bare = Mid(bare, 7)
-            if bare <> "" and bare = fid then return Int(m.cableLineup[key])
+            if bare <> "" and bare = fid then return m.cableLineup[key] * 1.0
         end for
     end if
 
-    ' 2) Exact / normalized title aliases
+    ' 2) Title aliases
     if t <> "" then
         titles = m.cableTitles
         if titles = invalid then titles = GetHardcodedCableTitleNumbers()
         for each key in titles
-            if LCase(valueOr(key, "")) = t then return Int(titles[key])
+            if LCase(valueOr(key, "")) = t then return titles[key] * 1.0
         end for
-        ' "USA Network" vs "usa", "Disney Channel" vs "disney channel"
         for each key in titles
             k = LCase(valueOr(key, ""))
             if k <> "" and (t = k or Instr(1, t, k) = 1) then
-                ' Prefer longer / more specific alias matches by requiring near-full length
-                if Len(t) <= Len(k) + 4 then return Int(titles[key])
+                if Len(t) <= Len(k) + 4 then return titles[key] * 1.0
             end if
         end for
     end if
 
-    return 0
+    return 0.0
 end function
 
-function preferredCableNumber(feedId as String, title as String) as Integer
+function preferredCableNumber(feedId as String, title as String) as Float
     n = cableLineupLookup(feedId, title)
     if n > 0 then return n
     n = m.cableFallbackNum
-    m.cableFallbackNum = m.cableFallbackNum + 1
+    m.cableFallbackNum = m.cableFallbackNum + 1.0
     return n
 end function
 
@@ -564,7 +561,8 @@ function makeCableChannel(item as Object, category as String) as Dynamic
     if streamUrl = "" then return invalid
     key = "cable:" + feedId
     if feedId = "" then key = "cable:" + streamUrl
-    order = preferredCableNumber(feedId, title) * 10000.0
+    ' Float VCN (e.g. 7.15) so Cable ABC sorts between OTA 7.1 and 7.2
+    order = preferredCableNumber(feedId, title)
     raw = []
     if item.programs <> invalid then
         for each p in item.programs
@@ -631,10 +629,10 @@ sub finishUnifiedGuide()
     m.top.loadingMessage = ""
     m.channels = []
     m.byKey = {}
-    ' Reload map + reset fallback so a prior miss cannot stick channels at 800+
+    ' Reload map + reset fallback (unmatched → 67.1+)
     m.cableLineup = loadCableLineup()
     m.cableTitles = GetHardcodedCableTitleNumbers()
-    m.cableFallbackNum = 800
+    m.cableFallbackNum = 67.1
     allowPlex = ProfileAllowsPlexLiveTv(m.top.config)
     if allowPlex then
         for each ch in m.plexChannels
@@ -646,9 +644,8 @@ sub finishUnifiedGuide()
     end if
     for each ch in m.cableChannels
         if ProfileAllowsCableChannel(m.top.config, valueOr(ch.feedId, ""), valueOr(ch.callSign, "")) then
-            ' Force hardcoded lineup every time (id + title). Number column blank.
-            ' Scale *10000 so Cable 70 sorts with Plex VCNs ("2.1"→20001, "70"→700000).
-            order = preferredCableNumber(valueOr(ch.feedId, ""), valueOr(ch.callSign, "")) * 10000.0
+            ' Hardcoded float VCN every time. Number column stays blank.
+            order = preferredCableNumber(valueOr(ch.feedId, ""), valueOr(ch.callSign, ""))
             ch.lineupOrder = order
             ch.sortKey = order
             ch.number = ""
@@ -676,43 +673,25 @@ sub finishUnifiedGuide()
     updateGridInfo()
 end sub
 
-function vcnSortKey(number as String) as Float
-    ' Same scale as PlexTask.sortChannels: "2.1" → 20001, "70" → 700000
-    if number = "" then return 999999999.0
-    major = 0.0
-    minor = 0.0
-    seenDot = false
-    for i = 1 to Len(number)
-        c = Mid(number, i, 1)
-        if c >= "0" and c <= "9" then
-            if seenDot then
-                minor = minor * 10.0 + (Asc(c) - 48)
-            else
-                major = major * 10.0 + (Asc(c) - 48)
-            end if
-        else if (c = "." or c = "-") and seenDot = false then
-            seenDot = true
-        else
-            exit for
-        end if
-    end for
-    return major * 10000.0 + minor
-end function
-
 function plexLineupOrder(ch as Object) as Float
-    if ch = invalid then return 999999999.0
+    if ch = invalid then return 99999.0
     n = valueOr(ch.number, "")
-    if n <> "" then return vcnSortKey(n)
-    return 999999999.0
+    if n <> "" then
+        v = Val(n)
+        if v > 0 then return v
+    end if
+    return 99999.0
 end function
 
 function channelSortKey(ch as Object) as Float
-    if ch = invalid then return 999999999.0
+    if ch = invalid then return 99999.0
     if ch.lineupOrder <> invalid then return ch.lineupOrder * 1.0
     if ch.sortKey <> invalid then return ch.sortKey * 1.0
     n = valueOr(ch.number, "")
-    if n = "" then return 999999999.0
-    return vcnSortKey(n)
+    if n = "" then return 99999.0
+    v = Val(n)
+    if v > 0 then return v
+    return 99999.0
 end function
 
 sub markUsedNumber(used as Object, key as Float)
