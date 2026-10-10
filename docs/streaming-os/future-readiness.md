@@ -115,6 +115,64 @@ Matter/Home Assistant: “Scene: Movie mode” dims lights and launches a channe
 
 - **Prep:** Shell deep links (`channel://…`, `play?…`); don’t bury launch only inside the D-pad home row.
 
+### Universal smart-home remote (ESPHome-centered)
+
+A **separate but related product idea**: sell a programmable remote that talks to the home theater *and* the rest of the house (AVR, TV, lights, scenes) — with **ESPHome** (and Home Assistant) as the customization center, open enough for power users out of the box.
+
+This is **not** the same thing as “the BLE remote in the stick box,” and it should not gate the OS MVP. It *does* fit the ecosystem if sequenced honestly.
+
+#### Is there space?
+
+| Signal | Reality |
+| --- | --- |
+| Harmony is gone | Real gap for “one remote for AVR + TV + streamer + lights” |
+| SofaBaton / similar | Prove people still pay for universal remotes; often cloudier / less HA-native |
+| ESPHome + HA community | Strong niche that already wants local, YAML-custom, no subscription |
+| Our stick OS | Needs *a* remote anyway; a smart remote can be the **Pro companion** later |
+
+So: **yes, there is space** — mostly as an **enthusiast / local-home beachhead product**, not as a Walmart impulse buy on day one. Stretch risk is real if it becomes a second full company (plastics, battery, IR learning, support) while the OS is unfinished.
+
+#### How it relates to the stick OS
+
+```text
+ESPHome remote ──BLE HID / Wi‑Fi──► Stick shell (nav, play, Home)
+       │
+       ├── IR / IP ──► TV, AVR, projector, discrete power
+       │
+       └── HA / ESPHome ──► lights, scenes, “Movie mode”
+```
+
+- **MVP stick:** ship or recommend a simple BLE/IR remote (see [hardware.md](./hardware.md)).  
+- **Down the road:** bless an ESPHome remote as the “works great with our stick + HA” accessory.  
+- **OS prep (cheap):** input abstraction, deep links for scenes, optional network API so a button can `launch channel` / `play` without pretending to be only a HID keyboard.
+
+#### Why ESPHome is a good center of gravity
+
+- Local-first, fits privacy / anti-cloud wedge  
+- Custom button maps out of the box for the audience who will buy this  
+- Same home-server mental model as Plex/multiview  
+- You can prototype hardware without waiting for the stick OS to exist  
+
+#### Honest sequencing
+
+| Phase | Remote story |
+| --- | --- |
+| OS Phase 1–2 | Any working remote; don’t build a universal product yet |
+| Parallel hobby (optional) | Personal ESPHome remote prototype — learn IR/BLE/HA, zero OS dependency |
+| After stick dogfood | Decide if the remote is SKU #2 under the same brand |
+| Retail stick | Cheap remote in-box; link “Pro remote” as upsell for HA homes |
+
+**Verdict:** Down-the-road / parallel-hobby idea, **not** stretching if kept as a companion. Stretching if it steals the first year from sideload + shell. Architect the stick to welcome it; productize the remote only when the OS is daily-drivable *or* when you explicitly choose “remote-first business, stick later.”
+
+#### Competitors / analogs (remote-specific)
+
+- **Logitech Harmony** (discontinued) — category ghost; expectations still exist  
+- **SofaBaton, SwitchBot Universal Remote, etc.** — consumer universal remotes  
+- **Phone apps / HA dashboards** — free substitute; lose the “grab one puck” feel  
+- **Folding DIY ESP32 remotes** — your early buyers; also your open-source competition  
+
+Wedge if you proceed: **HA/ESPHome-native, theater + lights, first-class pairing with our stick**, repairable/custom — not “another Harmony clone with a cloud app.”
+
 ### Accessibility as a platform feature
 
 System-wide captions, audio description, high-contrast shell, dyslexia-friendly type, switch control — especially differentiating vs cluttered Android TV skins.

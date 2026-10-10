@@ -98,6 +98,14 @@ Stick is a distribution vehicle for PlexFlix-like experience (or a partner’s l
 - **Pro:** Clear story for your existing work  
 - **Con:** Looks like a single-app box unless the channel platform is real  
 
+### 9. Companion universal remote (ESPHome / HA)
+
+Sell a programmable remote for theater + smart home; stick OS is one target among TV/AVR/lights. See [future-readiness.md](./future-readiness.md#universal-smart-home-remote-esphome-centered).
+
+- **Pro:** Harmony-shaped gap; fits local-first enthusiasts; can be prototyped independently  
+- **Con:** Different hardware business (tooling, battery, IR support); can distract from OS  
+- **When:** Hobby anytime; product after stick dogfood — or only if you deliberately go remote-first  
+
 ---
 
 **Hidden third product identity worth naming:**  
@@ -220,3 +228,5 @@ Tech stack (Linux kiosk, native shell, web channels) **supports all of the above
 - How central is PlexFlix (or local media) to the marketing wedge?  
 
 Record answers here when you have them; they beat rewriting the architecture every quarter.
+
+Long-horizon product bets (AR/VR, AI-generated content, short-form, companions, etc.) live in [future-readiness.md](./future-readiness.md) — they should not freeze Avenue A/B, but they can influence Pro SKU headroom and API design.

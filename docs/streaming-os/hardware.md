@@ -183,6 +183,8 @@ MVP options:
 
 For development, a spare Bluetooth keyboard or a Flirc-style dongle is fine. For a product, budget a simple 10–20 button BLE remote in the BOM.
 
+A **smart-home universal remote** (ESPHome / Home Assistant, AVR + lights + scenes) is a possible later companion product — not the MVP in-box remote. Positioning and sequencing: [future-readiness.md](./future-readiness.md#universal-smart-home-remote-esphome-centered).
+
 ## Suggested buying plan (concrete)
 
 1. **Now:** one comfortable Linux board (Pi 5 or Radxa RK board) for shell + runtime bring-up.  
