@@ -25,6 +25,7 @@ This is intentionally a **separate product** from PlexFlix (the Roku channel in 
 | [shell-toolkit.md](./shell-toolkit.md) | Native shell shortlist (Flutter / Qt / Slint) in plain language |
 | [channels.md](./channels.md) | Web channel model, APIs, packaging, sideload, store later |
 | [hardware.md](./hardware.md) | Finding boards/sticks; will a Pi/Radxa prototype translate? |
+| [business-positioning.md](./business-positioning.md) | Volume stick vs premium box, other models, competitor map |
 | [roadmap.md](./roadmap.md) | Prototype → sideload MVP → branding/store → sellable stick |
 
 ## One-sentence vision
