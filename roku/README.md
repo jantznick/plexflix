@@ -20,11 +20,10 @@ This is intentionally a **design/UX shell** on top of existing Plex data. Creden
   so returning is instant and the hubs refresh in the background (also after
   playback), updating only the rows whose items changed
 - Selecting a library in the sidebar opens that library’s shelves
-- **TV**: one guide like a cable box — Plex Live TV channels plus Entertainment/Cartoons from the sports feed
-  (listings from optional `cableEpgUrl` sidecar). Cable rows start around channel **900** and are tagged **CABLE**.
-  Record / Upcoming / Rules stay Plex-only; on Cable channels `*` shows **Recording not available** plus **Refresh guide**.
-  OK watches (Plex tunes via DVR; Cable uses the direct stream). Back from a Plex channel you were watching can return
-  with that channel still in the preview
+- **TV**: one guide like a cable box — Plex Live TV plus Entertainment/Cartoons, sorted by channel number
+  (locals first via Plex VCNs, then basic cable ~70–300, kids, sports, premiums 500+ from `cable_lineup.json`).
+  Cable rows are tagged **CABLE**. Record / Upcoming / Rules stay Plex-only; on Cable, `*` shows
+  **Recording not available** plus **Refresh guide**. OK watches (Plex DVR tune vs Cable direct stream).
 - **DVR**: Upcoming lists scheduled recordings (OK cancels one). Rules lists each show with a rule; OK opens an editor for
   its Plex recording settings (quality, replace lower quality, padding, commercial detection, episodes to keep, …;
   OK on a setting opens its choices to pick from), plus Save and Delete. "Edit series rule" is also on the guide and Upcoming menus.
@@ -75,7 +74,7 @@ Optional keys:
 
 ### Cable listings in the TV guide (EPG)
 
-Entertainment / Cartoons appear in the unified **TV** guide (channels ~900+). Listings live in a **sidecar** JSON (`cable-epg.json`) so your 5-minute sports feed publish never wipes them. Full setup is under [Cable TV EPG sidecar](#cable-tv-epg-sidecar-home-server) below.
+Entertainment / Cartoons appear in the unified **TV** guide with cable-style channel numbers (`roku/source/cable_lineup.json`). Listings live in a **sidecar** JSON (`cable-epg.json`) so your 5-minute sports feed publish never wipes them. Full setup is under [Cable TV EPG sidecar](#cable-tv-epg-sidecar-home-server) below.
 
 Notes:
 

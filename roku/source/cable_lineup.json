@@ -1,0 +1,71 @@
+{
+  "_comment": "Preferred virtual channel numbers for Cable feed ids in the unified TV guide. Locals from Plex keep their VCN (2.1, 7.1, …); these place cable nets after broadcast, getting more premium/exotic as numbers rise.",
+  "channels": {
+    "timst-abc": 70,
+    "timst-nbc": 71,
+    "timst-cbs": 72,
+    "timst-fox": 73,
+    "timst-cw": 74,
+    "timst-telemundo": 76,
+    "timst-wapa-america": 77,
+    "timst-wapa-deportes": 78,
+
+    "timst-cnbc": 110,
+    "timst-bbc-america": 120,
+
+    "timst-usa-network": 200,
+    "timst-syfy": 202,
+    "timst-tnt": 204,
+    "timst-tbs": 206,
+    "timst-trutv": 208,
+    "timst-amc": 210,
+    "timst-fx": 212,
+    "timst-fxx": 214,
+    "timst-fxm": 216,
+    "timst-freeform": 218,
+    "timst-bravo": 220,
+    "timst-comedy-central": 222,
+    "timst-ae-network": 224,
+    "timst-mtv": 230,
+    "timst-axs-tv": 240,
+
+    "timst-discovery-channel": 250,
+    "timst-animal-planet": 252,
+    "timst-american-heroes-channel": 254,
+    "timst-discovery-turbo": 256,
+    "timst-discovery-family": 258,
+    "timst-food-network": 260,
+    "timst-hgtv": 262,
+
+    "timst-cartoon-network": 280,
+    "timst-boomerang": 282,
+    "timst-nickelodeon": 284,
+    "timst-nick-jr": 286,
+    "timst-nicktoons": 288,
+    "timst-teenick": 290,
+    "timst-disney-channel": 292,
+    "timst-disney-junior": 294,
+    "timst-disney-xd": 296,
+    "timst-cbeebies": 298,
+    "timst-starz-kids-and-family": 299,
+
+    "timst-fox-deportes": 400,
+
+    "timst-hbo": 500,
+    "timst-hbo-comedy": 502,
+    "timst-hbo-drama": 504,
+    "timst-hbo-movies": 506,
+    "timst-hbo-latino": 508,
+
+    "timst-showtime": 520,
+    "timst-showtime-2": 522,
+    "timst-showtime-extreme": 524,
+    "timst-showtime-family-zone": 526,
+    "timst-showtime-next": 528,
+    "timst-showtime-women": 530,
+
+    "timst-starz": 540,
+    "timst-starz-cinema": 542,
+    "timst-starz-comedy": 544
+  }
+}

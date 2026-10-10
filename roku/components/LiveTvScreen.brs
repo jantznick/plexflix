@@ -92,6 +92,8 @@ sub init()
     m.cableLoading = false
     m.feedDialog = invalid
     m.feedDialogActions = []
+    m.cableLineup = loadCableLineup()
+    m.cableFallbackNum = 800
 
     buildTabs()
     buildSlotHeader()
@@ -414,18 +416,14 @@ sub onCableFeedLoaded()
 
     rows = response.rows
     if rows = invalid then rows = []
-    channelNum = 900
     for each rowData in rows
         league = valueOr(rowData.title, "")
         if isCableCategory(league) then
             items = rowData.items
             if items = invalid then items = []
             for each item in items
-                ch = makeCableChannel(item, league, channelNum)
-                if ch <> invalid then
-                    m.cableChannels.push(ch)
-                    channelNum = channelNum + 1
-                end if
+                ch = makeCableChannel(item, league)
+                if ch <> invalid then m.cableChannels.push(ch)
             end for
         end if
     end for
@@ -471,7 +469,31 @@ sub onCableEpgLoaded()
     finishUnifiedGuide()
 end sub
 
-function makeCableChannel(item as Object, category as String, number as Integer) as Dynamic
+function loadCableLineup() as Object
+    out = {}
+    raw = ReadAsciiFile("pkg:/source/cable_lineup.json")
+    if raw = invalid or raw = "" then return out
+    parsed = ParseJson(raw)
+    if parsed = invalid or parsed.channels = invalid then return out
+    channels = parsed.channels
+    if GetInterface(channels, "ifAssociativeArray") = invalid then return out
+    for each feedId in channels
+        n = channels[feedId]
+        if n <> invalid then out[feedId] = Int(n)
+    end for
+    return out
+end function
+
+function preferredCableNumber(feedId as String) as Integer
+    if feedId <> "" and m.cableLineup <> invalid and m.cableLineup.DoesExist(feedId) then
+        return m.cableLineup[feedId]
+    end if
+    n = m.cableFallbackNum
+    m.cableFallbackNum = m.cableFallbackNum + 1
+    return n
+end function
+
+function makeCableChannel(item as Object, category as String) as Dynamic
     if item = invalid then return invalid
     title = valueOr(item.title, "")
     if title = "" then title = "Channel"
@@ -482,6 +504,7 @@ function makeCableChannel(item as Object, category as String, number as Integer)
     if streamUrl = "" then return invalid
     key = "cable:" + feedId
     if feedId = "" then key = "cable:" + streamUrl
+    number = preferredCableNumber(feedId)
     raw = []
     if item.programs <> invalid then
         for each p in item.programs
@@ -494,6 +517,7 @@ function makeCableChannel(item as Object, category as String, number as Integer)
         source: "cable",
         feedId: feedId,
         number: StrI(number).Trim(),
+        sortKey: number * 1.0,
         callSign: title,
         name: title,
         logo: logo,
@@ -546,14 +570,22 @@ sub finishUnifiedGuide()
     m.top.loadingMessage = ""
     m.channels = []
     m.byKey = {}
+    usedNumbers = {}
     for each ch in m.plexChannels
+        ch.sortKey = channelSortKey(ch)
+        markUsedNumber(usedNumbers, ch.sortKey)
         m.channels.push(ch)
         m.byKey[ch.key] = ch
     end for
     for each ch in m.cableChannels
+        ' If a Plex VCN already owns this integer, nudge Cable up so the lineup stays unique
+        ch.sortKey = avoidNumberCollision(usedNumbers, channelSortKey(ch))
+        ch.number = formatChannelNumber(ch.sortKey)
+        markUsedNumber(usedNumbers, ch.sortKey)
         m.channels.push(ch)
         m.byKey[ch.key] = ch
     end for
+    sortChannelsByNumber()
     rebuildPrograms()
 
     if m.channels.count() = 0 then
@@ -571,6 +603,60 @@ sub finishUnifiedGuide()
     refocusAnchor(nowSeconds())
     renderGrid()
     updateGridInfo()
+end sub
+
+function channelSortKey(ch as Object) as Float
+    if ch = invalid then return 99999.0
+    if ch.sortKey <> invalid then return ch.sortKey
+    n = valueOr(ch.number, "")
+    if n = "" then return 99999.0
+    return Val(n)
+end function
+
+sub markUsedNumber(used as Object, key as Float)
+    ' Track whole-number slots so Cable 210 doesn't sit on top of Plex "210"
+    slot = Int(key)
+    used[StrI(slot).Trim()] = true
+end sub
+
+function avoidNumberCollision(used as Object, preferred as Float) as Float
+    slot = Int(preferred)
+    if slot < 1 then slot = 1
+    guard = 0
+    while used.DoesExist(StrI(slot).Trim()) and guard < 200
+        slot = slot + 1
+        guard = guard + 1
+    end while
+    return slot * 1.0
+end function
+
+function formatChannelNumber(key as Float) as String
+    ' Prefer whole numbers for Cable; keep decimals for Plex VCNs like 7.1
+    whole = Int(key)
+    if Abs(key - whole) < 0.001 then return StrI(whole).Trim()
+    text = Str(key).Trim()
+    return text
+end function
+
+sub sortChannelsByNumber()
+    n = m.channels.count()
+    if n < 2 then return
+    for i = 0 to n - 2
+        best = i
+        bestKey = channelSortKey(m.channels[i])
+        for j = i + 1 to n - 1
+            k = channelSortKey(m.channels[j])
+            if k < bestKey then
+                best = j
+                bestKey = k
+            end if
+        end for
+        if best <> i then
+            tmp = m.channels[i]
+            m.channels[i] = m.channels[best]
+            m.channels[best] = tmp
+        end if
+    end for
 end sub
 
 sub maybeLoadMore()
