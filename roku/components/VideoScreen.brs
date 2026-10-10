@@ -791,8 +791,10 @@ end sub
 
 sub maybeEnrichLiveMeta()
     if m.item = invalid then return
-    if not m.isLive and not m.isSport then return
-    ' Already have cast (Cable sidecar / sports) — leave meta alone
+    mediaType = valueOrEmpty(m.item.mediaType)
+    ' Live TV always; Cable (sport) only when the sidecar didn't already ship cast.
+    ' Skip sports-game titles — TMDB matches those poorly.
+    if mediaType <> "livetv" and mediaType <> "sport" then return
     if m.item.cast <> invalid and GetInterface(m.item.cast, "ifArray") <> invalid then
         if m.item.cast.count() > 0 then return
     end if
@@ -804,6 +806,10 @@ sub maybeEnrichLiveMeta()
     title = valueOrEmpty(m.item.shortTitle)
     if title = "" then title = valueOrEmpty(m.item.title)
     if title = "" then return
+    if mediaType = "sport" then
+        low = LCase(title)
+        if Instr(1, low, " vs ") > 0 or Instr(1, low, " @ ") > 0 then return
+    end if
 
     m.enrichTask = createObject("roSGNode", "PlexTask")
     m.enrichTask.config = cfg
