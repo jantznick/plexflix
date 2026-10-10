@@ -193,9 +193,9 @@ swallows the remote).
   bar, read from `Video.bufferingStatus` (the number Roku's stock UI shows)
 
 A live sports stream that errors, ends before playing, or makes no buffer
-progress for 30 seconds closes the player and returns to the game page. The
-stream you tried stays highlighted, and the page says why it failed so you can
-pick another.
+progress for 30 seconds closes the player. Multi-feed games return to the
+picker with the failed stream highlighted; single-feed games return to the
+sports guide.
 
 Switching audio, subtitles or version writes the choice to Plex
 (`PUT /library/parts/{id}`) and restarts the transcode at the current position,
