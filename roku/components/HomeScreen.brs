@@ -35,7 +35,6 @@ sub init()
     end if
 
     m.splashMosaic = m.top.findNode("splashMosaic")
-    m.loadingPanel = m.top.findNode("loadingPanel")
     applyQuietLoad()
 
     m.snapTimer = createObject("roSGNode", "Timer")

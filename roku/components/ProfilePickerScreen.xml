@@ -42,7 +42,7 @@
                 <Font role="font" uri="pkg:/fonts/Outfit-Bold.ttf" size="36" />
             </Label>
             <Group id="pinDigits" translation="[680, 360]" />
-            <Group id="pinKeypad" translation="[608, 460]" />
+            <Group id="pinKeypad" translation="[796, 460]" />
             <Label id="pinError" translation="[568, 760]" width="784" height="36" text="" color="0xFF5A64" horizAlign="center">
                 <Font role="font" uri="pkg:/fonts/Outfit-Medium.ttf" size="22" />
             </Label>
