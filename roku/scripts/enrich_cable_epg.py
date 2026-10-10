@@ -63,6 +63,22 @@ TMDB_CAST_LIMIT = 8
 TMDB_DESC_LIMIT = 320
 
 
+def _strip_inline_comment(val: str) -> str:
+    """Drop unquoted trailing ` # comment` (common .env mistake)."""
+    in_single = False
+    in_double = False
+    for i, ch in enumerate(val):
+        if ch == "'" and not in_double:
+            in_single = not in_single
+        elif ch == '"' and not in_single:
+            in_double = not in_double
+        elif ch == "#" and not in_single and not in_double:
+            # allow `#` only when preceded by whitespace (or start)
+            if i == 0 or val[i - 1].isspace():
+                return val[:i]
+    return val
+
+
 def load_env_file(path: Path) -> None:
     """Load KEY=VALUE pairs. Explicit --env-file values always win over the shell."""
     if not path.is_file():
@@ -73,6 +89,7 @@ def load_env_file(path: Path) -> None:
             continue
         key, val = line.split("=", 1)
         key = key.strip()
+        val = _strip_inline_comment(val)
         # strip quotes + CR (Windows/edited-on-Mac line endings)
         val = val.strip().strip('"').strip("'").strip("\r")
         if key:
@@ -573,14 +590,32 @@ def upload_b2(local_path: Path, remote_key: str) -> None:
     key_id = require_env("B2_KEY_ID")
     app_key = require_env("B2_APPLICATION_KEY")
     bucket_name = require_env("B2_BUCKET")
+    remote_key = remote_key.strip().lstrip("/")
+    if not remote_key:
+        raise SystemExit("B2_REMOTE_KEY is empty")
 
     info = InMemoryAccountInfo()
     api = B2Api(info)
     api.authorize_account("production", key_id, app_key)
     bucket = api.get_bucket_by_name(bucket_name)
     print(f"upload {local_path.name} -> b2://{bucket_name}/{remote_key}")
-    bucket.upload_local_file(local_file=str(local_path), file_name=remote_key)
-    print("upload complete")
+    print(f"  local bytes {local_path.stat().st_size}")
+    uploaded = bucket.upload_local_file(
+        local_file=str(local_path),
+        file_name=remote_key,
+        content_type="application/json",
+    )
+    # Confirm the object is actually addressable under that name (catches wrong bucket/key).
+    info_by_name = bucket.get_file_info_by_name(remote_key)
+    download_url = bucket.get_download_url(remote_key)
+    public_guess = (
+        os.environ.get("B2_PUBLIC_URL")
+        or DEFAULT_PUBLIC_URL
+    ).strip()
+    print(f"upload complete fileId={uploaded.id_}")
+    print(f"  verified name={info_by_name.file_name} size={info_by_name.size}")
+    print(f"  b2 download URL: {download_url}")
+    print(f"  expected public URL: {public_guess}")
 
 
 def main() -> int:

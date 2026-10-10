@@ -364,9 +364,11 @@ Edit `~/plexflix-cable-epg.env`:
 EPG_XMLTV_URL=https://epgshare01.online/epgshare01/epg_ripper_US2.xml.gz
 
 # Optional — synopsis / backdrop / cast for the guide + player (same key as PlexConfig tmdbApiKey)
+# Use the v3 API Key. Put comments on their own lines — not after the value.
 TMDB_API_KEY=your_tmdb_v3_key
 
-# Backblaze B2 — same bucket you already use for the sports feed / splash
+# Backblaze B2 — same bucket/keys you already use for the sports feed / splash
+# (no region setting; b2sdk talks to the native B2 API)
 B2_BUCKET=roku-hockey
 B2_KEY_ID=your_key_id
 B2_APPLICATION_KEY=your_application_key
