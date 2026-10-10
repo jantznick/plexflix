@@ -1697,14 +1697,15 @@ sub stopAndClose()
     m.top.closed = true
 end sub
 
-' Sports HLS (and some live feeds) can keep audible after the screen is
-' removed if we only flip control=stop. Mute + clear content first.
+' Tear the Video node out of the tree so the decoder actually releases.
+' control=stop alone is not enough for some sports HLS feeds.
 sub hardStopVideo()
     if m.video = invalid then return
-    m.video.mute = true
     m.video.control = "stop"
     m.video.content = invalid
-    m.video.visible = false
+    parent = m.video.getParent()
+    if parent <> invalid then parent.removeChild(m.video)
+    m.video = invalid
 end sub
 
 '--------------------------------------------------------------------

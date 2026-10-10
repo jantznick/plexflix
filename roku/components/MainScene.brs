@@ -814,16 +814,16 @@ sub showVideo(item as Object)
     updateNavRail()
 end sub
 
-' Belt-and-suspenders: sports HLS can keep decoding audio after removeChild
-' if the Video node was not muted/cleared first.
+' Stop and detach the Video node before the screen leaves the tree so the
+' decoder releases (sports HLS can keep playing after a bare removeChild).
 sub forceStopVideoScreen(screen as Object)
     if screen = invalid then return
     vid = screen.findNode("video")
     if vid = invalid then return
-    vid.mute = true
     vid.control = "stop"
     vid.content = invalid
-    vid.visible = false
+    parent = vid.getParent()
+    if parent <> invalid then parent.removeChild(vid)
 end sub
 
 sub onPlaybackReport(event as Object)
