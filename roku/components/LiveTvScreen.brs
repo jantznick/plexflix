@@ -73,6 +73,7 @@ sub init()
     m.tabNames = ["Guide", "Upcoming", "Rules"]
     m.tab = 0
     m.zone = "grid"
+    m.tabsBuiltForKids = invalid
     m.schedule = { upcoming: [], rules: [] }
     m.recByAiring = {}
     m.recByGuid = {}
@@ -343,6 +344,17 @@ end function
 
 sub onConfigReady()
     if m.top.config = invalid then return
+    if not ProfileAllowsPlexLiveTv(m.top.config) then
+        ' Kids: Guide only — no Plex DVR Upcoming/Rules
+        m.tabNames = ["Guide"]
+        while m.tabRow.getChildCount() > 1
+            m.tabRow.removeChildIndex(m.tabRow.getChildCount() - 1)
+        end while
+        m.tabNodes = []
+        m.tab = 0
+        buildTabs()
+        paintTabs()
+    end if
     loadGuide()
     loadSchedule()
 end sub
@@ -350,6 +362,17 @@ end sub
 sub loadGuide()
     m.top.loadingMessage = "Loading TV guide…"
     m.cableChannels = []
+    ' Kids: skip Plex Live TV entirely — streaming Cable nets only
+    if not ProfileAllowsPlexLiveTv(m.top.config) then
+        m.plexChannels = []
+        m.byKey = {}
+        m.ctx = invalid
+        m.loadedStart = m.minWin
+        m.loadedEnd = m.minWin + m.chunkLen
+        m.top.loadingMessage = "Loading channels…"
+        loadCableChannels()
+        return
+    end if
     m.gridTask = createObject("roSGNode", "PlexTask")
     m.gridTask.config = m.top.config
     m.gridTask.action = "liveTvGrid"
@@ -571,19 +594,24 @@ sub finishUnifiedGuide()
     m.channels = []
     m.byKey = {}
     usedNumbers = {}
-    for each ch in m.plexChannels
-        ch.sortKey = channelSortKey(ch)
-        markUsedNumber(usedNumbers, ch.sortKey)
-        m.channels.push(ch)
-        m.byKey[ch.key] = ch
-    end for
+    allowPlex = ProfileAllowsPlexLiveTv(m.top.config)
+    if allowPlex then
+        for each ch in m.plexChannels
+            ch.sortKey = channelSortKey(ch)
+            markUsedNumber(usedNumbers, ch.sortKey)
+            m.channels.push(ch)
+            m.byKey[ch.key] = ch
+        end for
+    end if
     for each ch in m.cableChannels
-        ' Sort like a cable lineup, but leave the number column blank (name only)
-        ch.sortKey = avoidNumberCollision(usedNumbers, channelSortKey(ch))
-        ch.number = ""
-        markUsedNumber(usedNumbers, ch.sortKey)
-        m.channels.push(ch)
-        m.byKey[ch.key] = ch
+        if ProfileAllowsCableChannel(m.top.config, valueOr(ch.feedId, ""), valueOr(ch.callSign, "")) then
+            ' Sort like a cable lineup, but leave the number column blank (name only)
+            ch.sortKey = avoidNumberCollision(usedNumbers, channelSortKey(ch))
+            ch.number = ""
+            markUsedNumber(usedNumbers, ch.sortKey)
+            m.channels.push(ch)
+            m.byKey[ch.key] = ch
+        end if
     end for
     sortChannelsByNumber()
     rebuildPrograms()
@@ -757,6 +785,13 @@ end sub
 ' ---------------------------------------------------------------------------
 
 sub loadSchedule()
+    if not ProfileAllowsPlexLiveTv(m.top.config) then
+        m.schedule = { upcoming: [], rules: [] }
+        m.recByAiring = {}
+        m.recByGuid = {}
+        m.seriesByGuid = {}
+        return
+    end if
     m.scheduleTask = createObject("roSGNode", "PlexTask")
     m.scheduleTask.config = m.top.config
     m.scheduleTask.action = "dvrSchedule"

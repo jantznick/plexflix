@@ -6,6 +6,7 @@
     </interface>
     <script type="text/brightscript" uri="MainScene.brs" />
     <script type="text/brightscript" uri="pkg:/source/PlexConfig.brs" />
+    <script type="text/brightscript" uri="pkg:/source/Profiles.brs" />
     <script type="text/brightscript" uri="pkg:/source/Fonts.brs" />
 
     <children>

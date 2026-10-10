@@ -9,8 +9,13 @@ This is intentionally a **design/UX shell** on top of existing Plex data. Creden
 ## What you get
 
 - Dark Netflix-like home: billboard hero + horizontal shelves
+- **Profiles splash** at launch: pick **Kids** or **Adults**. Kids unlocks
+  with no passcode and only sees matching libraries (title contains kid /
+  family / disney / nick / …), cartoon + basic broadcast Cable nets (no Plex
+  Live TV / DVR, no Live Sports, no Discover). Adults use passcode `1990` for
+  the full channel. Sidebar includes **Switch Profile** to return to the picker
 - **Collapsible sidebar** (Left to open): Home, **Search**, your **Libraries**,
-  **TV** (Plex Live TV + Cable nets), Live Sports.
+  **TV** (Plex Live TV + Cable nets), Live Sports (Adults).
   Collapsed, a 72px icon rail stays on browse screens with the current section
   lit; it is hidden on detail pages, in the player and over the launch splash
 - **Search**: Plex Discover catalog search for any movie/show (not just what’s

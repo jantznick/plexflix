@@ -23,17 +23,19 @@ sub init()
     m.liveTvScreen = invalid
     m.cableTvScreen = invalid
     m.searchScreen = invalid
+    m.profilePicker = invalid
     m.section = "home"
     m.navExpanded = false
     m.activeLibraryId = ""
+    m.profileReady = false
 
-    m.sideNav.config = m.config
     m.sideNav.expanded = false
     m.sideNav.observeField("selected", "onNavSelected")
     m.sideNav.observeField("selectedLibrary", "onLibrarySelected")
     ' The nav can collapse itself (Back); keep the scrim and focus in sync when it does
     m.sideNav.observeField("expanded", "onNavExpandedChanged")
-    showHome()
+    m.sideNav.suppressed = true
+    showProfilePicker()
 end sub
 
 ' The icon rail belongs to browse surfaces: detail pages and the player use
@@ -46,9 +48,43 @@ end sub
 
 ' Nothing draws over the splash mosaic, open menu or rail
 function splashShowing() as Boolean
+    if m.profilePicker <> invalid then return true
     if m.homeScreen = invalid then return false
     return m.homeScreen.splashActive = true
 end function
+
+sub showProfilePicker()
+    clearScreens()
+    ' Drop a parked Home so the next profile gets a fresh load
+    if m.homeScreen <> invalid then
+        m.screens.removeChild(m.homeScreen)
+        m.homeScreen = invalid
+    end if
+    m.profileReady = false
+    m.sideNav.suppressed = true
+    m.profilePicker = createObject("roSGNode", "ProfilePickerScreen")
+    m.profilePicker.config = m.config
+    m.profilePicker.observeField("selectedProfile", "onProfileSelected")
+    m.screens.appendChild(m.profilePicker)
+    m.profilePicker.setFocus(true)
+    updateNavRail()
+end sub
+
+sub onProfileSelected()
+    profile = m.profilePicker.selectedProfile
+    if profile = invalid then return
+    m.config = ApplyProfileToConfig(GetPlexConfig(), profile)
+    m.profileReady = true
+    if m.profilePicker <> invalid then
+        m.screens.removeChild(m.profilePicker)
+        m.profilePicker = invalid
+    end if
+    m.sideNav.suppressed = false
+    m.sideNav.config = m.config
+    m.sideNav.active = "home"
+    m.section = "home"
+    showHome()
+end sub
 
 sub onHomeSplashChange()
     updateNavRail()
@@ -104,6 +140,7 @@ sub clearScreens()
     m.liveTvScreen = invalid
     m.cableTvScreen = invalid
     m.searchScreen = invalid
+    ' Profile picker is managed by showProfilePicker / onProfileSelected
     updateNavRail()
 end sub
 
@@ -111,6 +148,12 @@ sub onNavSelected()
     section = m.sideNav.selected
     if section = invalid or section = "" then return
     if section = "library" then return ' handled by onLibrarySelected
+
+    if section = "profiles" then
+        setNavExpanded(false)
+        showProfilePicker()
+        return
+    end if
 
     if section = m.section and sectionScreenExists(section) then
         setNavExpanded(false)
@@ -129,6 +172,7 @@ sub onNavSelected()
         m.section = "livetv"
         showLiveTv()
     else if section = "sports" then
+        if not ProfileAllowsSports(m.config) then return
         showSports()
     end if
 end sub
@@ -301,6 +345,7 @@ sub onLiveTvSelected()
 end sub
 
 sub showSports()
+    if not ProfileAllowsSports(m.config) then return
     clearScreens()
     m.sideNav.active = "sports"
     m.sportsScreen = createObject("roSGNode", "SportsScreen")
@@ -751,6 +796,9 @@ function onKeyEvent(key as String, press as Boolean) as Boolean
             return true
         else if m.libraryAllScreen <> invalid then
             m.libraryAllScreen.close = true
+            return true
+        else if m.profilePicker <> invalid then
+            m.top.exitApp = true
             return true
         else if m.navExpanded then
             m.top.exitApp = true

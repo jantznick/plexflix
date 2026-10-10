@@ -891,23 +891,26 @@ function buildHome(cfg as Object) as Object
     seenTitles = {}
     movieSectionKeys = []
     showSectionKeys = []
+    kidsMode = ProfileIsKids(cfg)
 
-    ' Continue Watching / On Deck — exempt from 15-min (always useful)
-    onDeck = plexGet(cfg, "/library/onDeck")
-    if onDeck.ok = true then
-        addUniqueRowLoose(root, seenTitles, "Continue Watching", enrichEpisodeShowDescriptions(cfg, preferShowPosters(collectMetadata(cfg, onDeck.json))))
-    end if
+    if not kidsMode then
+        ' Continue Watching / On Deck — exempt from 15-min (always useful)
+        onDeck = plexGet(cfg, "/library/onDeck")
+        if onDeck.ok = true then
+            addUniqueRowLoose(root, seenTitles, "Continue Watching", enrichEpisodeShowDescriptions(cfg, preferShowPosters(collectMetadata(cfg, onDeck.json))))
+        end if
 
-    ' Recently Added (global)
-    recent = plexGet(cfg, "/library/recentlyAdded")
-    if recent.ok = true then
-        addUniqueRow(root, seenTitles, "Recently Added", collectMetadata(cfg, recent.json))
-    end if
+        ' Recently Added (global)
+        recent = plexGet(cfg, "/library/recentlyAdded")
+        if recent.ok = true then
+            addUniqueRow(root, seenTitles, "Recently Added", collectMetadata(cfg, recent.json))
+        end if
 
-    ' Home hubs
-    hubs = plexGet(cfg, "/hubs/home?count=" + safeToStr(cfg.rowSize))
-    if hubs.ok = true and hubs.json <> invalid and hubs.json.MediaContainer <> invalid then
-        appendHubRows(root, seenTitles, hubs.json.MediaContainer.Hub, cfg)
+        ' Home hubs
+        hubs = plexGet(cfg, "/hubs/home?count=" + safeToStr(cfg.rowSize))
+        if hubs.ok = true and hubs.json <> invalid and hubs.json.MediaContainer <> invalid then
+            appendHubRows(root, seenTitles, hubs.json.MediaContainer.Hub, cfg)
+        end if
     end if
 
     ' Per-library hubs + collect section keys for genre shelves
@@ -921,20 +924,24 @@ function buildHome(cfg as Object) as Object
                 if sectionType = "movie" or sectionType = "show" then
                     key = safeToStr(dir.key)
                     title = safeToStr(dir.title)
-                    if sectionType = "movie" then movieSectionKeys.push(key)
-                    if sectionType = "show" then showSectionKeys.push(key)
+                    if not ProfileAllowsLibraryTitle(cfg, title) then
+                        ' Kids profiles only see matching libraries
+                    else
+                        if sectionType = "movie" then movieSectionKeys.push(key)
+                        if sectionType = "show" then showSectionKeys.push(key)
 
-                    sectionHubs = plexGet(cfg, "/hubs/sections/" + key + "?count=" + safeToStr(cfg.rowSize))
-                    if sectionHubs.ok = true and sectionHubs.json <> invalid and sectionHubs.json.MediaContainer <> invalid then
-                        appendHubRows(root, seenTitles, sectionHubs.json.MediaContainer.Hub, cfg)
-                    end if
+                        sectionHubs = plexGet(cfg, "/hubs/sections/" + key + "?count=" + safeToStr(cfg.rowSize))
+                        if sectionHubs.ok = true and sectionHubs.json <> invalid and sectionHubs.json.MediaContainer <> invalid then
+                            appendHubRows(root, seenTitles, sectionHubs.json.MediaContainer.Hub, cfg)
+                        end if
 
-                    allItems = plexGet(cfg, "/library/sections/" + key + "/all?sort=addedAt:desc")
-                    if allItems.ok = true then
-                        label = title
-                        if sectionType = "movie" then label = title + " · Movies"
-                        if sectionType = "show" then label = title + " · TV"
-                        addUniqueRow(root, seenTitles, label, collectMetadata(cfg, allItems.json))
+                        allItems = plexGet(cfg, "/library/sections/" + key + "/all?sort=addedAt:desc")
+                        if allItems.ok = true then
+                            label = title
+                            if sectionType = "movie" then label = title + " · Movies"
+                            if sectionType = "show" then label = title + " · TV"
+                            addUniqueRow(root, seenTitles, label, collectMetadata(cfg, allItems.json))
+                        end if
                     end if
                 end if
             end for
@@ -944,8 +951,10 @@ function buildHome(cfg as Object) as Object
     ' Netflix-style genre shelves from local libraries
     appendGenreRows(root, seenTitles, cfg, movieSectionKeys, showSectionKeys)
 
-    ' Discover / trending (may include titles not in library)
-    appendDiscoverRows(root, seenTitles, cfg)
+    ' Discover / trending (may include titles not in library) — adults only
+    if ProfileAllowsDiscover(cfg) then
+        appendDiscoverRows(root, seenTitles, cfg)
+    end if
 
     if root.getChildCount() = 0 then
         err = "No rows loaded from Plex."
@@ -1110,6 +1119,9 @@ end function
 function buildHomeMore(cfg as Object, exclude as Object) as Object
     if cfg.token = invalid or cfg.token = "" or cfg.token = "REPLACE_WITH_YOUR_PLEX_TOKEN" then
         return { ok: false, error: "Set your Plex token in roku/source/PlexConfig.brs" }
+    end if
+    if not ProfileAllowsDiscover(cfg) then
+        return { ok: false, error: "Discover disabled for this profile" }
     end if
 
     seenTitles = {}

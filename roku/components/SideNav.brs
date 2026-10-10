@@ -33,9 +33,12 @@ sub buildStaticEntries()
     m.entries = [
         { id: "home", kind: "nav", title: "Home" },
         { id: "search", kind: "nav", title: "Search" },
-        { id: "livetv", kind: "nav", title: "TV" },
-        { id: "sports", kind: "nav", title: "Live Sports" }
+        { id: "livetv", kind: "nav", title: "TV" }
     ]
+    if ProfileAllowsSports(m.top.config) then
+        m.entries.push({ id: "sports", kind: "nav", title: "Live Sports" })
+    end if
+    m.entries.push({ id: "profiles", kind: "nav", title: "Switch Profile" })
     rebuildItems()
 end sub
 
@@ -51,7 +54,11 @@ sub onLibrariesLoaded()
     response = m.task.response
     m.libraries = []
     if response <> invalid and response.ok = true and response.items <> invalid then
-        m.libraries = response.items
+        for each lib in response.items
+            if ProfileAllowsLibraryTitle(m.top.config, asString(lib.title)) then
+                m.libraries.push(lib)
+            end if
+        end for
     end if
 
     m.entries = []
@@ -66,7 +73,10 @@ sub onLibrariesLoaded()
         })
     end for
     m.entries.push({ id: "livetv", kind: "nav", title: "TV" })
-    m.entries.push({ id: "sports", kind: "nav", title: "Live Sports" })
+    if ProfileAllowsSports(m.top.config) then
+        m.entries.push({ id: "sports", kind: "nav", title: "Live Sports" })
+    end if
+    m.entries.push({ id: "profiles", kind: "nav", title: "Switch Profile" })
     rebuildItems()
     syncActiveIndex()
 end sub
@@ -145,6 +155,7 @@ function iconFor(entry as Object) as String
     if entry.id = "livetv" then return "pkg:/images/nav_live.png"
     if entry.id = "cable" then return "pkg:/images/nav_cable.png"
     if entry.id = "sports" then return "pkg:/images/nav_sports.png"
+    if entry.id = "profiles" then return "pkg:/images/nav_profiles.png"
     if entry.library <> invalid and asString(entry.library.sectionType) = "show" then
         return "pkg:/images/nav_tv.png"
     end if
