@@ -74,11 +74,13 @@ sportsFeedUrl: "https://roku-hockey.s3.us-west-004.backblazeb2.com/secretfeedfil
 cableEpgUrl: "https://roku-hockey.s3.us-west-004.backblazeb2.com/plexflix/cable-epg.json"
 tmdbApiKey: "YOUR_TMDB_API_KEY"
 multiviewUrl: "http://192.168.x.x:8095"   ' optional, see Multiview
+scoresUrl: "http://192.168.x.x:8096"       ' optional, see Live scores API
 ```
 
 Optional keys:
 - `tmdbApiKey` — cast bios / photos / known-for, plus synopsis art for Discover titles not in your library (https://www.themoviedb.org/settings/api)
 - Leave as `REPLACE_WITH_TMDB_API_KEY` to skip TMDB (Plex people data still used when available)
+- `scoresUrl` — home-server scores sidecar; leave empty and Live Sports looks exactly as before
 `sportsFeedUrl` can point at any JSON feed. Category maps like `{ "FOOTBALL": [ { title, thumbnail, content.videos[].url } ] }` are supported.
 
 ### Cable listings in the TV guide (EPG)
@@ -337,6 +339,25 @@ through the player's live buffer; the overlay waits for them. The pipeline
 itself is only restarted if it fails, and that restart is written into the
 same playlists as a discontinuity, so the Roku rebuffers briefly instead of
 erroring out.
+
+## Live scores API (home server)
+
+`scores/` is a small sidecar the Roku will call for NHL / NBA / NFL / MLB
+score lines on Live Sports rows. It polls ESPN’s public scoreboards, maps feed
+titles through a team alias dictionary, and exposes `POST /v1/resolve`. Full
+API notes and Compose instructions: [scores/README.md](../scores/README.md).
+
+```bash
+cd scores
+docker compose up -d --build
+curl -s http://localhost:8096/healthz
+```
+
+Set `scoresUrl` in `PlexConfig.brs` to `http://<server-ip>:8096` and republish.
+Leave it empty to skip scores entirely. After the sports feed loads, the channel
+calls `POST /v1/resolve` in the background; matched NHL/NBA/NFL/MLB rows show a
+**SCORE** column and a score line in the detail pane. If the sidecar is down or
+returns nothing useful, the guide stays unchanged — no error toast.
 
 ## Remote / focus
 

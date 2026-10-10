@@ -66,6 +66,8 @@ sub exec()
         m.top.response = tuneLiveChannel(cfg, m.top.item)
     else if action = "sportsFeed" then
         m.top.response = fetchSportsFeed(cfg)
+    else if action = "resolveScores" then
+        m.top.response = resolveSportsScores(cfg, m.top.item)
     else if action = "cableEpg" then
         m.top.response = fetchCableEpg(cfg)
     else if action = "tmdbEnrich" then
@@ -4787,6 +4789,97 @@ function cancelRecording(cfg as Object, item as Object) as Object
     if id = "" then return { ok: false, error: "No recording to cancel" }
     print "[plexflix:dvr] delete subscription "; id
     return plexCommand(cfg, "/media/subscriptions/" + requestEncode(id), "DELETE")
+end function
+
+function scoresBase(cfg as Object) as String
+    if cfg = invalid or cfg.scoresUrl = invalid then return ""
+    base = cfg.scoresUrl.Trim()
+    while Right(base, 1) = "/"
+        base = Left(base, Len(base) - 1)
+    end while
+    if base <> "" and Instr(1, base, "://") = 0 then base = "http://" + base
+    return base
+end function
+
+' Batch-resolve Live Sports titles against the home-server scores sidecar.
+' Failures are soft: SportsScreen leaves the guide unchanged when ok <> true.
+function resolveSportsScores(cfg as Object, payload as Object) as Object
+    base = scoresBase(cfg)
+    if base = "" then return { ok: false, skipped: true, error: "" }
+
+    items = []
+    if payload <> invalid and payload.items <> invalid then items = payload.items
+    if items = invalid or GetInterface(items, "ifArray") = invalid then items = []
+    if items.count() = 0 then return { ok: true, results: [], matched: 0, total: 0 }
+
+    bodyItems = []
+    for each entry in items
+        if GetInterface(entry, "ifAssociativeArray") <> invalid then
+            title = firstString(entry, ["title", "name"])
+            league = firstString(entry, ["league", "category", "sport"])
+            id = firstString(entry, ["id", "scoreKey", "key"])
+            if title <> "" then
+                bodyItems.push({ id: id, title: title, league: league })
+            end if
+        end if
+    end for
+    if bodyItems.count() = 0 then return { ok: true, results: [], matched: 0, total: 0 }
+
+    request = CreateObject("roUrlTransfer")
+    port = CreateObject("roMessagePort")
+    request.SetMessagePort(port)
+    request.SetUrl(base + "/v1/resolve")
+    request.SetRequest("POST")
+    request.RetainBodyOnError(true)
+    request.EnableEncodings(true)
+    request.AddHeader("Accept", "application/json")
+    request.AddHeader("Content-Type", "application/json")
+    if cfg.scoresToken <> invalid and cfg.scoresToken <> "" then
+        request.AddHeader("X-Scores-Token", cfg.scoresToken)
+        request.AddHeader("Authorization", "Bearer " + cfg.scoresToken)
+    end if
+    if Left(base, 8) = "https://" then
+        request.SetCertificatesFile("common:/certs/ca-bundle.crt")
+        request.InitClientCertificates()
+    end if
+
+    body = FormatJson({ items: bodyItems })
+    if not request.AsyncPostFromString(body) then
+        return { ok: false, error: "Could not reach scores server" }
+    end if
+
+    while true
+        msg = wait(12000, port)
+        if msg = invalid then
+            request.AsyncCancel()
+            return { ok: false, error: "Scores server timed out" }
+        end if
+        if type(msg) = "roUrlEvent" then
+            code = msg.GetResponseCode()
+            text = msg.GetString()
+            if text = invalid then text = ""
+            text = text.Trim()
+            parsed = invalid
+            if Left(text, 1) = "{" then parsed = ParseJson(text)
+            if code < 200 or code >= 300 then
+                err = "Scores HTTP " + safeToStr(code)
+                if parsed <> invalid and parsed.error <> invalid then err = safeToStr(parsed.error)
+                return { ok: false, error: err, code: code }
+            end if
+            if parsed = invalid then return { ok: false, error: "Scores response was not JSON" }
+            results = parsed.results
+            if results = invalid then results = []
+            matched = 0
+            if parsed.matched <> invalid then matched = parsed.matched
+            return {
+                ok: true,
+                results: results,
+                matched: matched,
+                total: results.count(),
+                updated: safeToStr(parsed.updated)
+            }
+        end if
+    end while
 end function
 
 function fetchSportsFeed(cfg as Object) as Object

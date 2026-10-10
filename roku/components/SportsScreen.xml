@@ -85,6 +85,10 @@
         <Label translation="[412, 400]" width="900" height="40" vertAlign="center" text="EVENT" color="0xE8EEF8">
             <Font role="font" uri="pkg:/fonts/Outfit-SemiBold.ttf" size="32" />
         </Label>
+        <!-- Shown only after the scores API returns at least one match -->
+        <Label id="scoreHeader" translation="[1052, 400]" width="260" height="40" vertAlign="center" text="SCORE" color="0x8FA0B8" visible="false">
+            <Font role="font" uri="pkg:/fonts/Outfit-SemiBold.ttf" size="32" />
+        </Label>
         <Label translation="[1332, 400]" width="500" height="40" vertAlign="center" text="STREAMS" color="0x8FA0B8">
             <Font role="font" uri="pkg:/fonts/Outfit-SemiBold.ttf" size="32" />
         </Label>

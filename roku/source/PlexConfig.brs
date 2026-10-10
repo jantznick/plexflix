@@ -12,7 +12,7 @@ function GetPlexConfig() as Object
         clientId: "plexflix-roku-mvp-001",
 
         product: "PlexFlix",
-        version: "0.10.44",
+        version: "0.10.45",
 
         ' How many items to request per row (home clamps display to 15–30)
         rowSize: 40,
@@ -36,6 +36,13 @@ function GetPlexConfig() as Object
         multiviewUrl: "",
         ' Must match MULTIVIEW_TOKEN in its docker-compose.yml when that is set
         multiviewToken: "",
+
+        ' Live scores sidecar (scores/ in this repo) for NHL/NBA/NFL/MLB lines on
+        ' the Live Sports guide. Leave empty to skip — the guide works as before.
+        ' e.g. "http://192.168.1.20:8096"
+        scoresUrl: "",
+        ' Must match SCORES_TOKEN in scores/docker-compose.yml when that is set
+        scoresToken: "",
 
         ' Optional TMDB key for cast bios / photos / known-for when Plex people data is thin.
         ' https://www.themoviedb.org/settings/api
