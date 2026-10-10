@@ -593,6 +593,12 @@ def upload_b2(local_path: Path, remote_key: str) -> None:
     remote_key = remote_key.strip().lstrip("/")
     if not remote_key:
         raise SystemExit("B2_REMOTE_KEY is empty")
+    if "#" in remote_key or " " in remote_key:
+        raise SystemExit(
+            f"B2_REMOTE_KEY looks polluted (inline comment?): {remote_key!r}\n"
+            "Fix ~/plexflix-cable-epg.env to exactly:\n"
+            "  B2_REMOTE_KEY=plexflix/cable-epg.json"
+        )
 
     info = InMemoryAccountInfo()
     api = B2Api(info)
