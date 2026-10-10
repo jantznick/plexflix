@@ -91,6 +91,34 @@ function IsKidsLibraryTitle(title as String) as Boolean
     return false
 end function
 
+' Hardcoded Adults sidebar libraries only — nothing else (no Music, etc.).
+' Each row: OK opens adultMatch library; Right+OK on K opens kidsMatch.
+function GetAdultLibraryNav() as Object
+    return [
+        {
+            title: "Movies",
+            sectionType: "movie",
+            adultMatch: ["movies"],
+            kidsMatch: ["kid", "kids", "children", "child", "family"],
+            exclude: ["youtube"]
+        },
+        {
+            title: "TV Shows",
+            sectionType: "show",
+            adultMatch: ["tv shows", "television", "tv"],
+            kidsMatch: ["kid", "kids", "children", "child", "family", "nick", "disney"],
+            exclude: ["youtube"]
+        },
+        {
+            title: "YouTube",
+            sectionType: "",
+            adultMatch: ["youtube"],
+            kidsMatch: ["youtube"],
+            exclude: []
+        }
+    ]
+end function
+
 function ProfileAllowsCableChannel(cfg as Object, feedId as String, title as String) as Boolean
     if cfg = invalid or cfg.profile = invalid then return true
     allow = cfg.profile.cableAllow

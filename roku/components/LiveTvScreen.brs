@@ -94,6 +94,7 @@ sub init()
     m.feedDialog = invalid
     m.feedDialogActions = []
     m.cableLineup = loadCableLineup()
+    m.cableTitles = GetHardcodedCableTitleNumbers()
     m.cableFallbackNum = 800
 
     buildTabs()
@@ -493,7 +494,7 @@ sub onCableEpgLoaded()
 end sub
 
 function loadCableLineup() as Object
-    out = {}
+    out = GetHardcodedCableLineup()
     raw = ReadAsciiFile("pkg:/source/cable_lineup.json")
     if raw = invalid or raw = "" then return out
     parsed = ParseJson(raw)
@@ -502,15 +503,51 @@ function loadCableLineup() as Object
     if GetInterface(channels, "ifAssociativeArray") = invalid then return out
     for each feedId in channels
         n = channels[feedId]
-        if n <> invalid then out[feedId] = Int(n)
+        if n <> invalid then out[LCase(valueOr(feedId, ""))] = Int(n)
     end for
     return out
 end function
 
-function preferredCableNumber(feedId as String) as Integer
-    if feedId <> "" and m.cableLineup <> invalid and m.cableLineup.DoesExist(feedId) then
-        return m.cableLineup[feedId]
+function cableLineupLookup(feedId as String, title as String) as Integer
+    fid = LCase(valueOr(feedId, "").Trim())
+    t = LCase(valueOr(title, "").Trim())
+
+    ' 1) Exact feed id against hardcoded / JSON map (no DoesExist — loop compare)
+    if fid <> "" and m.cableLineup <> invalid then
+        for each key in m.cableLineup
+            if LCase(valueOr(key, "")) = fid then return Int(m.cableLineup[key])
+        end for
+        ' Bare id: "abc" ↔ "timst-abc"
+        for each key in m.cableLineup
+            bare = LCase(valueOr(key, ""))
+            if Left(bare, 6) = "timst-" then bare = Mid(bare, 7)
+            if bare <> "" and bare = fid then return Int(m.cableLineup[key])
+        end for
     end if
+
+    ' 2) Exact / normalized title aliases
+    if t <> "" then
+        titles = m.cableTitles
+        if titles = invalid then titles = GetHardcodedCableTitleNumbers()
+        for each key in titles
+            if LCase(valueOr(key, "")) = t then return Int(titles[key])
+        end for
+        ' "USA Network" vs "usa", "Disney Channel" vs "disney channel"
+        for each key in titles
+            k = LCase(valueOr(key, ""))
+            if k <> "" and (t = k or Instr(1, t, k) = 1) then
+                ' Prefer longer / more specific alias matches by requiring near-full length
+                if Len(t) <= Len(k) + 4 then return Int(titles[key])
+            end if
+        end for
+    end if
+
+    return 0
+end function
+
+function preferredCableNumber(feedId as String, title as String) as Integer
+    n = cableLineupLookup(feedId, title)
+    if n > 0 then return n
     n = m.cableFallbackNum
     m.cableFallbackNum = m.cableFallbackNum + 1
     return n
@@ -527,7 +564,7 @@ function makeCableChannel(item as Object, category as String) as Dynamic
     if streamUrl = "" then return invalid
     key = "cable:" + feedId
     if feedId = "" then key = "cable:" + streamUrl
-    order = preferredCableNumber(feedId) * 1.0
+    order = preferredCableNumber(feedId, title) * 10000.0
     raw = []
     if item.programs <> invalid then
         for each p in item.programs
@@ -594,19 +631,26 @@ sub finishUnifiedGuide()
     m.top.loadingMessage = ""
     m.channels = []
     m.byKey = {}
+    ' Reload map + reset fallback so a prior miss cannot stick channels at 800+
+    m.cableLineup = loadCableLineup()
+    m.cableTitles = GetHardcodedCableTitleNumbers()
+    m.cableFallbackNum = 800
     allowPlex = ProfileAllowsPlexLiveTv(m.top.config)
     if allowPlex then
         for each ch in m.plexChannels
             ch.lineupOrder = plexLineupOrder(ch)
+            ch.sortKey = ch.lineupOrder
             m.channels.push(ch)
             m.byKey[ch.key] = ch
         end for
     end if
     for each ch in m.cableChannels
         if ProfileAllowsCableChannel(m.top.config, valueOr(ch.feedId, ""), valueOr(ch.callSign, "")) then
-            ' Force lineup.json order every time (do not trust earlier sortKey).
-            ' Number column stays blank; Cable still sorts among Plex VCNs.
-            ch.lineupOrder = preferredCableNumber(valueOr(ch.feedId, "")) * 1.0
+            ' Force hardcoded lineup every time (id + title). Number column blank.
+            ' Scale *10000 so Cable 70 sorts with Plex VCNs ("2.1"→20001, "70"→700000).
+            order = preferredCableNumber(valueOr(ch.feedId, ""), valueOr(ch.callSign, "")) * 10000.0
+            ch.lineupOrder = order
+            ch.sortKey = order
             ch.number = ""
             m.channels.push(ch)
             m.byKey[ch.key] = ch
@@ -632,29 +676,43 @@ sub finishUnifiedGuide()
     updateGridInfo()
 end sub
 
-function plexLineupOrder(ch as Object) as Float
-    if ch = invalid then return 99999.0
-    n = valueOr(ch.number, "")
-    if n <> "" then
-        v = Val(n)
-        if v > 0 then return v
-    end if
-    if ch.sortKey <> invalid then
-        v = ch.sortKey
-        if type(v) = "Float" or type(v) = "Double" or type(v) = "Integer" or type(v) = "roFloat" or type(v) = "roInt" or type(v) = "roInteger" then
-            if v > 0 then return v * 1.0
+function vcnSortKey(number as String) as Float
+    ' Same scale as PlexTask.sortChannels: "2.1" → 20001, "70" → 700000
+    if number = "" then return 999999999.0
+    major = 0.0
+    minor = 0.0
+    seenDot = false
+    for i = 1 to Len(number)
+        c = Mid(number, i, 1)
+        if c >= "0" and c <= "9" then
+            if seenDot then
+                minor = minor * 10.0 + (Asc(c) - 48)
+            else
+                major = major * 10.0 + (Asc(c) - 48)
+            end if
+        else if (c = "." or c = "-") and seenDot = false then
+            seenDot = true
+        else
+            exit for
         end if
-    end if
-    return 99999.0
+    end for
+    return major * 10000.0 + minor
+end function
+
+function plexLineupOrder(ch as Object) as Float
+    if ch = invalid then return 999999999.0
+    n = valueOr(ch.number, "")
+    if n <> "" then return vcnSortKey(n)
+    return 999999999.0
 end function
 
 function channelSortKey(ch as Object) as Float
-    if ch = invalid then return 99999.0
+    if ch = invalid then return 999999999.0
     if ch.lineupOrder <> invalid then return ch.lineupOrder * 1.0
     if ch.sortKey <> invalid then return ch.sortKey * 1.0
     n = valueOr(ch.number, "")
-    if n = "" then return 99999.0
-    return Val(n)
+    if n = "" then return 999999999.0
+    return vcnSortKey(n)
 end function
 
 sub markUsedNumber(used as Object, key as Float)
@@ -685,22 +743,34 @@ end function
 sub sortChannelsByNumber()
     n = m.channels.count()
     if n < 2 then return
+    keyed = []
+    for i = 0 to n - 1
+        keyed.push({
+            k: channelSortKey(m.channels[i]),
+            c: m.channels[i]
+        })
+    end for
     for i = 0 to n - 2
         best = i
-        bestKey = channelSortKey(m.channels[i])
+        bestKey = keyed[i].k
         for j = i + 1 to n - 1
-            k = channelSortKey(m.channels[j])
+            k = keyed[j].k
             if k < bestKey then
                 best = j
                 bestKey = k
             end if
         end for
         if best <> i then
-            tmp = m.channels[i]
-            m.channels[i] = m.channels[best]
-            m.channels[best] = tmp
+            tmp = keyed[i]
+            keyed[i] = keyed[best]
+            keyed[best] = tmp
         end if
     end for
+    out = []
+    for each entry in keyed
+        out.push(entry.c)
+    end for
+    m.channels = out
 end sub
 
 sub maybeLoadMore()

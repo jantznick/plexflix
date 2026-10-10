@@ -11,6 +11,7 @@
     <script type="text/brightscript" uri="LiveTvScreen.brs" />
     <script type="text/brightscript" uri="pkg:/source/Fonts.brs" />
     <script type="text/brightscript" uri="pkg:/source/Profiles.brs" />
+    <script type="text/brightscript" uri="pkg:/source/CableLineup.brs" />
 
     <!-- Grid geometry is mirrored in LiveTvScreen.brs (m.gridTop, m.progX, ...) -->
     <children>

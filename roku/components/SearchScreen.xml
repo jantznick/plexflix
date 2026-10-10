@@ -30,7 +30,7 @@
             <FocusButton id="clearBtn" translation="[1388, 0]" text="Clear" buttonWidth="140" />
         </Group>
 
-        <MarkupGrid
+        <EscapeMarkupGrid
             id="grid"
             translation="[96, 108]"
             itemComponentName="PosterItem"

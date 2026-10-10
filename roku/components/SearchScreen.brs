@@ -27,10 +27,24 @@ sub init()
     m.typeBtn.observeField("selected", "onTypeButton")
     m.clearBtn.observeField("selected", "onClearButton")
     m.grid.observeField("itemSelected", "onGridSelected")
+    m.grid.observeField("escapeUp", "onGridEscapeUp")
+    m.grid.observeField("escapeBack", "onGridEscapeBack")
 
     paintTypeButton()
     showEmpty("Search Plex Discover for any movie or show.")
     m.searchBtn.setFocus(true)
+end sub
+
+sub onGridEscapeUp()
+    if m.grid.escapeUp <> true then return
+    m.grid.escapeUp = false
+    focusToolbar("search")
+end sub
+
+sub onGridEscapeBack()
+    if m.grid.escapeBack <> true then return
+    m.grid.escapeBack = false
+    focusToolbar("search")
 end sub
 
 sub onConfigReady()
@@ -265,18 +279,16 @@ end sub
 function onKeyEvent(key as String, press as Boolean) as Boolean
     if not press then return false
 
-    if key = "back"
-        m.top.openMenu = true
-        return true
-    end if
-
     if key = "left" and m.focusZone = "toolbar" and m.toolbarBtn = "search" then
         m.top.openMenu = true
         return true
     end if
 
     if m.focusZone = "toolbar" then
-        if key = "right" or key = "left" then
+        if key = "back" then
+            m.top.openMenu = true
+            return true
+        else if key = "right" or key = "left" then
             order = ["search", "type", "clear"]
             idx = 0
             for i = 0 to order.count() - 1
@@ -305,12 +317,8 @@ function onKeyEvent(key as String, press as Boolean) as Boolean
             return true
         end if
     else if m.focusZone = "grid" then
-        if key = "up" then
-            ' Let MarkupGrid consume up until the top row; escape via an empty press path is awkward,
-            ' so Left from column 0 also returns to the toolbar.
-            return false
-        else if key = "left" then
-            ' Opening the menu from the first column matches other browse screens
+        ' Up/Back from the top row are handled by EscapeMarkupGrid → onGridEscape*
+        if key = "left" then
             col = 0
             if m.grid.itemFocused <> invalid then col = m.grid.itemFocused MOD 6
             if col = 0 then
