@@ -10,7 +10,6 @@
     <script type="text/brightscript" uri="pkg:/source/Profiles.brs" />
 
     <children>
-        <!-- Atmospheric plane - not a flat fill -->
         <Rectangle width="1920" height="1080" color="0x0B1220" />
         <Rectangle width="1920" height="1080" color="0x132033" opacity="0.85" />
         <Rectangle translation="[0, 0]" width="1920" height="420" color="0x1A3A3A" opacity="0.22" />
@@ -38,15 +37,10 @@
 
         <Group id="profileRow" translation="[0, 360]" />
 
-        <Label id="hint" translation="[120, 980]" width="1680" height="36" text="OK to select  |  Left / Right to move" color="0x5E6880" horizAlign="center">
-            <Font role="font" uri="pkg:/fonts/Outfit-Medium.ttf" size="22" />
-        </Label>
-
-        <!-- PIN overlay -->
         <Group id="pinOverlay" visible="false">
             <Rectangle width="1920" height="1080" color="0x05070C" opacity="0.72" />
-            <Rectangle id="pinPanel" translation="[560, 280]" width="800" height="480" color="0x121A2A" />
-            <Rectangle translation="[560, 280]" width="8" height="480" color="0xE50914" />
+            <Rectangle id="pinPanel" translation="[560, 280]" width="800" height="420" color="0x121A2A" />
+            <Rectangle translation="[560, 280]" width="8" height="420" color="0xE50914" />
             <Label id="pinTitle" translation="[608, 320]" width="704" height="48" text="Enter passcode" color="0xFFFFFF">
                 <Font role="font" uri="pkg:/fonts/Outfit-Bold.ttf" size="36" />
             </Label>
@@ -56,9 +50,6 @@
             <Group id="pinDigits" translation="[680, 460]" />
             <Label id="pinError" translation="[608, 580]" width="704" height="36" text="" color="0xFF5A64" horizAlign="center">
                 <Font role="font" uri="pkg:/fonts/Outfit-Medium.ttf" size="22" />
-            </Label>
-            <Label id="pinHint" translation="[608, 680]" width="704" height="36" text="Numbers or Up/Down | Right next | OK unlock | Back cancel" color="0x5E6880" horizAlign="center">
-                <Font role="font" uri="pkg:/fonts/Outfit-Regular.ttf" size="20" />
             </Label>
         </Group>
     </children>
