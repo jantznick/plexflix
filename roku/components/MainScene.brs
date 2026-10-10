@@ -389,8 +389,50 @@ end sub
 sub onSportsItemSelected()
     item = m.sportsScreen.selectedItem
     if item = invalid then return
+    streams = sportsStreamList(item)
+    ' One feed → play immediately; multiple → picker on the game page
+    if streams.count() = 1 then
+        showVideo(sportsPlayableFromStream(item, streams[0]))
+        return
+    end if
     showSportsDetail(item)
 end sub
+
+function sportsStreamList(item as Object) as Object
+    streams = []
+    if item = invalid then return streams
+    if item.streams <> invalid then
+        for each s in item.streams
+            if asString(s.streamUrl) <> "" then streams.push(s)
+        end for
+    end if
+    if streams.count() = 0 and asString(item.streamUrl) <> "" then
+        streams.push({
+            title: "Primary stream",
+            streamUrl: asString(item.streamUrl),
+            streamFormat: asString(item.streamFormat)
+        })
+    end if
+    return streams
+end function
+
+function sportsPlayableFromStream(item as Object, stream as Object) as Object
+    url = asString(stream.streamUrl)
+    format = asString(stream.streamFormat)
+    if format = "" then format = asString(item.streamFormat)
+    return {
+        title: asString(item.title),
+        description: asString(item.description),
+        mediaType: "sport",
+        key: url,
+        streamUrl: url,
+        streamFormat: format,
+        hdPosterUrl: item.hdPosterUrl,
+        ratingKey: "",
+        duration: 0,
+        viewOffset: 0
+    }
+end function
 
 sub showSportsDetail(item as Object)
     if m.sportsDetailScreen <> invalid then

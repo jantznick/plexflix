@@ -50,7 +50,8 @@ This is intentionally a **design/UX shell** on top of existing Plex data. Creden
   and an **inline cast panel** that pauses rather than leaving playback
 - **Progress is written back to Plex**, so resume points and Continue Watching
   stay in sync with every other Plex client
-- Live sports from a configurable JSON feed URL (event detail + stream picker). `*` opens options: **Refresh feed**,
+- Live sports from a configurable JSON feed URL. OK on a game with **one** feed plays
+  it immediately; **multiple** feeds open the stream picker. `*` opens options: **Refresh feed**,
   Multiview add/remove (when enabled), and Watch Multiview
 - **TV player**: Live TV programs can enrich from **TMDB** while tuning when `tmdbApiKey` is set; Cable rows use
   sidecar cast when present (TMDB fallback otherwise)
