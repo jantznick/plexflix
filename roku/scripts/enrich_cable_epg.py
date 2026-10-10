@@ -64,6 +64,7 @@ TMDB_DESC_LIMIT = 320
 
 
 def load_env_file(path: Path) -> None:
+    """Load KEY=VALUE pairs. Explicit --env-file values always win over the shell."""
     if not path.is_file():
         raise SystemExit(f"env file not found: {path}")
     for raw in path.read_text(encoding="utf-8").splitlines():
@@ -72,8 +73,9 @@ def load_env_file(path: Path) -> None:
             continue
         key, val = line.split("=", 1)
         key = key.strip()
-        val = val.strip().strip('"').strip("'")
-        if key and key not in os.environ:
+        # strip quotes + CR (Windows/edited-on-Mac line endings)
+        val = val.strip().strip('"').strip("'").strip("\r")
+        if key:
             os.environ[key] = val
 
 
