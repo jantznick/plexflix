@@ -195,6 +195,7 @@ sub requestStream(startAt as Integer)
 end sub
 
 sub playDirect(url as String, item as Object)
+    if m.video = invalid then return
     logPlayback("direct url " + url)
     contentNode = createObject("roSGNode", "ContentNode")
     contentNode.url = url
@@ -242,6 +243,7 @@ end function
 
 sub onStreamReady()
     response = m.task.response
+    if m.video = invalid then return
     if response = invalid or response.ok <> true or response.url = invalid or response.url = "" then
         err = "Playback failed"
         if response <> invalid and response.error <> invalid then err = response.error
@@ -277,6 +279,7 @@ end sub
 sub onFocusedChild()
     ' If anything under this screen (especially Video) grabs focus, take it
     ' back so onKeyEvent keeps owning the remote.
+    if m.video = invalid then return
     child = m.top.focusedChild
     if child = invalid then return
     if child.isSameNode(m.video) then
@@ -285,6 +288,7 @@ sub onFocusedChild()
 end sub
 
 sub ensurePlayerFocus()
+    if m.video = invalid then return
     m.video.focusable = false
     ' Always re-assert: hasFocus() is false while a child holds focus, and that
     ' is exactly the broken state we are trying to leave.
@@ -292,6 +296,8 @@ sub ensurePlayerFocus()
 end sub
 
 sub onVideoState()
+    ' Teardown nulls m.video before/while stop notifications drain
+    if m.video = invalid then return
     state = m.video.state
     logPlayback("state=" + state + " position=" + StrI(m.position).Trim() + " duration=" + StrI(m.duration).Trim())
 
@@ -333,6 +339,9 @@ sub onVideoState()
         m.reportTimer.control = "stop"
         if playedToEnd() then
             sendPlaybackActions([scrobbleAction(), releaseAction()])
+            ' Tear the Video node down here so MainScene's follow-up stop does
+            ' not race a still-observed handle.
+            hardStopVideo()
             m.top.closed = true
         else
             ' Finishing without having played is a failure, not a completed
@@ -347,12 +356,14 @@ end sub
 
 ' The same 0-100 figure Roku's stock player shows as "Loading X%"
 function bufferPercent() as Integer
+    if m.video = invalid then return -1
     status = m.video.bufferingStatus
     if status = invalid or status.percentage = invalid then return -1
     return numberOf(status.percentage)
 end function
 
 sub onBufferingStatus()
+    if m.video = invalid then return
     if m.video.state <> "buffering" then return
     pct = bufferPercent()
     if pct = m.lastBufferPct then return
@@ -395,6 +406,7 @@ sub restartStallTimer()
 end sub
 
 sub onStallTimer()
+    if m.video = invalid then return
     state = m.video.state
     if state = "playing" or state = "paused" then return
     m.reportTimer.control = "stop"
@@ -426,7 +438,7 @@ sub failStream(reason as String)
     m.stallTimer.control = "stop"
     m.hideTimer.control = "stop"
     m.seekTimer.control = "stop"
-    m.video.control = "stop"
+    if m.video <> invalid then m.video.control = "stop"
     m.top.failure = message
     m.top.closed = true
 end sub
@@ -458,6 +470,7 @@ end sub
 ' simply ended.
 function videoErrorDetail() as String
     bits = []
+    if m.video = invalid then return ""
 
     code = m.video.errorCode
     if code <> invalid and code <> 0 then bits.push("code " + StrI(code).Trim())
@@ -486,6 +499,7 @@ sub logPlayback(message as String)
 end sub
 
 sub onPositionChange()
+    if m.video = invalid then return
     m.position = Int(m.video.position)
     if m.pendingSeek = invalid and m.controls.visible then paintScrubber(m.position)
     refreshMarker()
@@ -530,6 +544,7 @@ end sub
 
 sub skipMarker()
     if m.activeMarker = invalid then return
+    if m.video = invalid then return
 
     target = Int(m.activeMarker.endAt / 1000)
     if m.duration > 0 and target > m.duration - 2 then target = m.duration - 2
@@ -608,6 +623,7 @@ sub onReportTimer()
 end sub
 
 sub togglePlayPause()
+    if m.video = invalid then return
     if m.paused then
         m.video.control = "resume"
     else
@@ -618,6 +634,7 @@ end sub
 sub restart()
     m.pendingSeek = invalid
     if m.isLive then return
+    if m.video = invalid then return
     m.video.seek = 0
     if m.paused then m.video.control = "resume"
 end sub
@@ -781,7 +798,7 @@ end sub
 
 sub beginRestart(message as String)
     m.restartAt = m.position
-    m.video.control = "stop"
+    if m.video <> invalid then m.video.control = "stop"
     m.reportTimer.control = "stop"
     hideControls()
     if message <> "" then setStatus(message)
@@ -1288,7 +1305,7 @@ sub openCastModal()
     ' needs to already know the modal owns the screen
     m.zone = "castModal"
     m.hideTimer.control = "stop"
-    if m.castResumeOnClose then m.video.control = "pause"
+    if m.castResumeOnClose = true and m.video <> invalid then m.video.control = "pause"
 
     m.castModalName.text = valueOrEmpty(member.title)
     role = valueOrEmpty(member.description)
@@ -1359,7 +1376,7 @@ sub closeCastModal()
     m.castModal.visible = false
     m.castModalSpinner.control = "stop"
     m.castModalSpinner.visible = false
-    if m.castResumeOnClose then m.video.control = "resume"
+    if m.castResumeOnClose = true and m.video <> invalid then m.video.control = "resume"
     m.castResumeOnClose = false
     showControls("cast")
 end sub
@@ -1670,6 +1687,10 @@ end sub
 
 sub onSeekCommit()
     if m.pendingSeek = invalid then return
+    if m.video = invalid then
+        m.pendingSeek = invalid
+        return
+    end if
     target = m.pendingSeek
     m.pendingSeek = invalid
     hidePreview()
@@ -2027,11 +2048,17 @@ end sub
 ' control=stop alone is not enough for some sports HLS feeds.
 sub hardStopVideo()
     if m.video = invalid then return
-    m.video.control = "stop"
-    m.video.content = invalid
-    parent = m.video.getParent()
-    if parent <> invalid then parent.removeChild(m.video)
+    vid = m.video
+    ' Drop our handle first so any sync/async state callbacks from stop/remove
+    ' see invalid and bail instead of crashing on a dead component.
     m.video = invalid
+    vid.unobserveField("state")
+    vid.unobserveField("position")
+    vid.unobserveField("bufferingStatus")
+    vid.control = "stop"
+    vid.content = invalid
+    parent = vid.getParent()
+    if parent <> invalid then parent.removeChild(vid)
 end sub
 
 '--------------------------------------------------------------------

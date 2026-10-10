@@ -820,6 +820,11 @@ sub forceStopVideoScreen(screen as Object)
     if screen = invalid then return
     vid = screen.findNode("video")
     if vid = invalid then return
+    ' Drop observers before stop/remove so VideoScreen handlers don't run on a
+    ' node Mid-teardown (and so a second stop from onVideoClosed is quiet).
+    vid.unobserveField("state")
+    vid.unobserveField("position")
+    vid.unobserveField("bufferingStatus")
     vid.control = "stop"
     vid.content = invalid
     parent = vid.getParent()
