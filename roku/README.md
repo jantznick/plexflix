@@ -16,10 +16,11 @@ This is intentionally a **design/UX shell** on top of existing Plex data. Creden
   passcode `1990` (on-screen keypad; Back clears a digit, then exits the PIN).
   After a pick, a spinner covers Home until hubs land. Sidebar **Switch Profile**
   returns to the picker
-- **Collapsible sidebar** (Left to open): Home, **Search**, your **Libraries**,
-  **TV** (Plex Live TV + Cable nets), Live Sports (Adults).
-  Collapsed, a 72px icon rail stays on browse screens with the current section
-  lit; it is hidden on detail pages, in the player and over the launch splash
+- **Collapsible sidebar** (Left to open): on Adults, Home+Search share an icon
+  row; **Movies** / **TV Shows** open the adult library (Right to **K** for the
+  kids library). **Live TV** (Plex + Cable nets), Live Sports. Kids profiles keep
+  a simpler list. Collapsed, a 72px icon rail stays on browse screens; it is
+  hidden on detail pages, in the player and over the launch splash
 - **Search**: Plex Discover catalog search for any movie/show (not just what’s
   already in your libraries), with Movies / TV filters; open a result and
   **Add to Watchlist** / **Remove** from the detail page
