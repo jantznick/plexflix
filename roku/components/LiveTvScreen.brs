@@ -1834,13 +1834,21 @@ sub launchWatch(ch as Object, p as Dynamic, url as String)
     programKind = ""
     episodeLabel = ""
     cast = []
+    beginsAt = 0
+    endsAt = 0
     streamFormat = "hls"
     mediaType = "livetv"
+    source = "plex"
     dvrId = ""
-    if m.ctx <> invalid then dvrId = m.ctx.dvrId
+    epgId = ""
+    if m.ctx <> invalid then
+        dvrId = m.ctx.dvrId
+        epgId = valueOr(m.ctx.epgId, "")
+    end if
 
     if ch.source = "cable" then
         mediaType = "sport"
+        source = "cable"
         streamFormat = valueOr(ch.streamFormat, "hls")
         art = valueOr(ch.logo, "")
         if valueOr(ch.summary, "") <> "" then description = ch.summary
@@ -1862,6 +1870,8 @@ sub launchWatch(ch as Object, p as Dynamic, url as String)
         episodeLabel = valueOr(p.episodeLabel, "")
         if episodeLabel <> "" and description = "" then description = episodeLabel
         if p.cast <> invalid then cast = p.cast
+        if p.beginsAt <> invalid then beginsAt = p.beginsAt
+        if p.endsAt <> invalid then endsAt = p.endsAt
     end if
 
     m.top.selectedItem = {
@@ -1875,6 +1885,13 @@ sub launchWatch(ch as Object, p as Dynamic, url as String)
         channelId: valueOr(ch.tuneId, ""),
         tuneAlt: valueOr(ch.tuneAlt, ""),
         dvrId: dvrId,
+        epgId: epgId,
+        feedId: valueOr(ch.feedId, ""),
+        source: source,
+        channelName: channelName,
+        beginsAt: beginsAt,
+        endsAt: endsAt,
+        programs: scheduleProgramsForWatch(ch, nowSeconds()),
         streamUrl: url,
         streamFormat: streamFormat,
         hdPosterUrl: art,
@@ -1887,6 +1904,54 @@ sub launchWatch(ch as Object, p as Dynamic, url as String)
         viewOffset: 0
     }
 end sub
+
+' Compact upcoming airings for the player so it can advance titles when a show ends
+function scheduleProgramsForWatch(ch as Object, fromAt as Integer) as Object
+    out = []
+    if ch = invalid then return out
+    src = invalid
+    if ch.raw <> invalid and GetInterface(ch.raw, "ifArray") <> invalid then
+        src = ch.raw
+    else if ch.programs <> invalid and GetInterface(ch.programs, "ifArray") <> invalid then
+        src = ch.programs
+    end if
+    if src = invalid then return out
+
+    for each p in src
+        if p <> invalid and p.placeholder <> true then
+            b = 0
+            e = 0
+            if p.beginsAt <> invalid then b = p.beginsAt
+            if p.endsAt <> invalid then e = p.endsAt
+            if e > fromAt and b > 0 and e > b then
+                art = valueOr(p.art, "")
+                if art = "" then art = valueOr(p.backdrop, "")
+                if art = "" then art = valueOr(p.poster, "")
+                cast = []
+                if p.cast <> invalid then cast = p.cast
+                out.push({
+                    title: valueOr(p.title, "Program"),
+                    subtitle: valueOr(p.subtitle, ""),
+                    summary: valueOr(p.summary, ""),
+                    beginsAt: b,
+                    endsAt: e,
+                    episodeLabel: valueOr(p.episodeLabel, ""),
+                    kind: valueOr(p.kind, ""),
+                    year: valueOr(p.year, ""),
+                    contentRating: valueOr(p.contentRating, ""),
+                    rating: valueOr(p.rating, ""),
+                    art: art,
+                    poster: valueOr(p.poster, ""),
+                    backdrop: valueOr(p.backdrop, ""),
+                    cast: cast,
+                    placeholder: false
+                })
+                if out.count() >= 24 then return out
+            end if
+        end if
+    end for
+    return out
+end function
 
 sub openProgramMenu(includeWatch as Boolean)
     ch = focusedChannel()

@@ -1068,7 +1068,8 @@ sub watchChannel(ch as Object)
     item = ch.item
     p = focusedProgram()
 
-    title = asString(item.title)
+    channelName = asString(item.title)
+    title = channelName
     description = asString(item.description)
     poster = asString(item.hdPosterUrl)
     backdrop = asString(item.hdBackdropUrl)
@@ -1077,11 +1078,13 @@ sub watchChannel(ch as Object)
     rating = ""
     cast = []
     shortTitle = title
+    beginsAt = 0
+    endsAt = 0
 
     if p <> invalid and p.placeholder <> true then
         if asString(p.title) <> "" then
             shortTitle = asString(p.title)
-            title = shortTitle + "  ·  " + asString(item.title)
+            title = shortTitle + "  ·  " + channelName
         end if
         if asString(p.summary) <> "" then description = asString(p.summary)
         if asString(p.poster) <> "" then poster = asString(p.poster)
@@ -1092,6 +1095,8 @@ sub watchChannel(ch as Object)
         contentRating = asString(p.contentRating)
         rating = asString(p.rating)
         if p.cast <> invalid then cast = p.cast
+        if p.beginsAt <> invalid then beginsAt = p.beginsAt
+        if p.endsAt <> invalid then endsAt = p.endsAt
     end if
     if poster = "" then poster = asString(item.hdPosterUrl)
     if backdrop = "" then backdrop = poster
@@ -1108,6 +1113,12 @@ sub watchChannel(ch as Object)
         streamFormat: asString(item.streamFormat),
         streams: item.streams,
         streamCount: item.streamCount,
+        feedId: asString(ch.feedId),
+        source: "cable",
+        channelName: channelName,
+        beginsAt: beginsAt,
+        endsAt: endsAt,
+        programs: scheduleProgramsForCableWatch(ch, nowSeconds()),
         hdPosterUrl: poster,
         hdBackdropUrl: backdrop,
         year: year,
@@ -1118,6 +1129,53 @@ sub watchChannel(ch as Object)
         viewOffset: 0
     }
 end sub
+
+function scheduleProgramsForCableWatch(ch as Object, fromAt as Integer) as Object
+    out = []
+    if ch = invalid then return out
+    src = invalid
+    if ch.rawPrograms <> invalid and GetInterface(ch.rawPrograms, "ifArray") <> invalid then
+        src = ch.rawPrograms
+    else if ch.programs <> invalid and GetInterface(ch.programs, "ifArray") <> invalid then
+        src = ch.programs
+    end if
+    if src = invalid then return out
+
+    for each p in src
+        if p <> invalid and p.placeholder <> true then
+            b = 0
+            e = 0
+            if p.beginsAt <> invalid then b = p.beginsAt
+            if p.endsAt <> invalid then e = p.endsAt
+            if e > fromAt and b > 0 and e > b then
+                art = asString(p.art)
+                if art = "" then art = asString(p.backdrop)
+                if art = "" then art = asString(p.poster)
+                cast = []
+                if p.cast <> invalid then cast = p.cast
+                out.push({
+                    title: asString(p.title),
+                    subtitle: asString(p.subtitle),
+                    summary: asString(p.summary),
+                    beginsAt: b,
+                    endsAt: e,
+                    episodeLabel: asString(p.episodeLabel),
+                    kind: asString(p.kind),
+                    year: asString(p.year),
+                    contentRating: asString(p.contentRating),
+                    rating: asString(p.rating),
+                    art: art,
+                    poster: asString(p.poster),
+                    backdrop: asString(p.backdrop),
+                    cast: cast,
+                    placeholder: false
+                })
+                if out.count() >= 24 then return out
+            end if
+        end if
+    end for
+    return out
+end function
 
 ' ---------------------------------------------------------------------------
 ' Remote
