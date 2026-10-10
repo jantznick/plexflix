@@ -527,7 +527,7 @@ function makeCableChannel(item as Object, category as String) as Dynamic
     if streamUrl = "" then return invalid
     key = "cable:" + feedId
     if feedId = "" then key = "cable:" + streamUrl
-    number = preferredCableNumber(feedId)
+    order = preferredCableNumber(feedId) * 1.0
     raw = []
     if item.programs <> invalid then
         for each p in item.programs
@@ -540,7 +540,8 @@ function makeCableChannel(item as Object, category as String) as Dynamic
         source: "cable",
         feedId: feedId,
         number: "",
-        sortKey: number * 1.0,
+        sortKey: order,
+        lineupOrder: order,
         callSign: title,
         name: title,
         logo: logo,
@@ -593,21 +594,19 @@ sub finishUnifiedGuide()
     m.top.loadingMessage = ""
     m.channels = []
     m.byKey = {}
-    usedNumbers = {}
     allowPlex = ProfileAllowsPlexLiveTv(m.top.config)
     if allowPlex then
         for each ch in m.plexChannels
-            ch.sortKey = channelSortKey(ch)
-            markUsedNumber(usedNumbers, ch.sortKey)
+            ch.lineupOrder = plexLineupOrder(ch)
             m.channels.push(ch)
             m.byKey[ch.key] = ch
         end for
     end if
     for each ch in m.cableChannels
         if ProfileAllowsCableChannel(m.top.config, valueOr(ch.feedId, ""), valueOr(ch.callSign, "")) then
-            ' Keep lineup.json numbers so Cable sits among Plex locals/VCNs.
-            ' Number column stays blank (name only); collisions are fine for sort.
-            if ch.sortKey = invalid then ch.sortKey = channelSortKey(ch)
+            ' Force lineup.json order every time (do not trust earlier sortKey).
+            ' Number column stays blank; Cable still sorts among Plex VCNs.
+            ch.lineupOrder = preferredCableNumber(valueOr(ch.feedId, "")) * 1.0
             ch.number = ""
             m.channels.push(ch)
             m.byKey[ch.key] = ch
@@ -633,9 +632,26 @@ sub finishUnifiedGuide()
     updateGridInfo()
 end sub
 
+function plexLineupOrder(ch as Object) as Float
+    if ch = invalid then return 99999.0
+    n = valueOr(ch.number, "")
+    if n <> "" then
+        v = Val(n)
+        if v > 0 then return v
+    end if
+    if ch.sortKey <> invalid then
+        v = ch.sortKey
+        if type(v) = "Float" or type(v) = "Double" or type(v) = "Integer" or type(v) = "roFloat" or type(v) = "roInt" or type(v) = "roInteger" then
+            if v > 0 then return v * 1.0
+        end if
+    end if
+    return 99999.0
+end function
+
 function channelSortKey(ch as Object) as Float
     if ch = invalid then return 99999.0
-    if ch.sortKey <> invalid then return ch.sortKey
+    if ch.lineupOrder <> invalid then return ch.lineupOrder * 1.0
+    if ch.sortKey <> invalid then return ch.sortKey * 1.0
     n = valueOr(ch.number, "")
     if n = "" then return 99999.0
     return Val(n)

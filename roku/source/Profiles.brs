@@ -13,11 +13,10 @@ function GetProfiles() as Object
             allowDiscover: false,
             libraryMatch: ["kid", "kids", "children", "child", "family", "cartoon", "disney", "nick"],
             cableAllow: [
-                "timst-abc", "timst-nbc", "timst-cbs", "timst-fox", "timst-cw",
                 "timst-cartoon-network", "timst-boomerang", "timst-cbeebies",
                 "timst-disney-channel", "timst-disney-junior", "timst-disney-xd",
                 "timst-nickelodeon", "timst-nick-jr", "timst-nicktoons", "timst-teenick",
-                "timst-discovery-family", "timst-starz-kids-and-family"
+                "timst-discovery-family"
             ]
         },
         {

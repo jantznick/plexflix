@@ -36,12 +36,7 @@ end function
 
 sub buildStaticEntries()
     m.entries = []
-    if isAdultNav() then
-        m.entries.push({ id: "homeSearch", kind: "homeSearch", title: "Home" })
-    else
-        m.entries.push({ id: "home", kind: "nav", title: "Home" })
-        m.entries.push({ id: "search", kind: "nav", title: "Search" })
-    end if
+    m.entries.push({ id: "homeSearch", kind: "homeSearch", title: "Home" })
     m.entries.push({ id: "livetv", kind: "nav", title: "Live TV" })
     if ProfileAllowsSports(m.top.config) then
         m.entries.push({ id: "sports", kind: "nav", title: "Live Sports" })
@@ -70,12 +65,10 @@ sub onLibrariesLoaded()
     end if
 
     m.entries = []
+    m.entries.push({ id: "homeSearch", kind: "homeSearch", title: "Home" })
     if isAdultNav() then
-        m.entries.push({ id: "homeSearch", kind: "homeSearch", title: "Home" })
         appendAdultLibraryEntries()
     else
-        m.entries.push({ id: "home", kind: "nav", title: "Home" })
-        m.entries.push({ id: "search", kind: "nav", title: "Search" })
         for each lib in m.libraries
             m.entries.push({
                 id: "lib:" + asString(lib.sectionId),
@@ -94,65 +87,109 @@ sub onLibrariesLoaded()
     syncActiveIndex()
 end sub
 
+function isPrimaryLibraryName(title as String, sectionKind as String) as Boolean
+    low = LCase(title)
+    if sectionKind = "movie" then
+        if low = "movies" or low = "movie" then return true
+        if Left(low, 6) = "movies" then return true
+        return false
+    end if
+    if low = "tv shows" or low = "tv" or low = "shows" or low = "television" then return true
+    if Left(low, 8) = "tv shows" then return true
+    if Left(low, 2) = "tv" and Len(low) <= 10 then return true
+    return false
+end function
+
+function pickPrimaryLibrary(libs as Object, sectionKind as String) as Dynamic
+    if libs = invalid or libs.count() = 0 then return invalid
+    for each lib in libs
+        if isPrimaryLibraryName(asString(lib.title), sectionKind) then return lib
+    end for
+    return libs[0]
+end function
+
 sub appendAdultLibraryEntries()
-    moviesAdult = invalid
-    moviesKids = invalid
-    showsAdult = invalid
-    showsKids = invalid
+    moviesAdult = []
+    moviesKids = []
+    showsAdult = []
+    showsKids = []
+    otherLibs = []
     for each lib in m.libraries
         st = asString(lib.sectionType)
         kids = IsKidsLibraryTitle(asString(lib.title))
         if st = "movie" then
-            if kids then
-                if moviesKids = invalid then moviesKids = lib
-            else
-                if moviesAdult = invalid then moviesAdult = lib
-            end if
+            if kids then moviesKids.push(lib) else moviesAdult.push(lib)
         else if st = "show" then
-            if kids then
-                if showsKids = invalid then showsKids = lib
-            else
-                if showsAdult = invalid then showsAdult = lib
-            end if
+            if kids then showsKids.push(lib) else showsAdult.push(lib)
+        else
+            otherLibs.push(lib)
         end if
     end for
 
-    if moviesAdult <> invalid or moviesKids <> invalid then
-        primary = moviesAdult
-        if primary = invalid then primary = moviesKids
+    moviesPrimary = pickPrimaryLibrary(moviesAdult, "movie")
+    moviesKid = invalid
+    if moviesKids.count() > 0 then moviesKid = moviesKids[0]
+    if moviesPrimary <> invalid or moviesKid <> invalid then
+        primary = moviesPrimary
+        if primary = invalid then primary = moviesKid
         m.entries.push({
             id: "lib:" + asString(primary.sectionId),
             kind: "librarySplit",
             title: "Movies",
             library: primary,
-            altLibrary: moviesKids,
+            altLibrary: moviesKid,
             sectionKind: "movie"
         })
     end if
-    if showsAdult <> invalid or showsKids <> invalid then
-        primary = showsAdult
-        if primary = invalid then primary = showsKids
+
+    showsPrimary = pickPrimaryLibrary(showsAdult, "show")
+    showsKid = invalid
+    if showsKids.count() > 0 then showsKid = showsKids[0]
+    if showsPrimary <> invalid or showsKid <> invalid then
+        primary = showsPrimary
+        if primary = invalid then primary = showsKid
         m.entries.push({
             id: "lib:" + asString(primary.sectionId),
             kind: "librarySplit",
             title: "TV Shows",
             library: primary,
-            altLibrary: showsKids,
+            altLibrary: showsKid,
             sectionKind: "show"
         })
     end if
 
-    ' Any leftover libraries that are not movie/show stay as plain rows
-    for each lib in m.libraries
-        st = asString(lib.sectionType)
-        if st <> "movie" and st <> "show" then
-            m.entries.push({
-                id: "lib:" + asString(lib.sectionId),
-                kind: "library",
-                title: asString(lib.title),
-                library: lib
-            })
-        end if
+    ' Extra adult movie/show libraries (YouTube, etc.) keep their own rows
+    if moviesPrimary <> invalid then
+        for each lib in moviesAdult
+            if asString(lib.sectionId) <> asString(moviesPrimary.sectionId) then
+                m.entries.push({
+                    id: "lib:" + asString(lib.sectionId),
+                    kind: "library",
+                    title: asString(lib.title),
+                    library: lib
+                })
+            end if
+        end for
+    end if
+    if showsPrimary <> invalid then
+        for each lib in showsAdult
+            if asString(lib.sectionId) <> asString(showsPrimary.sectionId) then
+                m.entries.push({
+                    id: "lib:" + asString(lib.sectionId),
+                    kind: "library",
+                    title: asString(lib.title),
+                    library: lib
+                })
+            end if
+        end for
+    end if
+    for each lib in otherLibs
+        m.entries.push({
+            id: "lib:" + asString(lib.sectionId),
+            kind: "library",
+            title: asString(lib.title),
+            library: lib
+        })
     end for
 end sub
 
