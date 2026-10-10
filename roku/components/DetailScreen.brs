@@ -266,9 +266,9 @@ function durationMeta(item as Object) as String
     if minutes < 1 then return ""
     if minutes < 60 then return asString(minutes) + " min"
     hours = Int(minutes / 60)
-    rem = minutes - hours * 60
-    if rem = 0 then return asString(hours) + " hr"
-    return asString(hours) + " hr " + asString(rem) + " min"
+    leftover = minutes - hours * 60
+    if leftover = 0 then return asString(hours) + " hr"
+    return asString(hours) + " hr " + asString(leftover) + " min"
 end function
 
 sub rememberShowHeader()
