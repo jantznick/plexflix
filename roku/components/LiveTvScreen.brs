@@ -1680,7 +1680,8 @@ sub onRefocus()
     resumed = m.watching
     m.watching = invalid
     if resumed <> invalid and m.byKey.DoesExist(resumed.key) then
-        ' Back from full screen keeps the same live session going in the preview
+        ' Back from full screen: stay on that channel, but do not keep audio
+        ' playing in the preview square
         for i = 0 to m.channels.count() - 1
             if m.channels[i].key = resumed.key then
                 if i <> m.focusCh then
@@ -1691,9 +1692,10 @@ sub onRefocus()
                 exit for
             end if
         end for
+        stopPreview()
+        releaseOwnedLive()
         renderGrid()
         updateGridInfo()
-        playPreview(m.channels[m.focusCh], resumed.url)
         return
     end if
     renderGrid()
