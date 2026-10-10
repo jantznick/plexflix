@@ -24,10 +24,15 @@ sub init()
     m.cableTvScreen = invalid
     m.searchScreen = invalid
     m.profilePicker = invalid
+    m.bootSplashHost = m.top.findNode("bootSplash")
+    m.bootSplash = invalid
+    m.waitSpinner = m.top.findNode("waitSpinner")
+    m.waitBusy = m.top.findNode("waitBusy")
     m.section = "home"
     m.navExpanded = false
     m.activeLibraryId = ""
     m.profileReady = false
+    m.launchSplashDone = false
 
     m.sideNav.expanded = false
     m.sideNav.observeField("selected", "onNavSelected")
@@ -35,7 +40,11 @@ sub init()
     ' The nav can collapse itself (Back); keep the scrim and focus in sync when it does
     m.sideNav.observeField("expanded", "onNavExpandedChanged")
     m.sideNav.suppressed = true
-    showProfilePicker()
+    if m.waitBusy <> invalid then
+        PinSpinner(m.waitBusy)
+        CenterSpinner(m.waitBusy, 960)
+    end if
+    showLaunchSplash()
 end sub
 
 ' The icon rail belongs to browse surfaces: detail pages and the player use
@@ -48,13 +57,78 @@ end sub
 
 ' Nothing draws over the splash mosaic, open menu or rail
 function splashShowing() as Boolean
+    if m.bootSplash <> invalid then return true
     if m.profilePicker <> invalid then return true
+    if m.waitSpinner <> invalid and m.waitSpinner.visible = true then return true
     if m.homeScreen = invalid then return false
     return m.homeScreen.splashActive = true
 end function
 
+sub showLaunchSplash()
+    m.sideNav.suppressed = true
+    m.launchSplashDone = false
+    if m.bootSplashHost = invalid then
+        onLaunchSplashDone()
+        return
+    end if
+    while m.bootSplashHost.getChildCount() > 0
+        m.bootSplashHost.removeChildIndex(0)
+    end while
+    m.bootSplash = createObject("roSGNode", "SplashMosaic")
+    splashUrl = ""
+    if m.config.splashManifestUrl <> invalid then splashUrl = m.config.splashManifestUrl
+    if splashUrl <> "" then m.bootSplash.manifestUrl = splashUrl
+    m.bootSplash.active = true
+    m.bootSplashHost.appendChild(m.bootSplash)
+    m.bootSplashHost.visible = true
+    m.bootSplashHost.setFocus(true)
+    updateNavRail()
+
+    m.launchTimer = createObject("roSGNode", "Timer")
+    m.launchTimer.repeat = false
+    m.launchTimer.duration = 2.0
+    m.launchTimer.observeField("fire", "onLaunchSplashDone")
+    m.launchTimer.control = "start"
+end sub
+
+sub onLaunchSplashDone()
+    m.launchSplashDone = true
+    if m.launchTimer <> invalid then m.launchTimer.control = "stop"
+    hideLaunchSplash()
+    showProfilePicker()
+end sub
+
+sub hideLaunchSplash()
+    if m.bootSplash <> invalid then
+        m.bootSplash.active = false
+        m.bootSplash = invalid
+    end if
+    if m.bootSplashHost <> invalid then
+        while m.bootSplashHost.getChildCount() > 0
+            m.bootSplashHost.removeChildIndex(0)
+        end while
+        m.bootSplashHost.visible = false
+    end if
+end sub
+
+sub showWaitSpinner(on as Boolean)
+    if m.waitSpinner = invalid then return
+    m.waitSpinner.visible = on
+    if m.waitBusy <> invalid then
+        if on then
+            PinSpinner(m.waitBusy)
+            CenterSpinner(m.waitBusy, 960)
+            m.waitBusy.control = "start"
+        else
+            m.waitBusy.control = "stop"
+        end if
+    end if
+    updateNavRail()
+end sub
+
 sub showProfilePicker()
     clearScreens()
+    showWaitSpinner(false)
     ' Drop a parked Home so the next profile gets a fresh load
     if m.homeScreen <> invalid then
         m.screens.removeChild(m.homeScreen)
@@ -79,14 +153,19 @@ sub onProfileSelected()
         m.screens.removeChild(m.profilePicker)
         m.profilePicker = invalid
     end if
-    m.sideNav.suppressed = false
+    m.sideNav.suppressed = true
     m.sideNav.config = m.config
     m.sideNav.active = "home"
     m.section = "home"
-    showHome()
+    showWaitSpinner(true)
+    showHome(true)
 end sub
 
 sub onHomeSplashChange()
+    if m.homeScreen <> invalid and m.homeScreen.splashActive <> true then
+        showWaitSpinner(false)
+        m.sideNav.suppressed = false
+    end if
     updateNavRail()
 end sub
 
@@ -205,7 +284,7 @@ sub onLibrarySelected(event as Object)
     showLibraryBrowse(lib)
 end sub
 
-sub showHome()
+sub showHome(quietLoad = false as Boolean)
     clearScreens()
     m.section = "home"
     m.sideNav.active = "home"
@@ -216,11 +295,13 @@ sub showHome()
         m.homeScreen.setFocus(true)
         m.homeScreen.refocus = true
         m.homeScreen.refresh = true
+        showWaitSpinner(false)
         updateNavRail()
         return
     end if
 
     m.homeScreen = createObject("roSGNode", "HomeScreen")
+    m.homeScreen.quietLoad = quietLoad
     m.homeScreen.config = m.config
     m.homeScreen.observeField("selectedItem", "onBrowseSelected")
     m.homeScreen.observeField("loadingMessage", "onSoftLoading")

@@ -151,29 +151,23 @@ sub buildPinKeypad()
     end while
     m.pinKeys = []
 
-    ' Phone layout: 1-9, then Del + 0
-    labels = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "Del", "0"]
-    actions = ["", "", "", "", "", "", "", "", "", "del", ""]
+    ' Phone layout: 1-9, then centered 0. Back on the remote clears digits.
+    labels = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "0"]
     cellW = 96
     cellH = 72
     gapX = 16
     gapY = 14
-    gridW = 3 * cellW + 2 * gapX
-    startX = Int((880 - 8 - gridW) / 2) - 88
-
     for i = 0 to labels.count() - 1
-        row = Int(i / 3)
-        col = i mod 3
-        if i = 9 then
-            row = 3
-            col = 0
-        else if i = 10 then
+        if i < 9 then
+            row = Int(i / 3)
+            col = i mod 3
+        else
             row = 3
             col = 1
         end if
 
         g = m.pinKeypad.createChild("Group")
-        g.translation = [startX + col * (cellW + gapX), row * (cellH + gapY)]
+        g.translation = [col * (cellW + gapX), row * (cellH + gapY)]
 
         bg = g.createChild("Rectangle")
         bg.width = cellW
@@ -187,25 +181,15 @@ sub buildPinKeypad()
         lbl.vertAlign = "center"
         lbl.text = labels[i]
         lbl.color = "0xFFFFFF"
-        if labels[i] = "Del" then
-            lbl.font = MakeFont("pkg:/fonts/Outfit-SemiBold.ttf", 26)
-        else
-            lbl.font = MakeFont("pkg:/fonts/Outfit-Bold.ttf", 36)
-        end if
+        lbl.font = MakeFont("pkg:/fonts/Outfit-Bold.ttf", 36)
 
-        entry = {
+        m.pinKeys.push({
             group: g,
             bg: bg,
             row: row,
             col: col,
-            label: labels[i]
-        }
-        if actions[i] = "del" then
-            entry.action = "del"
-        else
-            entry.digit = labels[i]
-        end if
-        m.pinKeys.push(entry)
+            digit: labels[i]
+        })
     end for
     m.pinKeyIndex = 4
     paintPinKeypad()
@@ -247,14 +231,6 @@ end sub
 sub activatePinKey()
     if m.pinKeyIndex < 0 or m.pinKeyIndex >= m.pinKeys.count() then return
     keyEntry = m.pinKeys[m.pinKeyIndex]
-    if keyEntry.action = "del" then
-        if Len(m.pinValue) > 0 then
-            m.pinValue = Left(m.pinValue, Len(m.pinValue) - 1)
-            m.pinError.text = ""
-            paintPin()
-        end if
-        return
-    end if
     if keyEntry.digit <> invalid and keyEntry.digit <> "" then
         appendPinDigit(keyEntry.digit)
     end if
@@ -332,6 +308,16 @@ sub appendPinDigit(digit as String)
     if Len(m.pinValue) = 4 then tryUnlock()
 end sub
 
+sub backspacePin()
+    if Len(m.pinValue) = 0 then
+        closePin()
+        return
+    end if
+    m.pinValue = Left(m.pinValue, Len(m.pinValue) - 1)
+    m.pinError.text = ""
+    paintPin()
+end sub
+
 sub tryUnlock()
     if m.pinTarget = invalid then return
     expected = valueOr(m.pinTarget.pin, "")
@@ -388,8 +374,8 @@ function onKeyEvent(key as String, press as Boolean) as Boolean
             activatePinKey()
             return true
         end if
-        if key = "back" then
-            closePin()
+        if key = "back" or key = "rewind" then
+            backspacePin()
             return true
         end if
         if key = "left" then

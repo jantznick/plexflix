@@ -8,6 +8,7 @@
     <script type="text/brightscript" uri="pkg:/source/PlexConfig.brs" />
     <script type="text/brightscript" uri="pkg:/source/Profiles.brs" />
     <script type="text/brightscript" uri="pkg:/source/Fonts.brs" />
+    <script type="text/brightscript" uri="pkg:/source/Spinner.brs" />
 
     <children>
         <Rectangle id="background" width="1920" height="1080" color="0x07070B" />
@@ -26,6 +27,13 @@
         />
 
         <SideNav id="sideNav" />
+
+        <Group id="bootSplash" visible="false" />
+
+        <Group id="waitSpinner" visible="false">
+            <Rectangle width="1920" height="1080" color="0x07070B" opacity="0.72" />
+            <BusySpinner id="waitBusy" translation="[912, 492]" uri="pkg:/images/spinner.png" />
+        </Group>
 
         <Group id="loadingBanner" translation="[96, 992]" visible="false">
             <Rectangle width="1728" height="68" color="0x16161E" opacity="0.94" />
