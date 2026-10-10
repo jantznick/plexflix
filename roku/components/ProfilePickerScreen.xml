@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<component name="ProfilePickerScreen" extends="Group">
+    <interface>
+        <field id="config" type="assocarray" />
+        <field id="selectedProfile" type="assocarray" alwaysNotify="true" />
+    </interface>
+
+    <script type="text/brightscript" uri="ProfilePickerScreen.brs" />
+    <script type="text/brightscript" uri="pkg:/source/Fonts.brs" />
+    <script type="text/brightscript" uri="pkg:/source/Profiles.brs" />
+
+    <children>
+        <Rectangle width="1920" height="1080" color="0x0B1220" />
+        <Rectangle width="1920" height="1080" color="0x132033" opacity="0.85" />
+        <Rectangle translation="[0, 0]" width="1920" height="420" color="0x1A3A3A" opacity="0.22" />
+        <Rectangle translation="[0, 720]" width="1920" height="360" color="0x0A0E18" opacity="0.55" />
+        <Poster
+            translation="[1100, -80]"
+            width="980"
+            height="980"
+            uri="pkg:/images/poster_placeholder.png"
+            opacity="0.06"
+            loadDisplayMode="scaleToZoom"
+        />
+
+        <Group id="hero" translation="[0, 0]">
+            <Label id="brand" translation="[120, 96]" width="1680" height="72" text="PlexFlix" color="0xFFFFFF">
+                <Font role="font" uri="pkg:/fonts/Outfit-Bold.ttf" size="64" />
+            </Label>
+            <Label id="headline" translation="[120, 178]" width="1680" height="56" text="Who is watching?" color="0xE8EEF8">
+                <Font role="font" uri="pkg:/fonts/Outfit-SemiBold.ttf" size="42" />
+            </Label>
+        </Group>
+
+        <Group id="profileRow" translation="[0, 380]" />
+
+        <Group id="pinOverlay" visible="false">
+            <Rectangle width="1920" height="1080" color="0x05070C" opacity="0.72" />
+            <Rectangle id="pinPanel" translation="[520, 240]" width="880" height="600" color="0x121A2A" />
+            <Rectangle translation="[520, 240]" width="8" height="600" color="0xE50914" />
+            <Label id="pinTitle" translation="[568, 280]" width="784" height="48" text="Passcode" color="0xFFFFFF" horizAlign="center">
+                <Font role="font" uri="pkg:/fonts/Outfit-Bold.ttf" size="36" />
+            </Label>
+            <Group id="pinDigits" translation="[680, 360]" />
+            <Group id="pinKeypad" translation="[796, 460]" />
+            <Label id="pinError" translation="[568, 760]" width="784" height="36" text="" color="0xFF5A64" horizAlign="center">
+                <Font role="font" uri="pkg:/fonts/Outfit-Medium.ttf" size="22" />
+            </Label>
+        </Group>
+    </children>
+</component>

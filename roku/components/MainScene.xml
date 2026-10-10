@@ -6,6 +6,7 @@
     </interface>
     <script type="text/brightscript" uri="MainScene.brs" />
     <script type="text/brightscript" uri="pkg:/source/PlexConfig.brs" />
+    <script type="text/brightscript" uri="pkg:/source/Profiles.brs" />
     <script type="text/brightscript" uri="pkg:/source/Fonts.brs" />
 
     <children>
@@ -25,6 +26,12 @@
         />
 
         <SideNav id="sideNav" />
+
+        <Group id="bootSplash" visible="false" />
+
+        <Group id="waitSpinner" visible="false">
+            <SparseSplash id="waitSplash" />
+        </Group>
 
         <Group id="loadingBanner" translation="[96, 992]" visible="false">
             <Rectangle width="1728" height="68" color="0x16161E" opacity="0.94" />

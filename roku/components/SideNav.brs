@@ -10,6 +10,7 @@ sub init()
     m.activeIndex = 0
     m.itemNodes = []
     m.miniNodes = []
+    m.rowFocus = "main" ' main | alt | home | search within a dual row
     buildStaticEntries()
     applyExpanded()
     ' Screens finishing a load call setFocus on their own lists; while the
@@ -29,14 +30,22 @@ sub onConfigReady()
     loadLibraries()
 end sub
 
+function isAdultNav() as Boolean
+    return ProfileIsKids(m.top.config) = false
+end function
+
 sub buildStaticEntries()
-    m.entries = [
-        { id: "home", kind: "nav", title: "Home" },
-        { id: "search", kind: "nav", title: "Search" },
-        { id: "livetv", kind: "nav", title: "Live TV" },
-        { id: "cable", kind: "nav", title: "Cable TV" },
-        { id: "sports", kind: "nav", title: "Live Sports" }
-    ]
+    m.entries = []
+    if isAdultNav() then
+        m.entries.push({ id: "homeSearch", kind: "homeSearch", title: "Home" })
+    else
+        m.entries.push({ id: "home", kind: "nav", title: "Home" })
+    end if
+    m.entries.push({ id: "livetv", kind: "nav", title: "Live TV" })
+    if ProfileAllowsSports(m.top.config) then
+        m.entries.push({ id: "sports", kind: "nav", title: "Live Sports" })
+    end if
+    m.entries.push({ id: "profiles", kind: "nav", title: "Switch Profile" })
     rebuildItems()
 end sub
 
@@ -52,25 +61,127 @@ sub onLibrariesLoaded()
     response = m.task.response
     m.libraries = []
     if response <> invalid and response.ok = true and response.items <> invalid then
-        m.libraries = response.items
+        for each lib in response.items
+            if ProfileAllowsLibraryTitle(m.top.config, asString(lib.title)) then
+                m.libraries.push(lib)
+            end if
+        end for
     end if
 
     m.entries = []
-    m.entries.push({ id: "home", kind: "nav", title: "Home" })
-    m.entries.push({ id: "search", kind: "nav", title: "Search" })
-    for each lib in m.libraries
-        m.entries.push({
-            id: "lib:" + asString(lib.sectionId),
-            kind: "library",
-            title: asString(lib.title),
-            library: lib
-        })
-    end for
+    if isAdultNav() then
+        m.entries.push({ id: "homeSearch", kind: "homeSearch", title: "Home" })
+        appendAdultLibraryEntries()
+    else
+        m.entries.push({ id: "home", kind: "nav", title: "Home" })
+        for each lib in m.libraries
+            m.entries.push({
+                id: "lib:" + asString(lib.sectionId),
+                kind: "library",
+                title: asString(lib.title),
+                library: lib
+            })
+        end for
+    end if
     m.entries.push({ id: "livetv", kind: "nav", title: "Live TV" })
-    m.entries.push({ id: "cable", kind: "nav", title: "Cable TV" })
-    m.entries.push({ id: "sports", kind: "nav", title: "Live Sports" })
+    if ProfileAllowsSports(m.top.config) then
+        m.entries.push({ id: "sports", kind: "nav", title: "Live Sports" })
+    end if
+    m.entries.push({ id: "profiles", kind: "nav", title: "Switch Profile" })
     rebuildItems()
     syncActiveIndex()
+end sub
+
+function titleHasAny(title as String, needles as Object) as Boolean
+    low = LCase(title)
+    if needles = invalid then return false
+    for each needle in needles
+        if needle <> "" and Instr(1, low, LCase(needle)) > 0 then return true
+    end for
+    return false
+end function
+
+function pickLibByMatch(libs as Object, needles as Object, sectionType as String, wantKids as Boolean, exclude as Object) as Dynamic
+    best = invalid
+    for each lib in libs
+        title = asString(lib.title)
+        st = asString(lib.sectionType)
+        ok = true
+        if sectionType <> "" and st <> sectionType then ok = false
+        if ok and titleHasAny(title, exclude) then ok = false
+        kids = IsKidsLibraryTitle(title)
+        if ok and wantKids and kids <> true then ok = false
+        if ok and wantKids = false and kids = true then ok = false
+        if ok and titleHasAny(title, needles) then
+            if best = invalid then
+                best = lib
+            else if Len(title) < Len(asString(best.title)) then
+                best = lib
+            end if
+        end if
+    end for
+    return best
+end function
+
+function pickYoutubeLib(libs as Object, wantKids as Boolean) as Dynamic
+    best = invalid
+    for each lib in libs
+        title = asString(lib.title)
+        low = LCase(title)
+        if Instr(1, low, "youtube") > 0 then
+            kids = IsKidsLibraryTitle(title)
+            isKidsYt = (kids = true) or (Instr(1, low, "kids") > 0)
+            take = false
+            if wantKids and isKidsYt then take = true
+            if wantKids = false and isKidsYt = false then take = true
+            if take then
+                if best = invalid then
+                    best = lib
+                else if Len(title) < Len(asString(best.title)) then
+                    best = lib
+                end if
+            end if
+        end if
+    end for
+    return best
+end function
+
+sub appendAdultLibraryEntries()
+    ' Hardcoded rows only: Movies, TV Shows, YouTube — each with optional K
+    for each spec in GetAdultLibraryNav()
+        adultLib = invalid
+        kidsLib = invalid
+        if LCase(spec.title) = "youtube" then
+            adultLib = pickYoutubeLib(m.libraries, false)
+            kidsLib = pickYoutubeLib(m.libraries, true)
+        else
+            adultLib = pickLibByMatch(m.libraries, spec.adultMatch, asString(spec.sectionType), false, spec.exclude)
+            kidsLib = pickLibByMatch(m.libraries, spec.kidsMatch, asString(spec.sectionType), true, spec.exclude)
+            ' Kids movie/show libs may not include the word "movies" — any kids lib of that type
+            if kidsLib = invalid then
+                for each lib in m.libraries
+                    if asString(lib.sectionType) = asString(spec.sectionType) and IsKidsLibraryTitle(asString(lib.title)) then
+                        if not titleHasAny(asString(lib.title), spec.exclude) then
+                            kidsLib = lib
+                            exit for
+                        end if
+                    end if
+                end for
+            end if
+        end if
+        if adultLib <> invalid or kidsLib <> invalid then
+            primary = adultLib
+            if primary = invalid then primary = kidsLib
+            m.entries.push({
+                id: "lib:" + asString(primary.sectionId),
+                kind: "librarySplit",
+                title: spec.title,
+                library: primary,
+                altLibrary: kidsLib,
+                sectionKind: asString(spec.sectionType)
+            })
+        end if
+    end for
 end sub
 
 sub rebuildItems()
@@ -78,6 +189,7 @@ sub rebuildItems()
         m.navItems.removeChildIndex(0)
     end while
     m.itemNodes = []
+    m.rowFocus = "main"
 
     y = 0
     for i = 0 to m.entries.count() - 1
@@ -85,25 +197,35 @@ sub rebuildItems()
         row = createObject("roSGNode", "Group")
         row.translation = [0, y]
 
-        bg = createObject("roSGNode", "Rectangle")
-        bg.id = "bg"
-        bg.width = 260
-        bg.height = 56
-        bg.color = "0x1E1E24"
-        row.appendChild(bg)
+        if entry.kind = "homeSearch" then
+            node = buildHomeSearchRow(row)
+            m.navItems.appendChild(row)
+            m.itemNodes.push(node)
+        else if entry.kind = "librarySplit" then
+            node = buildLibrarySplitRow(row, entry)
+            m.navItems.appendChild(row)
+            m.itemNodes.push(node)
+        else
+            bg = createObject("roSGNode", "Rectangle")
+            bg.id = "bg"
+            bg.width = 260
+            bg.height = 56
+            bg.color = "0x1E1E24"
+            row.appendChild(bg)
 
-        label = createObject("roSGNode", "Label")
-        label.width = 260
-        label.height = 56
-        label.horizAlign = "center"
-        label.vertAlign = "center"
-        label.text = entry.title
-        label.color = "0xDDDDDD"
-        label.font = MakeFont("pkg:/fonts/Outfit-SemiBold.ttf", 24)
-        row.appendChild(label)
+            label = createObject("roSGNode", "Label")
+            label.width = 260
+            label.height = 56
+            label.horizAlign = "center"
+            label.vertAlign = "center"
+            label.text = entry.title
+            label.color = "0xDDDDDD"
+            label.font = MakeFont("pkg:/fonts/Outfit-SemiBold.ttf", 24)
+            row.appendChild(label)
 
-        m.navItems.appendChild(row)
-        m.itemNodes.push({ group: row, bg: bg, label: label })
+            m.navItems.appendChild(row)
+            m.itemNodes.push({ kind: "plain", group: row, bg: bg, label: label })
+        end if
         y = y + 64
     end for
 
@@ -112,6 +234,90 @@ sub rebuildItems()
     if m.activeIndex >= m.entries.count() then m.activeIndex = 0
     paint()
 end sub
+
+function buildHomeSearchRow(row as Object) as Object
+    homeBg = row.createChild("Rectangle")
+    homeBg.width = 120
+    homeBg.height = 56
+    homeBg.color = "0x1E1E24"
+
+    homeIcon = row.createChild("Poster")
+    homeIcon.width = 36
+    homeIcon.height = 36
+    homeIcon.translation = [42, 10]
+    homeIcon.uri = "pkg:/images/nav_home.png"
+
+    searchBg = row.createChild("Rectangle")
+    searchBg.width = 120
+    searchBg.height = 56
+    searchBg.translation = [140, 0]
+    searchBg.color = "0x1E1E24"
+
+    searchIcon = row.createChild("Poster")
+    searchIcon.width = 36
+    searchIcon.height = 36
+    searchIcon.translation = [182, 10]
+    searchIcon.uri = "pkg:/images/nav_search.png"
+
+    return {
+        kind: "homeSearch",
+        group: row,
+        homeBg: homeBg,
+        searchBg: searchBg,
+        homeIcon: homeIcon,
+        searchIcon: searchIcon
+    }
+end function
+
+function buildLibrarySplitRow(row as Object, entry as Object) as Object
+    hasAlt = (entry.altLibrary <> invalid)
+    mainW = 260
+    if hasAlt then mainW = 196
+
+    bg = row.createChild("Rectangle")
+    bg.width = mainW
+    bg.height = 56
+    bg.color = "0x1E1E24"
+
+    label = row.createChild("Label")
+    label.width = mainW
+    label.height = 56
+    label.horizAlign = "center"
+    label.vertAlign = "center"
+    label.text = entry.title
+    label.color = "0xDDDDDD"
+    label.font = MakeFont("pkg:/fonts/Outfit-SemiBold.ttf", 24)
+
+    altBg = invalid
+    altLabel = invalid
+    if hasAlt then
+        altBg = row.createChild("Rectangle")
+        altBg.width = 56
+        altBg.height = 56
+        altBg.translation = [204, 0]
+        altBg.color = "0x1E1E24"
+
+        altLabel = row.createChild("Label")
+        altLabel.width = 56
+        altLabel.height = 56
+        altLabel.translation = [204, 0]
+        altLabel.horizAlign = "center"
+        altLabel.vertAlign = "center"
+        altLabel.text = "K"
+        altLabel.color = "0xDDDDDD"
+        altLabel.font = MakeFont("pkg:/fonts/Outfit-Bold.ttf", 26)
+    end if
+
+    return {
+        kind: "librarySplit",
+        group: row,
+        bg: bg,
+        label: label,
+        altBg: altBg,
+        altLabel: altLabel,
+        hasAlt: hasAlt
+    }
+end function
 
 ' Same vertical rhythm as the full list, so an icon sits where its label will
 ' appear when the menu opens
@@ -142,11 +348,13 @@ sub rebuildMini()
 end sub
 
 function iconFor(entry as Object) as String
-    if entry.id = "home" then return "pkg:/images/nav_home.png"
+    if entry.id = "home" or entry.kind = "homeSearch" then return "pkg:/images/nav_home.png"
     if entry.id = "search" then return "pkg:/images/nav_search.png"
     if entry.id = "livetv" then return "pkg:/images/nav_live.png"
     if entry.id = "cable" then return "pkg:/images/nav_cable.png"
     if entry.id = "sports" then return "pkg:/images/nav_sports.png"
+    if entry.id = "profiles" then return "pkg:/images/nav_profiles.png"
+    if entry.kind = "librarySplit" and entry.sectionKind = "show" then return "pkg:/images/nav_tv.png"
     if entry.library <> invalid and asString(entry.library.sectionType) = "show" then
         return "pkg:/images/nav_tv.png"
     end if
@@ -163,14 +371,61 @@ sub paint()
 
     for i = 0 to m.itemNodes.count() - 1
         node = m.itemNodes[i]
-        if i = m.index then
-            node.bg.color = "0xE50914"
-            node.label.color = "0xFFFFFF"
+        focused = (i = m.index)
+        if node.kind = "homeSearch" then
+            paintHomeSearch(node, focused)
+        else if node.kind = "librarySplit" then
+            paintLibrarySplit(node, focused)
         else
-            node.bg.color = "0x1E1E24"
-            node.label.color = "0xCCCCCC"
+            if focused then
+                node.bg.color = "0xE50914"
+                node.label.color = "0xFFFFFF"
+            else
+                node.bg.color = "0x1E1E24"
+                node.label.color = "0xCCCCCC"
+            end if
         end if
     end for
+end sub
+
+sub paintHomeSearch(node as Object, focused as Boolean)
+    homeOn = focused and (m.rowFocus = "home" or m.rowFocus = "main")
+    searchOn = focused and m.rowFocus = "search"
+    if homeOn then
+        node.homeBg.color = "0xE50914"
+        node.homeIcon.blendColor = "0xFFFFFF"
+    else
+        node.homeBg.color = "0x1E1E24"
+        if focused then node.homeIcon.blendColor = "0xAAAAAA" else node.homeIcon.blendColor = "0x77777F"
+    end if
+    if searchOn then
+        node.searchBg.color = "0xE50914"
+        node.searchIcon.blendColor = "0xFFFFFF"
+    else
+        node.searchBg.color = "0x1E1E24"
+        if focused then node.searchIcon.blendColor = "0xAAAAAA" else node.searchIcon.blendColor = "0x77777F"
+    end if
+end sub
+
+sub paintLibrarySplit(node as Object, focused as Boolean)
+    mainOn = focused and m.rowFocus <> "alt"
+    altOn = focused and m.rowFocus = "alt" and node.hasAlt = true
+    if mainOn then
+        node.bg.color = "0xE50914"
+        node.label.color = "0xFFFFFF"
+    else
+        node.bg.color = "0x1E1E24"
+        node.label.color = "0xCCCCCC"
+    end if
+    if node.hasAlt = true then
+        if altOn then
+            node.altBg.color = "0xE50914"
+            node.altLabel.color = "0xFFFFFF"
+        else
+            node.altBg.color = "0x1E1E24"
+            node.altLabel.color = "0xCCCCCC"
+        end if
+    end if
 end sub
 
 sub onExpandedChange()
@@ -194,6 +449,7 @@ sub applyExpanded()
         ' Reopening should start on the section you are in, not wherever the
         ' cursor was left when the menu was dismissed without a choice
         m.index = m.activeIndex
+        m.rowFocus = "main"
     end if
     paint()
 end sub
@@ -206,11 +462,29 @@ sub syncActiveIndex()
     active = m.top.active
     if active = invalid or active = "" then return
     for i = 0 to m.entries.count() - 1
-        if m.entries[i].id = active then
+        entry = m.entries[i]
+        if entry.id = active then
             m.index = i
             m.activeIndex = i
+            m.rowFocus = "main"
             paint()
             return
+        end if
+        if entry.kind = "homeSearch" and (active = "home" or active = "search") then
+            m.index = i
+            m.activeIndex = i
+            if active = "search" then m.rowFocus = "search" else m.rowFocus = "home"
+            paint()
+            return
+        end if
+        if entry.kind = "librarySplit" and entry.altLibrary <> invalid then
+            if active = "lib:" + asString(entry.altLibrary.sectionId) then
+                m.index = i
+                m.activeIndex = i
+                m.rowFocus = "alt"
+                paint()
+                return
+            end if
         end if
     end for
 end sub
@@ -218,6 +492,25 @@ end sub
 sub activateCurrent()
     if m.index < 0 or m.index >= m.entries.count() then return
     entry = m.entries[m.index]
+    if entry.kind = "homeSearch" then
+        if m.rowFocus = "search" then
+            m.top.active = "search"
+            m.top.selected = "search"
+        else
+            m.top.active = "home"
+            m.top.selected = "home"
+        end if
+        return
+    end if
+    if entry.kind = "librarySplit" then
+        lib = entry.library
+        if m.rowFocus = "alt" and entry.altLibrary <> invalid then lib = entry.altLibrary
+        if lib = invalid then return
+        m.top.active = "lib:" + asString(lib.sectionId)
+        m.top.selectedLibrary = lib
+        m.top.selected = "library"
+        return
+    end if
     if entry.kind = "library" then
         m.top.active = entry.id
         m.top.selectedLibrary = entry.library
@@ -231,28 +524,61 @@ end sub
 function onKeyEvent(key as String, press as Boolean) as Boolean
     if not press then return false
 
-    if key = "up"
+    entry = invalid
+    if m.index >= 0 and m.index < m.entries.count() then entry = m.entries[m.index]
+
+    if key = "up" then
         if m.index > 0 then
             m.index = m.index - 1
+            m.rowFocus = defaultRowFocus(m.entries[m.index])
             paint()
         end if
         return true
-    else if key = "down"
+    else if key = "down" then
         if m.index < m.entries.count() - 1 then
             m.index = m.index + 1
+            m.rowFocus = defaultRowFocus(m.entries[m.index])
             paint()
         end if
         return true
-    else if key = "OK" or key = "play"
+    else if key = "left" then
+        if entry <> invalid and entry.kind = "homeSearch" and m.rowFocus = "search" then
+            m.rowFocus = "home"
+            paint()
+            return true
+        end if
+        if entry <> invalid and entry.kind = "librarySplit" and m.rowFocus = "alt" then
+            m.rowFocus = "main"
+            paint()
+            return true
+        end if
+        return true
+    else if key = "right" then
+        if entry <> invalid and entry.kind = "homeSearch" and m.rowFocus <> "search" then
+            m.rowFocus = "search"
+            paint()
+            return true
+        end if
+        if entry <> invalid and entry.kind = "librarySplit" and entry.altLibrary <> invalid and m.rowFocus <> "alt" then
+            m.rowFocus = "alt"
+            paint()
+            return true
+        end if
+        return false
+    else if key = "OK" or key = "play" then
         activateCurrent()
         return true
-    else if key = "back"
+    else if key = "back" then
         ' MainScene owns Back from the open menu: it leaves the channel
-        return false
-    else if key = "right"
         return false
     end if
     return false
+end function
+
+function defaultRowFocus(entry as Object) as String
+    if entry = invalid then return "main"
+    if entry.kind = "homeSearch" then return "home"
+    return "main"
 end function
 
 function asString(value as Dynamic) as String

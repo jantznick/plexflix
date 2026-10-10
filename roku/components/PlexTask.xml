@@ -8,4 +8,5 @@
     </interface>
     <script type="text/brightscript" uri="PlexTask.brs" />
     <script type="text/brightscript" uri="pkg:/source/PlexConfig.brs" />
+    <script type="text/brightscript" uri="pkg:/source/Profiles.brs" />
 </component>

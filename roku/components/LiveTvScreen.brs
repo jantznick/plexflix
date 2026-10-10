@@ -73,6 +73,7 @@ sub init()
     m.tabNames = ["Guide", "Upcoming", "Rules"]
     m.tab = 0
     m.zone = "grid"
+    m.tabsBuiltForKids = invalid
     m.schedule = { upcoming: [], rules: [] }
     m.recByAiring = {}
     m.recByGuid = {}
@@ -87,6 +88,14 @@ sub init()
     m.watching = invalid
     m.pendingWatch = invalid
     m.ownedLive = invalid
+    m.plexChannels = []
+    m.cableChannels = []
+    m.cableLoading = false
+    m.feedDialog = invalid
+    m.feedDialogActions = []
+    m.cableLineup = loadCableLineup()
+    m.cableTitles = GetHardcodedCableTitleNumbers()
+    m.cableFallbackNum = 67.1
 
     buildTabs()
     buildSlotHeader()
@@ -336,12 +345,35 @@ end function
 
 sub onConfigReady()
     if m.top.config = invalid then return
+    if not ProfileAllowsPlexLiveTv(m.top.config) then
+        ' Kids: Guide only — no Plex DVR Upcoming/Rules
+        m.tabNames = ["Guide"]
+        while m.tabRow.getChildCount() > 1
+            m.tabRow.removeChildIndex(m.tabRow.getChildCount() - 1)
+        end while
+        m.tabNodes = []
+        m.tab = 0
+        buildTabs()
+        paintTabs()
+    end if
     loadGuide()
     loadSchedule()
 end sub
 
 sub loadGuide()
-    m.top.loadingMessage = "Loading Live TV…"
+    m.top.loadingMessage = "Loading TV guide…"
+    m.cableChannels = []
+    ' Kids: skip Plex Live TV entirely — streaming Cable nets only
+    if not ProfileAllowsPlexLiveTv(m.top.config) then
+        m.plexChannels = []
+        m.byKey = {}
+        m.ctx = invalid
+        m.loadedStart = m.minWin
+        m.loadedEnd = m.minWin + m.chunkLen
+        m.top.loadingMessage = "Loading channels…"
+        loadCableChannels()
+        return
+    end if
     m.gridTask = createObject("roSGNode", "PlexTask")
     m.gridTask.config = m.top.config
     m.gridTask.action = "liveTvGrid"
@@ -353,48 +385,375 @@ end sub
 
 sub onGuideLoaded()
     response = m.gridTask.response
-    m.top.loadingMessage = ""
+    m.plexChannels = []
+    m.byKey = {}
+    m.ctx = invalid
+
     if response = invalid or response.ok <> true then
-        err = "Could not load the guide"
+        err = "Could not load Plex channels"
         if response <> invalid and response.error <> invalid then err = response.error
-        m.programTitle.text = "Guide unavailable"
-        m.programSub.text = ""
-        m.programMeta.text = ""
-        m.programSummary.text = err
-        showGuideStatus(err)
+        showToast(err)
+        m.loadedStart = m.minWin
+        m.loadedEnd = m.minWin + m.chunkLen
+    else
+        m.ctx = { dvrId: response.dvrId, epgId: response.epgId, enabled: response.enabled }
+        m.loadedStart = response.startAt
+        m.loadedEnd = response.endAt
+        for each ch in response.channels
+            ch.source = "plex"
+            ch.raw = ch.programs
+            m.plexChannels.push(ch)
+            m.byKey[ch.key] = ch
+        end for
+        if response.source = "fallback" then
+            showToast("Plex guide data unavailable — showing channels only")
+        end if
+    end if
+
+    ' Cable nets (Entertainment / Cartoons) load next and append into one lineup
+    m.top.loadingMessage = "Loading cable channels…"
+    loadCableChannels()
+end sub
+
+sub loadCableChannels()
+    m.cableLoading = true
+    m.cableFeedTask = createObject("roSGNode", "PlexTask")
+    m.cableFeedTask.config = m.top.config
+    m.cableFeedTask.action = "sportsFeed"
+    m.cableFeedTask.observeField("response", "onCableFeedLoaded")
+    m.cableFeedTask.control = "RUN"
+end sub
+
+function isCableCategory(title as String) as Boolean
+    key = LCase(title)
+    return key = "entertainment" or key = "cartoons"
+end function
+
+sub onCableFeedLoaded()
+    response = m.cableFeedTask.response
+    m.cableChannels = []
+    if response = invalid or response.ok <> true then
+        m.cableLoading = false
+        finishUnifiedGuide()
         return
     end if
 
-    m.ctx = { dvrId: response.dvrId, epgId: response.epgId, enabled: response.enabled }
-    m.loadedStart = response.startAt
-    m.loadedEnd = response.endAt
+    rows = response.rows
+    if rows = invalid then rows = []
+    for each rowData in rows
+        league = valueOr(rowData.title, "")
+        if isCableCategory(league) then
+            items = rowData.items
+            if items = invalid then items = []
+            for each item in items
+                ch = makeCableChannel(item, league)
+                if ch <> invalid then m.cableChannels.push(ch)
+            end for
+        end if
+    end for
+
+    cfg = m.top.config
+    epgUrl = ""
+    if cfg <> invalid and cfg.cableEpgUrl <> invalid then epgUrl = cfg.cableEpgUrl
+    if epgUrl = "" or m.cableChannels.count() = 0 then
+        m.cableLoading = false
+        finishUnifiedGuide()
+        return
+    end if
+
+    m.top.loadingMessage = "Loading cable listings…"
+    m.cableEpgTask = createObject("roSGNode", "PlexTask")
+    m.cableEpgTask.config = cfg
+    m.cableEpgTask.action = "cableEpg"
+    m.cableEpgTask.observeField("response", "onCableEpgLoaded")
+    m.cableEpgTask.control = "RUN"
+end sub
+
+sub onCableEpgLoaded()
+    response = m.cableEpgTask.response
+    if response <> invalid and response.ok = true and response.skipped <> true then
+        byId = response.byId
+        if byId = invalid then byId = {}
+        for each ch in m.cableChannels
+            feedId = valueOr(ch.feedId, "")
+            if feedId <> "" and byId.DoesExist(feedId) then
+                programs = byId[feedId]
+                if programs <> invalid and programs.count() > 0 then
+                    raw = []
+                    for each p in programs
+                        mapped = cableProgToGuide(p)
+                        if mapped <> invalid then raw.push(mapped)
+                    end for
+                    if raw.count() > 0 then ch.raw = raw
+                end if
+            end if
+        end for
+    end if
+    m.cableLoading = false
+    finishUnifiedGuide()
+end sub
+
+function loadCableLineup() as Object
+    out = GetHardcodedCableLineup()
+    raw = ReadAsciiFile("pkg:/source/cable_lineup.json")
+    if raw = invalid or raw = "" then return out
+    parsed = ParseJson(raw)
+    if parsed = invalid or parsed.channels = invalid then return out
+    channels = parsed.channels
+    if GetInterface(channels, "ifAssociativeArray") = invalid then return out
+    for each feedId in channels
+        n = channels[feedId]
+        if n <> invalid then out[LCase(valueOr(feedId, ""))] = n * 1.0
+    end for
+    return out
+end function
+
+function cableLineupLookup(feedId as String, title as String) as Float
+    fid = LCase(valueOr(feedId, "").Trim())
+    t = LCase(valueOr(title, "").Trim())
+
+    ' 1) Exact feed id against hardcoded / JSON map
+    if fid <> "" and m.cableLineup <> invalid then
+        for each key in m.cableLineup
+            if LCase(valueOr(key, "")) = fid then return m.cableLineup[key] * 1.0
+        end for
+        for each key in m.cableLineup
+            bare = LCase(valueOr(key, ""))
+            if Left(bare, 6) = "timst-" then bare = Mid(bare, 7)
+            if bare <> "" and bare = fid then return m.cableLineup[key] * 1.0
+        end for
+    end if
+
+    ' 2) Title aliases
+    if t <> "" then
+        titles = m.cableTitles
+        if titles = invalid then titles = GetHardcodedCableTitleNumbers()
+        for each key in titles
+            if LCase(valueOr(key, "")) = t then return titles[key] * 1.0
+        end for
+        for each key in titles
+            k = LCase(valueOr(key, ""))
+            if k <> "" and (t = k or Instr(1, t, k) = 1) then
+                if Len(t) <= Len(k) + 4 then return titles[key] * 1.0
+            end if
+        end for
+    end if
+
+    return 0.0
+end function
+
+function preferredCableNumber(feedId as String, title as String) as Float
+    n = cableLineupLookup(feedId, title)
+    if n > 0 then return n
+    n = m.cableFallbackNum
+    m.cableFallbackNum = m.cableFallbackNum + 1.0
+    return n
+end function
+
+function makeCableChannel(item as Object, category as String) as Dynamic
+    if item = invalid then return invalid
+    title = valueOr(item.title, "")
+    if title = "" then title = "Channel"
+    logo = valueOr(item.hdPosterUrl, "")
+    if logo = "" then logo = valueOr(item.hdBackdropUrl, "")
+    feedId = valueOr(item.id, "")
+    streamUrl = valueOr(item.streamUrl, "")
+    if streamUrl = "" then return invalid
+    key = "cable:" + feedId
+    if feedId = "" then key = "cable:" + streamUrl
+    ' Float VCN (e.g. 7.15) so Cable ABC sorts between OTA 7.1 and 7.2
+    order = preferredCableNumber(feedId, title)
+    raw = []
+    if item.programs <> invalid then
+        for each p in item.programs
+            mapped = cableProgToGuide(p)
+            if mapped <> invalid then raw.push(mapped)
+        end for
+    end if
+    return {
+        key: key,
+        source: "cable",
+        feedId: feedId,
+        number: "",
+        sortKey: order,
+        lineupOrder: order,
+        callSign: title,
+        name: title,
+        logo: logo,
+        summary: valueOr(item.description, category + " · 24/7"),
+        tuneId: "",
+        tuneAlt: "",
+        streamUrl: streamUrl,
+        streamFormat: valueOr(item.streamFormat, "hls"),
+        item: item,
+        programs: [],
+        raw: raw
+    }
+end function
+
+function cableProgToGuide(p as Object) as Dynamic
+    if p = invalid then return invalid
+    beginsAt = 0
+    endsAt = 0
+    if p.beginsAt <> invalid then beginsAt = p.beginsAt
+    if p.endsAt <> invalid then endsAt = p.endsAt
+    if beginsAt <= 0 or endsAt <= beginsAt then return invalid
+    art = valueOr(p.art, "")
+    if art = "" then art = valueOr(p.backdrop, "")
+    if art = "" then art = valueOr(p.poster, "")
+    kind = valueOr(p.tmdbType, "")
+    if kind = "tv" then kind = "episode"
+    return {
+        title: valueOr(p.title, "Program"),
+        subtitle: valueOr(p.subtitle, ""),
+        summary: valueOr(p.summary, ""),
+        placeholder: false,
+        beginsAt: beginsAt,
+        endsAt: endsAt,
+        guid: "",
+        showGuid: "",
+        episodeLabel: valueOr(p.episodeLabel, ""),
+        isNew: false,
+        kind: kind,
+        art: art,
+        year: valueOr(p.year, ""),
+        contentRating: valueOr(p.contentRating, ""),
+        rating: valueOr(p.rating, ""),
+        cast: p.cast,
+        poster: valueOr(p.poster, ""),
+        backdrop: valueOr(p.backdrop, "")
+    }
+end function
+
+sub finishUnifiedGuide()
+    m.top.loadingMessage = ""
     m.channels = []
     m.byKey = {}
-    for each ch in response.channels
-        ch.raw = ch.programs
-        m.channels.push(ch)
-        m.byKey[ch.key] = ch
+    ' Reload map + reset fallback (unmatched → 67.1+)
+    m.cableLineup = loadCableLineup()
+    m.cableTitles = GetHardcodedCableTitleNumbers()
+    m.cableFallbackNum = 67.1
+    allowPlex = ProfileAllowsPlexLiveTv(m.top.config)
+    if allowPlex then
+        for each ch in m.plexChannels
+            ch.lineupOrder = plexLineupOrder(ch)
+            ch.sortKey = ch.lineupOrder
+            m.channels.push(ch)
+            m.byKey[ch.key] = ch
+        end for
+    end if
+    for each ch in m.cableChannels
+        if ProfileAllowsCableChannel(m.top.config, valueOr(ch.feedId, ""), valueOr(ch.callSign, "")) then
+            ' Hardcoded float VCN every time. Number column stays blank.
+            order = preferredCableNumber(valueOr(ch.feedId, ""), valueOr(ch.callSign, ""))
+            ch.lineupOrder = order
+            ch.sortKey = order
+            ch.number = ""
+            m.channels.push(ch)
+            m.byKey[ch.key] = ch
+        end if
     end for
+    sortChannelsByNumber()
     rebuildPrograms()
 
     if m.channels.count() = 0 then
+        m.guideLoaded = false
         showGuideStatus("No channels in the guide")
+        m.programTitle.text = "Guide unavailable"
         return
     end if
+
     showGuideStatus("")
     m.guideLoaded = true
-    m.focusCh = 0
-    m.topRow = 0
+    if m.focusCh >= m.channels.count() then m.focusCh = 0
+    if m.topRow >= m.channels.count() then m.topRow = 0
     m.winStart = m.minWin
     refocusAnchor(nowSeconds())
     renderGrid()
     updateGridInfo()
-    if response.source = "fallback" then
-        showToast("Guide data unavailable — showing channels only")
+end sub
+
+function plexLineupOrder(ch as Object) as Float
+    if ch = invalid then return 99999.0
+    n = valueOr(ch.number, "")
+    if n <> "" then
+        v = Val(n)
+        if v > 0 then return v
     end if
+    return 99999.0
+end function
+
+function channelSortKey(ch as Object) as Float
+    if ch = invalid then return 99999.0
+    if ch.lineupOrder <> invalid then return ch.lineupOrder * 1.0
+    if ch.sortKey <> invalid then return ch.sortKey * 1.0
+    n = valueOr(ch.number, "")
+    if n = "" then return 99999.0
+    v = Val(n)
+    if v > 0 then return v
+    return 99999.0
+end function
+
+sub markUsedNumber(used as Object, key as Float)
+    ' Track whole-number slots so Cable 210 doesn't sit on top of Plex "210"
+    slot = Int(key)
+    used[StrI(slot).Trim()] = true
+end sub
+
+function avoidNumberCollision(used as Object, preferred as Float) as Float
+    slot = Int(preferred)
+    if slot < 1 then slot = 1
+    guard = 0
+    while used.DoesExist(StrI(slot).Trim()) and guard < 200
+        slot = slot + 1
+        guard = guard + 1
+    end while
+    return slot * 1.0
+end function
+
+function formatChannelNumber(key as Float) as String
+    ' Prefer whole numbers for Cable; keep decimals for Plex VCNs like 7.1
+    whole = Int(key)
+    if Abs(key - whole) < 0.001 then return StrI(whole).Trim()
+    text = Str(key).Trim()
+    return text
+end function
+
+sub sortChannelsByNumber()
+    n = m.channels.count()
+    if n < 2 then return
+    keyed = []
+    for i = 0 to n - 1
+        keyed.push({
+            k: channelSortKey(m.channels[i]),
+            c: m.channels[i]
+        })
+    end for
+    for i = 0 to n - 2
+        best = i
+        bestKey = keyed[i].k
+        for j = i + 1 to n - 1
+            k = keyed[j].k
+            if k < bestKey then
+                best = j
+                bestKey = k
+            end if
+        end for
+        if best <> i then
+            tmp = keyed[i]
+            keyed[i] = keyed[best]
+            keyed[best] = tmp
+        end if
+    end for
+    out = []
+    for each entry in keyed
+        out.push(entry.c)
+    end for
+    m.channels = out
 end sub
 
 sub maybeLoadMore()
+    ' Only Plex EPG pages forward; cable listings come from the sidecar window
     if not m.guideLoaded or m.loadingMore or m.ctx = invalid then return
     if m.loadedEnd >= nowSeconds() + m.maxAhead then return
     if m.winStart + m.winLen + 3600 < m.loadedEnd then return
@@ -419,7 +778,7 @@ sub onMoreLoaded()
     if response = invalid or response.ok <> true then return
     for each incoming in response.channels
         ch = m.byKey[incoming.key]
-        if ch <> invalid then
+        if ch <> invalid and ch.source <> "cable" then
             lastBegin = 0
             if ch.raw.count() > 0 then lastBegin = ch.raw.peek().beginsAt
             for each p in incoming.programs
@@ -491,6 +850,13 @@ end sub
 ' ---------------------------------------------------------------------------
 
 sub loadSchedule()
+    if not ProfileAllowsPlexLiveTv(m.top.config) then
+        m.schedule = { upcoming: [], rules: [] }
+        m.recByAiring = {}
+        m.recByGuid = {}
+        m.seriesByGuid = {}
+        return
+    end if
     m.scheduleTask = createObject("roSGNode", "PlexTask")
     m.scheduleTask.config = m.top.config
     m.scheduleTask.action = "dvrSchedule"
@@ -891,11 +1257,12 @@ sub updateGridInfo()
     badges = []
     live = isOnNow(p)
     if live and p.placeholder <> true then badges.push({ text: "LIVE", fill: "0xE50914", ink: "0xFFFFFF" })
+    if ch.source = "cable" then badges.push({ text: "CABLE", fill: "0x1A2438", ink: "0xC5CCD8" })
     if p.isNew = true then badges.push({ text: "NEW", fill: "0xEDF0F5", ink: "0x0A0E18" })
     rec = recordingFor(ch, p)
-    if rec <> invalid then
+    if ch.source <> "cable" and rec <> invalid then
         badges.push({ text: "REC", fill: "0x3A0D12", ink: "0xFF5A64" })
-    else if seriesRuleFor(p) <> "" then
+    else if ch.source <> "cable" and seriesRuleFor(p) <> "" then
         badges.push({ text: "SERIES REC", fill: "0x3A0D12", ink: "0xFF5A64" })
     end if
 
@@ -913,9 +1280,17 @@ sub updateGridInfo()
 
     summary = ""
     if p.summary <> invalid then summary = p.summary
-    if p.placeholder = true then summary = "No program information for this time on " + channelLabel(ch) + "."
+    if p.placeholder = true then
+        if ch.source = "cable" and valueOr(ch.summary, "") <> "" then
+            summary = ch.summary
+        else
+            summary = "No program information for this time on " + channelLabel(ch) + "."
+        end if
+    end if
     title = p.title
-    paintInfo(title, joinStrings(subParts, "  ·  "), joinStrings(metaParts, "  ·  "), summary, badges, valueOr(p.art, ""))
+    art = valueOr(p.art, "")
+    if art = "" and ch.source = "cable" then art = valueOr(ch.logo, "")
+    paintInfo(title, joinStrings(subParts, "  ·  "), joinStrings(metaParts, "  ·  "), summary, badges, art)
 
     if live and p.placeholder <> true and p.endsAt > p.beginsAt then
         t = nowSeconds()
@@ -1370,7 +1745,8 @@ sub onRefocus()
     resumed = m.watching
     m.watching = invalid
     if resumed <> invalid and m.byKey.DoesExist(resumed.key) then
-        ' Back from full screen keeps the same live session going in the preview
+        ' Back from full screen: stay on that channel, but do not keep audio
+        ' playing in the preview square
         for i = 0 to m.channels.count() - 1
             if m.channels[i].key = resumed.key then
                 if i <> m.focusCh then
@@ -1381,9 +1757,10 @@ sub onRefocus()
                 exit for
             end if
         end for
+        stopPreview()
+        releaseOwnedLive()
         renderGrid()
         updateGridInfo()
-        playPreview(m.channels[m.focusCh], resumed.url)
         return
     end if
     renderGrid()
@@ -1394,7 +1771,22 @@ end sub
 ' ---------------------------------------------------------------------------
 
 sub watchChannel(ch as Object, p as Dynamic)
-    if ch = invalid or m.ctx = invalid then return
+    if ch = invalid then return
+    if ch.source = "cable" then
+        stopPreview()
+        releaseOwnedLive()
+        url = valueOr(ch.streamUrl, "")
+        if url = "" then
+            showToast("No stream for this channel")
+            return
+        end if
+        launchWatch(ch, p, url)
+        return
+    end if
+    if m.ctx = invalid then
+        showToast("Plex Live TV is not available")
+        return
+    end if
     url = ""
     if m.previewKey = ch.key and m.previewVideo.visible and m.previewUrl <> invalid then url = m.previewUrl
     stopPreview()
@@ -1438,41 +1830,59 @@ sub launchWatch(ch as Object, p as Dynamic, url as String)
     art = ""
     year = ""
     contentRating = ""
+    rating = ""
     programKind = ""
     episodeLabel = ""
+    cast = []
+    streamFormat = "hls"
+    mediaType = "livetv"
+    dvrId = ""
+    if m.ctx <> invalid then dvrId = m.ctx.dvrId
+
+    if ch.source = "cable" then
+        mediaType = "sport"
+        streamFormat = valueOr(ch.streamFormat, "hls")
+        art = valueOr(ch.logo, "")
+        if valueOr(ch.summary, "") <> "" then description = ch.summary
+    end if
+
     if p <> invalid and p.placeholder <> true then
         if valueOr(p.title, "") <> "" then
             shortTitle = valueOr(p.title, "")
             title = shortTitle + "  ·  " + channelName
         end if
-        description = valueOr(p.summary, "")
-        art = valueOr(p.art, "")
+        if valueOr(p.summary, "") <> "" then description = valueOr(p.summary, "")
+        if valueOr(p.art, "") <> "" then art = valueOr(p.art, "")
+        if valueOr(p.backdrop, "") <> "" then art = valueOr(p.backdrop, "")
+        if valueOr(p.poster, "") <> "" and art = "" then art = valueOr(p.poster, "")
         year = valueOr(p.year, "")
         contentRating = valueOr(p.contentRating, "")
+        rating = valueOr(p.rating, "")
         programKind = valueOr(p.kind, "")
         episodeLabel = valueOr(p.episodeLabel, "")
         if episodeLabel <> "" and description = "" then description = episodeLabel
+        if p.cast <> invalid then cast = p.cast
     end if
-    ' Player pulls cast/year/rating from TMDB while tuning if tmdbApiKey is set
+
     m.top.selectedItem = {
         title: title,
         shortTitle: shortTitle,
         description: description,
-        mediaType: "livetv",
+        mediaType: mediaType,
         programKind: programKind,
         ratingKey: "",
-        key: "",
-        channelId: ch.tuneId,
-        tuneAlt: ch.tuneAlt,
-        dvrId: m.ctx.dvrId,
+        key: valueOr(ch.key, ""),
+        channelId: valueOr(ch.tuneId, ""),
+        tuneAlt: valueOr(ch.tuneAlt, ""),
+        dvrId: dvrId,
         streamUrl: url,
-        streamFormat: "hls",
+        streamFormat: streamFormat,
         hdPosterUrl: art,
         hdBackdropUrl: art,
         year: year,
         contentRating: contentRating,
-        rating: "",
-        cast: [],
+        rating: rating,
+        cast: cast,
         duration: 0,
         viewOffset: 0
     }
@@ -1484,24 +1894,31 @@ sub openProgramMenu(includeWatch as Boolean)
     if ch = invalid or p = invalid then return
     actions = []
     if includeWatch then actions.push({ label: "Watch " + channelLabel(ch) + " live", act: "watch" })
-    rec = recordingFor(ch, p)
-    seriesId = seriesRuleFor(p)
-    if rec <> invalid and seriesId = "" then seriesId = seriesRuleIdForUpcoming(rec)
-    if seriesId <> "" then
-        actions.push({ label: "Edit series rule", act: "editRule", data: seriesId })
-        actions.push({ label: "Delete series rule", act: "confirmDelete", data: { subscriptionId: seriesId, title: p.title, done: "Series rule deleted" } })
-    end if
-    if rec <> invalid and rec.subscriptionId <> seriesId then
-        actions.push({ label: "Cancel recording", act: "cancel", data: { subscriptionId: rec.subscriptionId, done: "Recording cancelled" } })
-    end if
+
     loadingRecord = false
-    if rec = invalid and seriesId = "" and p.placeholder <> true and valueOr(p.guid, "") <> "" and p.endsAt > nowSeconds() then
-        actions.push({ label: "Loading record options…", act: "none" })
-        loadingRecord = true
+    if ch.source = "cable" then
+        actions.push({ label: "Recording not available on this channel", act: "none" })
+    else
+        rec = recordingFor(ch, p)
+        seriesId = seriesRuleFor(p)
+        if rec <> invalid and seriesId = "" then seriesId = seriesRuleIdForUpcoming(rec)
+        if seriesId <> "" then
+            actions.push({ label: "Edit series rule", act: "editRule", data: seriesId })
+            actions.push({ label: "Delete series rule", act: "confirmDelete", data: { subscriptionId: seriesId, title: p.title, done: "Series rule deleted" } })
+        end if
+        if rec <> invalid and rec.subscriptionId <> seriesId then
+            actions.push({ label: "Cancel recording", act: "cancel", data: { subscriptionId: rec.subscriptionId, done: "Recording cancelled" } })
+        end if
+        if rec = invalid and seriesId = "" and p.placeholder <> true and valueOr(p.guid, "") <> "" and p.endsAt > nowSeconds() then
+            actions.push({ label: "Loading record options…", act: "none" })
+            loadingRecord = true
+        end if
     end if
+    actions.push({ label: "Refresh guide", act: "refreshGuide" })
     actions.push({ label: "Close", act: "close" })
 
     subText = channelLabel(ch)
+    if ch.source = "cable" then subText = subText + "  ·  Cable"
     if p.placeholder <> true then
         when = rangeText(p.beginsAt, p.endsAt)
         if dayKey(p.beginsAt) <> dayKey(nowSeconds()) then when = dayLabel(p.beginsAt) + " " + when
@@ -1600,6 +2017,15 @@ sub onMenuSelected()
     if action.act = "none" then return
     if action.act = "close" then
         closeActionMenu()
+    else if action.act = "refreshGuide" then
+        closeActionMenu()
+        if m.cableLoading = true then
+            showToast("Refresh already in progress")
+        else
+            showToast("Refreshing guide…")
+            loadGuide()
+            loadSchedule()
+        end if
     else if action.act = "pickSetting" then
         openSettingPicker(action.data)
     else if action.act = "choose" then
@@ -1760,12 +2186,39 @@ function onKeyEvent(key as String, press as Boolean) as Boolean
         openProgramMenu(true)
         return true
     else if key = "back" then
-        ' First Back → Guide/Upcoming/Rules tabs; Back again from tabs opens the menu
-        enterTabs()
+        ' First Back while scrolled ahead → jump to now on this channel;
+        ' second Back → Guide/Upcoming/Rules tabs; Back again opens the menu
+        if guideScrolledFromNow() then
+            jumpGuideToNow()
+        else
+            enterTabs()
+        end if
         return true
     end if
     return false
 end function
+
+function guideScrolledFromNow() as Boolean
+    now = nowSeconds()
+    liveStart = floorSlot(now)
+    if m.winStart > liveStart then return true
+    p = focusedProgram()
+    if p = invalid then return false
+    if p.placeholder = true then return false
+    if isOnNow(p) then return false
+    if p.endsAt <= now then return true
+    if p.lb > now then return true
+    return false
+end function
+
+sub jumpGuideToNow()
+    now = nowSeconds()
+    m.minWin = floorSlot(now)
+    m.winStart = m.minWin
+    refocusAnchor(now)
+    renderGrid()
+    updateGridInfo()
+end sub
 
 ' ---------------------------------------------------------------------------
 ' Utils

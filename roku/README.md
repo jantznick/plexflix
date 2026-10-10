@@ -9,10 +9,18 @@ This is intentionally a **design/UX shell** on top of existing Plex data. Creden
 ## What you get
 
 - Dark Netflix-like home: billboard hero + horizontal shelves
-- **Collapsible sidebar** (Left to open): Home, **Search**, your **Libraries**,
-  **Live TV**, **Cable TV**, Live Sports.
-  Collapsed, a 72px icon rail stays on browse screens with the current section
-  lit; it is hidden on detail pages, in the player and over the launch splash
+- **Profiles**: brief loading mosaic (~2s), then pick **Kids** or **Adults**.
+  Kids unlocks with no passcode and only sees matching libraries (title
+  contains kid / family / disney / nick / …), cartoon + basic broadcast Cable
+  nets (no Plex Live TV / DVR, no Live Sports, no Discover). Adults use
+  passcode `1990` (on-screen keypad; Back clears a digit, then exits the PIN).
+  After a pick, a spinner covers Home until hubs land. Sidebar **Switch Profile**
+  returns to the picker
+- **Collapsible sidebar** (Left to open): on Adults, Home+Search share an icon
+  row; **Movies** / **TV Shows** open the adult library (Right to **K** for the
+  kids library). **Live TV** (Plex + Cable nets), Live Sports. Kids profiles keep
+  a simpler list. Collapsed, a 72px icon rail stays on browse screens; it is
+  hidden on detail pages, in the player and over the launch splash
 - **Search**: Plex Discover catalog search for any movie/show (not just what’s
   already in your libraries), with Movies / TV filters; open a result and
   **Add to Watchlist** / **Remove** from the detail page
@@ -20,15 +28,10 @@ This is intentionally a **design/UX shell** on top of existing Plex data. Creden
   so returning is instant and the hubs refresh in the background (also after
   playback), updating only the rows whose items changed
 - Selecting a library in the sidebar opens that library’s shelves
-- **Live TV**: a real grid guide built from your Plex EPG (`/<epg provider>/grid`): channel logo, number and call sign
-  down the left, half-hour time slots across the top, program blocks sized by duration, a red now-line, and a live
-  preview of the focused channel. Up/Down change channel, Left/Right move through programs (time pages in 30-minute
-  steps and later hours load as you go), `<<`/`>>` page channels. OK on something airing now watches it; OK on a future
-  show (or `*` on anything) opens **Record this episode / Record series / Cancel recording**. Back from a channel
-  you were watching returns to the guide with that channel still playing in the preview
-- **Cable TV**: same guide layout for Entertainment and Cartoons from the sports JSON feed; optional `cableEpgUrl`
-  sidecar supplies what’s-on listings (otherwise 24/7 placeholders). Those sections no longer appear under Live Sports.
-  `*` opens **Refresh** (reloads streams + EPG sidecar). Back from the grid → filter tabs; Back again → sidebar
+- **TV**: one guide like a cable box — Plex Live TV plus Entertainment/Cartoons, sorted by channel number
+  (locals first via Plex VCNs, then basic cable ~70–300, kids, sports, premiums 500+ from `cable_lineup.json`).
+  Cable rows are tagged **CABLE**. Record / Upcoming / Rules stay Plex-only; on Cable, `*` shows
+  **Recording not available** plus **Refresh guide**. OK watches (Plex DVR tune vs Cable direct stream).
 - **DVR**: Upcoming lists scheduled recordings (OK cancels one). Rules lists each show with a rule; OK opens an editor for
   its Plex recording settings (quality, replace lower quality, padding, commercial detection, episodes to keep, …;
   OK on a setting opens its choices to pick from), plus Save and Delete. "Edit series rule" is also on the guide and Upcoming menus.
@@ -50,10 +53,11 @@ This is intentionally a **design/UX shell** on top of existing Plex data. Creden
   and an **inline cast panel** that pauses rather than leaving playback
 - **Progress is written back to Plex**, so resume points and Continue Watching
   stay in sync with every other Plex client
-- Live sports from a configurable JSON feed URL (event detail + stream picker). `*` opens options: **Refresh feed**,
+- Live sports from a configurable JSON feed URL. OK on a game with **one** feed plays
+  it immediately; **multiple** feeds open the stream picker. `*` opens options: **Refresh feed**,
   Multiview add/remove (when enabled), and Watch Multiview
-- **Live TV player**: while a channel tunes, the custom player can enrich the current program from **TMDB**
-  (cast strip, year, rating, overview) when `tmdbApiKey` is set in `PlexConfig.brs` — same chrome as Cable TV
+- **TV player**: Live TV programs can enrich from **TMDB** while tuning when `tmdbApiKey` is set; Cable rows use
+  sidecar cast when present (TMDB fallback otherwise)
 - **Multiview**: 2–4 live games at once in Grid, Spotlight or Picture in picture,
   tiled on your home server (see [Multiview](#multiview))
 - Optional **TMDB** enrichment for cast pages and Discover titles missing from your library (`tmdbApiKey` in config)
@@ -77,9 +81,9 @@ Optional keys:
 - Leave as `REPLACE_WITH_TMDB_API_KEY` to skip TMDB (Plex people data still used when available)
 `sportsFeedUrl` can point at any JSON feed. Category maps like `{ "FOOTBALL": [ { title, thumbnail, content.videos[].url } ] }` are supported.
 
-### Cable TV listings (EPG)
+### Cable listings in the TV guide (EPG)
 
-Entertainment / Cartoons are 24/7 streams. Listings live in a **sidecar** JSON (`cable-epg.json`) so your 5-minute sports feed publish never wipes them. Full setup is under [Cable TV EPG sidecar](#cable-tv-epg-sidecar-home-server) below.
+Entertainment / Cartoons appear in the unified **TV** guide with cable-style channel numbers (`roku/source/cable_lineup.json`). Listings live in a **sidecar** JSON (`cable-epg.json`) so your 5-minute sports feed publish never wipes them. Full setup is under [Cable TV EPG sidecar](#cable-tv-epg-sidecar-home-server) below.
 
 Notes:
 
@@ -192,9 +196,9 @@ swallows the remote).
   bar, read from `Video.bufferingStatus` (the number Roku's stock UI shows)
 
 A live sports stream that errors, ends before playing, or makes no buffer
-progress for 30 seconds closes the player and returns to the game page. The
-stream you tried stays highlighted, and the page says why it failed so you can
-pick another.
+progress for 30 seconds closes the player. Multi-feed games return to the
+picker with the failed stream highlighted; single-feed games return to the
+sports guide.
 
 Switching audio, subtitles or version writes the choice to Plex
 (`PUT /library/parts/{id}`) and restarts the transcode at the current position,
@@ -329,7 +333,7 @@ erroring out.
 ## Remote / focus
 
 - **Left** opens the sidebar from Home, Libraries, Live Sports (and sports detail via Back first); **Right** hides it
-- **Back** on Live TV / Cable TV / Live Sports: first press returns to the top tabs/pills; second press opens the sidebar. On Home or a library, Back opens the sidebar (from deep in shelves it returns to the top first)
+- **Back** on TV / Live Sports: first press returns to the top tabs/pills; second press opens the sidebar. On Home or a library, Back opens the sidebar (from deep in shelves it returns to the top first)
 - **Back** with the sidebar open exits the channel
 - Libraries appear as flat items in the sidebar (no wrapping cycle at the ends)
 - Arrow keys move across poster rows
@@ -385,7 +389,7 @@ B2_REMOTE_KEY=plexflix/cable-epg.json
 
 With `TMDB_API_KEY` set, the enricher looks up each unique programme title (cached under
 `~/.cache/plexflix-cable-tmdb.json`) and attaches overview, backdrop/poster, year, rating,
-and up to 8 cast members. The Cable TV guide uses that art/summary; OK → player shows the
+and up to 8 cast members. The unified TV guide uses that art/summary on Cable rows; OK → player shows the
 cast strip like library titles (stream stays live — no scrubber).
 
 Channel id map (usually leave as-is): `roku/scripts/cable_epg_map.json`  
@@ -428,7 +432,7 @@ That writes:
 
 1. Load sports feed → Entertainment / Cartoons channels + stream URLs  
 2. Load `cableEpgUrl` → `programs[]` keyed by feed channel `id`  
-3. Merge into the Cable TV grid  
+3. Merge into the unified TV guide (Cable rows)
 
 Missing sidecar or unmapped channels (Fox, CBeebies, WAPA Deportes today) show a single 24/7 cell; playback still works.
 

@@ -1693,8 +1693,19 @@ sub stopAndClose()
     m.seekTimer.control = "stop"
     m.stallTimer.control = "stop"
     sendPlaybackActions([timelineAction("stopped"), releaseAction()])
-    if m.video <> invalid then m.video.control = "stop"
+    hardStopVideo()
     m.top.closed = true
+end sub
+
+' Tear the Video node out of the tree so the decoder actually releases.
+' control=stop alone is not enough for some sports HLS feeds.
+sub hardStopVideo()
+    if m.video = invalid then return
+    m.video.control = "stop"
+    m.video.content = invalid
+    parent = m.video.getParent()
+    if parent <> invalid then parent.removeChild(m.video)
+    m.video = invalid
 end sub
 
 '--------------------------------------------------------------------

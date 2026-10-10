@@ -35,7 +35,7 @@ sub init()
     end if
 
     m.splashMosaic = m.top.findNode("splashMosaic")
-    if m.splashMosaic <> invalid then m.splashMosaic.active = true
+    applyQuietLoad()
 
     m.snapTimer = createObject("roSGNode", "Timer")
     m.snapTimer.repeat = false
@@ -63,10 +63,21 @@ sub init()
     m.top.setFocus(true)
 end sub
 
+sub applyQuietLoad()
+    if m.top.quietLoad = true then
+        if m.splashMosaic <> invalid then m.splashMosaic.active = false
+        if m.loadingPanel <> invalid then m.loadingPanel.visible = false
+        m.top.splashActive = true
+    else if m.splashMosaic <> invalid then
+        m.splashMosaic.active = true
+        if m.loadingPanel <> invalid then m.loadingPanel.visible = true
+    end if
+end sub
+
 sub onConfigReady()
     if m.top.config = invalid then return
-    if m.splashMosaic <> invalid then
-        m.splashMosaic.active = true
+    applyQuietLoad()
+    if m.top.quietLoad <> true and m.splashMosaic <> invalid then
         splashUrl = ""
         if m.top.config.splashManifestUrl <> invalid then splashUrl = m.top.config.splashManifestUrl
         if splashUrl <> "" then m.splashMosaic.manifestUrl = splashUrl

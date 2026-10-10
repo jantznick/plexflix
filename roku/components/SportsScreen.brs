@@ -282,6 +282,8 @@ sub focusPills()
         return
     end if
     m.zone = "pills"
+    ' Keep the event list from stealing Left (it treats Left as open-menu)
+    if m.guideList <> invalid then m.guideList.focusable = false
     m.top.setFocus(true)
     paintPills()
 end sub
@@ -289,6 +291,7 @@ end sub
 sub focusList()
     m.zone = "list"
     paintPills()
+    if m.guideList <> invalid then m.guideList.focusable = true
     if m.events.count() = 0 then
         m.top.setFocus(true)
         return
@@ -641,7 +644,7 @@ function onKeyEvent(key as String, press as Boolean) as Boolean
     if m.zone <> "pills" then return false
 
     ' Moving between sports filters at once, the way streaming apps' genre
-    ' tabs do; there is nothing to confirm
+    ' tabs do; there is nothing to confirm. Leftmost Left opens the sidebar.
     if key = "left" then
         if m.pillIndex = 0 then
             m.top.openMenu = true
