@@ -605,10 +605,10 @@ sub finishUnifiedGuide()
     end if
     for each ch in m.cableChannels
         if ProfileAllowsCableChannel(m.top.config, valueOr(ch.feedId, ""), valueOr(ch.callSign, "")) then
-            ' Sort like a cable lineup, but leave the number column blank (name only)
-            ch.sortKey = avoidNumberCollision(usedNumbers, channelSortKey(ch))
+            ' Keep lineup.json numbers so Cable sits among Plex locals/VCNs.
+            ' Number column stays blank (name only); collisions are fine for sort.
+            if ch.sortKey = invalid then ch.sortKey = channelSortKey(ch)
             ch.number = ""
-            markUsedNumber(usedNumbers, ch.sortKey)
             m.channels.push(ch)
             m.byKey[ch.key] = ch
         end if
@@ -2119,12 +2119,39 @@ function onKeyEvent(key as String, press as Boolean) as Boolean
         openProgramMenu(true)
         return true
     else if key = "back" then
-        ' First Back → Guide/Upcoming/Rules tabs; Back again from tabs opens the menu
-        enterTabs()
+        ' First Back while scrolled ahead → jump to now on this channel;
+        ' second Back → Guide/Upcoming/Rules tabs; Back again opens the menu
+        if guideScrolledFromNow() then
+            jumpGuideToNow()
+        else
+            enterTabs()
+        end if
         return true
     end if
     return false
 end function
+
+function guideScrolledFromNow() as Boolean
+    now = nowSeconds()
+    liveStart = floorSlot(now)
+    if m.winStart > liveStart then return true
+    p = focusedProgram()
+    if p = invalid then return false
+    if p.placeholder = true then return false
+    if isOnNow(p) then return false
+    if p.endsAt <= now then return true
+    if p.lb > now then return true
+    return false
+end function
+
+sub jumpGuideToNow()
+    now = nowSeconds()
+    m.minWin = floorSlot(now)
+    m.winStart = m.minWin
+    refocusAnchor(now)
+    renderGrid()
+    updateGridInfo()
+end sub
 
 ' ---------------------------------------------------------------------------
 ' Utils

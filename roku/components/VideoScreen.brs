@@ -1693,7 +1693,10 @@ sub stopAndClose()
     m.seekTimer.control = "stop"
     m.stallTimer.control = "stop"
     sendPlaybackActions([timelineAction("stopped"), releaseAction()])
-    if m.video <> invalid then m.video.control = "stop"
+    if m.video <> invalid then
+        m.video.control = "stop"
+        m.video.content = invalid
+    end if
     m.top.closed = true
 end sub
 

@@ -83,6 +83,15 @@ function ProfileAllowsLibraryTitle(cfg as Object, title as String) as Boolean
     return false
 end function
 
+function IsKidsLibraryTitle(title as String) as Boolean
+    low = LCase(title)
+    matchers = ["kid", "kids", "children", "child", "family", "cartoon", "disney", "nick"]
+    for each needle in matchers
+        if Instr(1, low, needle) > 0 then return true
+    end for
+    return false
+end function
+
 function ProfileAllowsCableChannel(cfg as Object, feedId as String, title as String) as Boolean
     if cfg = invalid or cfg.profile = invalid then return true
     allow = cfg.profile.cableAllow

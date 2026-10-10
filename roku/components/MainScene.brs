@@ -27,7 +27,7 @@ sub init()
     m.bootSplashHost = m.top.findNode("bootSplash")
     m.bootSplash = invalid
     m.waitSpinner = m.top.findNode("waitSpinner")
-    m.waitBusy = m.top.findNode("waitBusy")
+    m.waitSplash = m.top.findNode("waitSplash")
     m.section = "home"
     m.navExpanded = false
     m.activeLibraryId = ""
@@ -40,10 +40,6 @@ sub init()
     ' The nav can collapse itself (Back); keep the scrim and focus in sync when it does
     m.sideNav.observeField("expanded", "onNavExpandedChanged")
     m.sideNav.suppressed = true
-    if m.waitBusy <> invalid then
-        PinSpinner(m.waitBusy)
-        CenterSpinner(m.waitBusy, 960)
-    end if
     showLaunchSplash()
 end sub
 
@@ -114,13 +110,14 @@ end sub
 sub showWaitSpinner(on as Boolean)
     if m.waitSpinner = invalid then return
     m.waitSpinner.visible = on
-    if m.waitBusy <> invalid then
+    if m.waitSplash <> invalid then
         if on then
-            PinSpinner(m.waitBusy)
-            CenterSpinner(m.waitBusy, 960)
-            m.waitBusy.control = "start"
+            splashUrl = ""
+            if m.config.splashManifestUrl <> invalid then splashUrl = m.config.splashManifestUrl
+            if splashUrl <> "" then m.waitSplash.manifestUrl = splashUrl
+            m.waitSplash.active = true
         else
-            m.waitBusy.control = "stop"
+            m.waitSplash.active = false
         end if
     end if
     updateNavRail()
@@ -937,7 +934,9 @@ function onKeyEvent(key as String, press as Boolean) as Boolean
             return true
         end if
     else if key = "left" and not m.navExpanded and m.videoScreen = invalid and m.detailScreen = invalid and m.castDetailScreen = invalid and m.multiviewScreen = invalid then
-        ' Allow Left → menu from home / libraries / sports / sports detail
+        ' Sports owns Left (pills move / list opens menu via openMenu)
+        if m.section = "sports" and m.sportsScreen <> invalid then return false
+        ' Allow Left → menu from home / libraries / sports detail
         setNavExpanded(true)
         if m.navExpanded then m.sideNav.setFocus(true)
         return true
