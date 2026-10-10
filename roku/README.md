@@ -330,6 +330,22 @@ itself is only restarted if it fails, and that restart is written into the
 same playlists as a discontinuity, so the Roku rebuffers briefly instead of
 erroring out.
 
+## Live scores API (home server)
+
+`scores/` is a small sidecar the Roku will call for NHL / NBA / NFL / MLB
+score lines on Live Sports rows. It polls ESPN’s public scoreboards, maps feed
+titles through a team alias dictionary, and exposes `POST /v1/resolve`. Full
+API notes and Compose instructions: [scores/README.md](../scores/README.md).
+
+```bash
+cd scores
+docker compose up -d --build
+curl -s http://localhost:8096/healthz
+```
+
+Channel wiring (`scoresUrl` in `PlexConfig.brs`) comes in a follow-up; the
+backend is ready to stand up and exercise on its own.
+
 ## Remote / focus
 
 - **Left** opens the sidebar from Home, Libraries, Live Sports (and sports detail via Back first); **Right** hides it
