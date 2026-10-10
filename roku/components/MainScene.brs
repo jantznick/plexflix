@@ -420,9 +420,11 @@ function sportsPlayableFromStream(item as Object, stream as Object) as Object
     url = asString(stream.streamUrl)
     format = asString(stream.streamFormat)
     if format = "" then format = asString(item.streamFormat)
+    league = asString(item.description)
+    if league = "" and item.DoesExist("league") then league = asString(item.league)
     return {
         title: asString(item.title),
-        description: asString(item.description),
+        description: league,
         mediaType: "sport",
         key: url,
         streamUrl: url,
