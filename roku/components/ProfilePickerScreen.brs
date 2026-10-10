@@ -343,12 +343,7 @@ function onKeyEvent(key as String, press as Boolean) as Boolean
             return true
         end if
         if key = "OK" or key = "play" then
-            if Len(m.pinValue) = 4 then
-                tryUnlock()
-            else if Len(m.pinValue) > 0 and Len(m.pinValue) < 4 then
-                ' Confirm current ▲/▼ digit and advance
-                appendPinDigit("0")
-            end if
+            if Len(m.pinValue) = 4 then tryUnlock()
             return true
         end if
         if key = "back" or key = "rewind" then
