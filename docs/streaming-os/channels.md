@@ -87,7 +87,12 @@ After sideload works end-to-end:
 - Store catalog + install of multiple channels  
 - Signed packages and update channels  
 - Auto-update policy (shell prompts vs silent patch)  
+- **Publisher account** may be required to *submit* channels (review, signing, takedown)  
+- **Viewer account** not required to browse/install free channels (see [product-positioning.md](./product-positioning.md))  
+- Paid channels: prefer guest checkout / payment tokens; optional viewer login later  
+- Store policies must reject fake Big App brands, malware, and pirate-aggregator channels (platform liability)  
 - First-party apps (possibly a PlexFlix port) published as normal channels  
+- Plex/Jellyfin-class apps are **connectors**, not the store’s only purpose  
 
 Sideload can remain as a developer escape hatch (as on Roku), even after the store exists.
 

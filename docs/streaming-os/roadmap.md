@@ -6,6 +6,7 @@ Phased so software learning is not blocked on retail hardware, and store/brandin
 
 - Vision, architecture, channel model, shell toolkit shortlist, hardware shopping guide, business positioning  
 - Locked: Linux kiosk, native shell, web channels, single-slot sideload  
+- Product lean captured in [product-positioning.md](./product-positioning.md) (lean OS + store, no viewer account, no fake Big Apps)  
 - Open: Flutter vs Qt vs Slint (see [shell-toolkit.md](./shell-toolkit.md)), browser engine, SoC winner, trust/signing, Avenue A vs B vs hybrid go-to-market (see [business-positioning.md](./business-positioning.md))  
 
 ## Phase 1 — Dev-mule prototype
