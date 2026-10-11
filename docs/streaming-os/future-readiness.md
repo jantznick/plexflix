@@ -221,7 +221,8 @@ These are small compared to building XR/AI products:
 4. **Permission manifest** fields even if MVP ignores most of them  
 5. **Layout / capability queries** (`screen`, `hdr`, `mic`, `localInference`, `maxDecodeSessions`)  
 6. **No hard dependency on a single cloud AI or account vendor in the OS core**  
-7. **Document “heavy work runs on home server”** as a first-class pattern (you already live here with multiview)
+7. **Document “heavy work runs on home server”** as a first-class pattern (you already live here with multiview)  
+8. **Deep links + input abstraction** so a future HA/ESPHome remote can drive scenes and playback without OS rewrites  
 
 ## What to explicitly defer
 
@@ -231,6 +232,7 @@ These are small compared to building XR/AI products:
 | On-stick video generation | Hardware exists *and* users ask |
 | Platform-wide AI assistant with wake word | Privacy model + cloud budget exist |
 | Mandatory AR home | Never, unless the category flips |
+| Sellable universal ESPHome remote | Stick daily-driver exists **or** you deliberately choose remote-first; hobby prototype anytime |
 
 ## How this relates to Avenue A vs B
 
@@ -249,5 +251,7 @@ Avenue A **consumes** future content formats. Avenue B is where you **accelerate
 - Do we want a public stance: **“AI welcome as channels; OS stays user-controlled / low-cloud”**?  
 - Is a **home inference box** (optional) part of the story, or stick-only forever?  
 - Any XR interest beyond “don’t block,” or park indefinitely?  
+- Is the ESPHome universal remote a **same-brand accessory**, a **separate project**, or **hobby only**?  
+- If both stick and remote ship someday: in-box cheap remote + Pro upsell, or Pro remote only?
 
 Record answers when you have them; until then, use the insurance list above and keep shipping the TV stick OS.

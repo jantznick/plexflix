@@ -1,8 +1,18 @@
 # Business positioning & competitors
 
-Working notes on **how this stick OS could make money and who it sits next to**. Product/tech decisions stay in the other docs; this one is market shape.
+Working notes on **how this stick OS could make money and who it sits next to**.
+
+For the current **product narrative** (lean OS, channel store goal, accounts, Big Apps, Android tradeoff), see [product-positioning.md](./product-positioning.md). This file stays focused on avenues, competitors, and revenue shape.
 
 Nothing here is a commitment. It exists so hardware and roadmap choices (cheap stick vs premium box) stay honest about *which business* you’re building.
+
+## Current lean (summary)
+
+- **Destination:** lean channel-store platform (alternative TV OS), not “Plex box company.”  
+- **Beachhead:** ship OS + web channels without Big Apps; Plex/Jellyfin as connectors.  
+- **Hardware:** commodity sticks prove the category is crowded — sell software taste + store, not silicon.  
+- **Roku lesson:** they bootstrapped with a **Netflix anchor**; we should not assume the same cold-start. Research partner programs in parallel; don’t block MVP on them.  
+- **Android sticks win on apps** because they run certified Google/Amazon catalogs — not because the plastic is special.
 
 ## The two avenues you named
 
@@ -46,7 +56,7 @@ Sensible sequence for a small team:
 2. Freeze software contracts (channels, updates).  
 3. Then either **cost-engineer down** (Avenue A) or **margin-engineer up** (Avenue B) — not both in the first retail year.
 
-If forced to pick a *first retail* identity: Avenue A matches “what Roku once was”; Avenue B matches “home media people who already care about PlexFlix.” Your existing PlexFlix work biases **B as beachhead, A as scale** — or A as product and B as a later “Pro” SKU.
+If forced to pick a *first retail* identity: product lean is **OS + store first** (see [product-positioning.md](./product-positioning.md)). That can ship on a mid stick (A) or Pro SKU (B); avoid marketing as “only for local media” even if server apps are included. PlexFlix history is a **channel asset**, not the company frame.
 
 ## Other avenues (easy to miss)
 
@@ -124,7 +134,7 @@ Grouped by *what job they do*, not by who has the best press release.
 | **Google TV / Chromecast** (and **Walmart Onn**, etc.) | Android-based mass devices | Huge app catalog; Google account gravity; commodity ODMs already build these |
 | **Xiaomi / generic Android sticks** | Race-to-bottom hardware | Prove that cheap HDMI sticks are abundant; software is where brands die |
 
-**Implication:** Avenue A is a **distribution and simplicity** fight against giants who can subsidize hardware. Your wedge is unlikely to be “more apps than Google.” Wedge ideas: cleaner UX, no ads, open sideload/web channels, local-media honesty, privacy, or a beloved store niche.
+**Implication:** Avenue A is a **distribution and simplicity** fight against giants who can subsidize hardware. Your wedge is unlikely to be “more apps than Google.” Wedge ideas: cleaner UX, **no required account**, no ads, web-channel developer experience, privacy — knowing Big Apps arrive only via partnerships (Linux) or by becoming Google TV (different product).
 
 ### Premium / living-room computers
 
@@ -223,10 +233,11 @@ Tech stack (Linux kiosk, native shell, web channels) **supports all of the above
 ## Open business questions
 
 - First retail identity: **A, B, or S3 hybrid?**  
-- Ads: never / later / only on free tier?  
-- Is the brand “OS company,” “device company,” or “channel store + reference hardware”?  
-- How central is PlexFlix (or local media) to the marketing wedge?  
+- Ads: **never at launch** (locked in product lean); later only if identity changes?  
+- Brand center: **OS + channel store** (current lean) vs device-led vs content-led?  
+- First **anchor** channel/partner while Netflix/Disney are absent?  
+- Invest time in Big App partner-program research this year, or only after sideload/store exist?  
 
-Record answers here when you have them; they beat rewriting the architecture every quarter.
+**Settled enough to stop re-litigating:** viewer account not required; publisher account OK; no unofficial Big App clients; home media is connector not headline. Details in [product-positioning.md](./product-positioning.md).
 
 Long-horizon product bets (AR/VR, AI-generated content, short-form, companions, etc.) live in [future-readiness.md](./future-readiness.md) — they should not freeze Avenue A/B, but they can influence Pro SKU headroom and API design.
