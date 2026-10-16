@@ -64,11 +64,10 @@ class StitchTests(unittest.TestCase):
         self.assertEqual(playlist.add(1, segments, "gen-1"), 0)
         self.assertEqual([e["uri"] for e in playlist.entries], ["gen-1/3.ts", "gen-1/4.ts"])
 
-    def test_master_lists_one_audio_rendition_per_tile(self):
-        text = master_playlist(3, 6384000)
-        self.assertEqual(text.count("TYPE=AUDIO"), 3)
-        self.assertIn('URI="a2.m3u8"', text)
-        self.assertEqual(text.count("DEFAULT=YES"), 1)
+    def test_master_points_at_muxed_variant(self):
+        text = master_playlist(6384000)
+        self.assertNotIn("TYPE=AUDIO", text)
+        self.assertIn("BANDWIDTH=6384000", text)
         self.assertTrue(text.rstrip().endswith("v.m3u8"))
 
 

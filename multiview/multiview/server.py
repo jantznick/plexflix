@@ -18,7 +18,6 @@ import uuid
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-from . import compositor
 from .relay import Relay
 from .session import Session
 
@@ -267,7 +266,6 @@ def make_handler(manager):
 
 def main():
     settings = settings_from_env()
-    _, encoder = compositor.encoder_description(settings)
     relay = Relay(variant_height=settings["variant_height"]).serve()
     manager = SessionManager(settings, relay=relay)
     server = ThreadingHTTPServer(("0.0.0.0", settings["port"]), make_handler(manager))
@@ -279,7 +277,11 @@ def main():
             manager.reap()
 
     threading.Thread(target=reaper, daemon=True).start()
-    print(f"[manager] multiview listening on :{settings['port']} (encoder: {encoder})", flush=True)
+    print(
+        f"[manager] multiview listening on :{settings['port']} "
+        f"(ffmpeg mosaic, live_feeds={settings['live_feeds']})",
+        flush=True,
+    )
     try:
         server.serve_forever()
     except KeyboardInterrupt:

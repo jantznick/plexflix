@@ -1,6 +1,4 @@
-# Built from the repo root (see docker-compose.yml) so the channel's own font
-# can be used for the "Reconnecting" slates. Vendors roku-feed's advanced-proxy
-# (proxy/ + src/) and runs it in-process — same fetch/unwrap/Chromium path.
+# Built from the repo root. Vendors roku-feed advanced-proxy; ffmpeg builds the mosaic.
 FROM ubuntu:24.04
 
 ENV DEBIAN_FRONTEND=noninteractive \
@@ -14,11 +12,7 @@ ENV DEBIAN_FRONTEND=noninteractive \
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         ca-certificates curl gnupg \
-        ffmpeg python3 python3-gi \
-        gir1.2-gstreamer-1.0 gir1.2-gst-plugins-base-1.0 \
-        gstreamer1.0-tools gstreamer1.0-plugins-base gstreamer1.0-plugins-good \
-        gstreamer1.0-plugins-bad gstreamer1.0-plugins-ugly gstreamer1.0-libav \
-        intel-media-va-driver mesa-va-drivers \
+        ffmpeg python3 \
         # Chromium runtime deps for the vendored puppeteer proxy
         fonts-liberation libasound2t64 libatk-bridge2.0-0t64 libatk1.0-0t64 \
         libcairo2 libcups2t64 libdbus-1-3 libdrm2 libgbm1 libglib2.0-0t64 \
@@ -31,7 +25,6 @@ RUN apt-get update \
 
 WORKDIR /app
 
-# Vendored roku-feed proxy (identical sources) + npm deps / Chrome
 COPY multiview/proxy/package.json multiview/proxy/package-lock.json ./proxy/
 WORKDIR /app/proxy
 RUN npm ci --omit=dev \

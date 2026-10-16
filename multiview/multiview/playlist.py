@@ -102,25 +102,15 @@ class StitchedPlaylist:
         return "\n".join(lines) + "\n"
 
 
-def master_playlist(audio_count, bandwidth):
-    """Video rendition plus one alternate audio rendition per tile.
-
-    Audio is named by slot rather than by game: a reorder changes which game
-    sits in a slot, and this file is written once for the whole session.
-    """
-    lines = ["#EXTM3U", "#EXT-X-VERSION:3", "#EXT-X-INDEPENDENT-SEGMENTS"]
-    for i in range(audio_count):
-        default = "YES" if i == 0 else "NO"
-        lines.append(
-            f'#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="aud",NAME="Tile {i + 1}",'
-            f'DEFAULT={default},AUTOSELECT={default},URI="a{i}.m3u8"'
-        )
-    lines.append(
+def master_playlist(bandwidth):
+    """Single muxed A/V variant (mosaic video + audio from the live feed)."""
+    return (
+        "#EXTM3U\n"
+        "#EXT-X-VERSION:3\n"
         f'#EXT-X-STREAM-INF:BANDWIDTH={bandwidth},RESOLUTION=1920x1080,'
-        f'CODECS="avc1.640028,mp4a.40.2",AUDIO="aud"'
+        f'CODECS="avc1.640028,mp4a.40.2"\n'
+        "v.m3u8\n"
     )
-    lines.append("v.m3u8")
-    return "\n".join(lines) + "\n"
 
 
 def write_atomic(path, text):

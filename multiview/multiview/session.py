@@ -1,12 +1,9 @@
-"""One multiview: its feeds, the compositor that tiles them, and the pump
-that moves frames between the two.
+"""Multiview session: proxy → one ffmpeg mosaic → HLS for the Roku.
 
-Every feed is decoded by its own ffmpeg (see ingest.py), so a feed that
-drops only blanks its own tile: the pump keeps pushing a frame for every
-tile on every tick, using a frozen frame or a slate for feeds that have
-nothing new. The compositor pipeline is only rebuilt if it fails itself;
-that becomes a discontinuity in the stitched playlists, which the Roku plays
-through.
+Feed URLs are warmed through the vendored advanced-proxy (same unwrap path as
+roku-feed). A single ffmpeg filtergraph places live feeds into layout tiles,
+draws placeholder slates for the rest, and writes 1080p HLS. The Roku plays
+that one stream fullscreen.
 """
 
 import collections
@@ -15,20 +12,14 @@ import shutil
 import threading
 import time
 
-from . import slate
-from .compositor import Compositor, bitrate_bps
-from .ingest import AUDIO_RATE, Ingest, PlaceholderIngest
 from .layouts import LAYOUTS, tiles_for
+from .mosaic import Mosaic, bitrate_bps
 from .playlist import StitchedPlaylist, master_playlist, read_media_playlist, write_atomic
 from .relay import rewrite_to_local_proxy, source_for
 
-# Only the first N feeds are fetched/decoded. The rest stay on a placeholder
-# slate so we can prove one stream works before turning the rest on.
-PLACEHOLDER_MESSAGE = "Other stream will play here"
-
 TICK = 0.5
-STARTUP_TIMEOUT = 20
-STALL_TIMEOUT = 12
+STARTUP_TIMEOUT = 45
+STALL_TIMEOUT = 15
 FAILURE_WINDOW = 60
 MAX_BACKOFF = 30
 RETIRED_GENERATION_GRACE = 30
@@ -36,61 +27,41 @@ STITCH_WINDOW = 10
 
 
 class Feed:
-    def __init__(self, index, spec, ingest, live=True):
+    def __init__(self, index, spec, live=True):
         self.index = index
         self.url = spec["url"]
         self.title = spec.get("title") or "Stream"
-        self.ingest = ingest
         self.live = live
-        self.frame = None
-        blank = slate.blank_frame()
-        self.slates = {
-            "starting": blank,
-            "reconnecting": blank,
-            "placeholder": blank,
-        }
-
-    def picture(self):
-        if not self.live:
-            return self.slates["placeholder"]
-        fresh = self.ingest.take_video()
-        if fresh is not None:
-            self.frame = fresh
-        if self.frame is not None and self.ingest.showing_live():
-            return self.frame
-        return self.slates["starting" if self.ingest.status == "starting" else "reconnecting"]
 
 
 class Session:
     def __init__(self, session_id, feeds, layout, root_dir, settings, relay=None,
-                 ingest_factory=Ingest, compositor_factory=Compositor, clock=time.monotonic):
+                 mosaic_factory=Mosaic, clock=time.monotonic, **_ignored):
         if layout not in LAYOUTS:
             raise ValueError(f"layout must be one of {', '.join(LAYOUTS)}")
+        if not feeds:
+            raise ValueError("at least one stream is required")
         tiles_for(layout, len(feeds))
         for spec in feeds:
             url = spec.get("url") or ""
             if not url.startswith(("http://", "https://")) and not settings.get("allow_local_inputs"):
                 raise ValueError(f"stream URLs must be http(s): {url!r}")
+        if relay is None:
+            raise ValueError("relay is required")
 
         self.id = session_id
         self.layout = layout
         self.dir = os.path.join(root_dir, session_id)
         self.settings = settings
         self._clock = clock
-        self._compositor_factory = compositor_factory
         self._relay = relay
+        self._mosaic_factory = mosaic_factory
+
         live_limit = max(0, int(settings.get("live_feeds", 1)))
-        self.feeds = []
-        for i, spec in enumerate(feeds):
-            live = i < live_limit
-            if live:
-                ingest = ingest_factory(source_for(spec, relay), settings, f"{session_id[:8]}/{i}")
-            else:
-                ingest = PlaceholderIngest(name=f"{session_id[:8]}/{i}")
-            self.feeds.append(Feed(i, spec, ingest, live=live))
+        self.feeds = [Feed(i, spec, live=(i < live_limit)) for i, spec in enumerate(feeds)]
         self.order = list(range(len(feeds)))
 
-        self.state = "starting"  # starting | running | error | stopped
+        self.state = "starting"
         self.error = ""
         self.generation = 0
         self.restarts = 0
@@ -98,12 +69,8 @@ class Session:
         self.last_seen = clock()
 
         self._lock = threading.RLock()
-        # Held by the pump while it pushes, so a compositor is never swapped
-        # out from under a push
-        self._push_lock = threading.Lock()
         self._stop = threading.Event()
-        self._compositor = None
-        self._pump_error = ""
+        self._mosaic = None
         self._gen_started = 0.0
         self._last_video_at = None
         self._failures = collections.deque()
@@ -112,25 +79,18 @@ class Session:
         self._playlists = {}
         self._last_wait_log = 0.0
         self._thread = threading.Thread(target=self._run, name=f"session-{session_id[:8]}", daemon=True)
-        self._pump_thread = threading.Thread(target=self._pump, name=f"pump-{session_id[:8]}", daemon=True)
-
-    # ------------------------------------------------------------------
-    # Public surface
-    # ------------------------------------------------------------------
 
     def start(self):
         os.makedirs(self.dir, exist_ok=True)
-        names = ["v"] + [f"a{i}" for i in range(len(self.feeds))]
-        self._playlists = {name: StitchedPlaylist(window=STITCH_WINDOW) for name in names}
-        bandwidth = bitrate_bps(self.settings.get("video_bitrate", "6M")) + 128000 * len(self.feeds)
-        write_atomic(os.path.join(self.dir, "master.m3u8"), master_playlist(len(self.feeds), bandwidth))
+        self._playlists = {"v": StitchedPlaylist(window=STITCH_WINDOW)}
+        bandwidth = bitrate_bps(self.settings.get("video_bitrate", "3M")) + 128000
+        write_atomic(os.path.join(self.dir, "master.m3u8"), master_playlist(bandwidth))
         self._thread.start()
 
     def stop(self):
         self._stop.set()
-        for thread in (self._thread, self._pump_thread):
-            if thread.is_alive() and threading.current_thread() is not thread:
-                thread.join(timeout=10)
+        if self._thread.is_alive() and threading.current_thread() is not self._thread:
+            self._thread.join(timeout=15)
         self._shutdown()
         with self._lock:
             self.state = "stopped"
@@ -140,20 +100,30 @@ class Session:
         self.last_seen = self._clock()
 
     def reconfigure(self, layout=None, order=None):
-        """Takes effect on the next frame; nothing restarts."""
         with self._lock:
             if layout is not None and layout not in LAYOUTS:
                 raise ValueError(f"layout must be one of {', '.join(LAYOUTS)}")
             if order is not None and sorted(order) != list(range(len(self.feeds))):
                 raise ValueError("order must list every stream index exactly once")
-            if layout is not None:
+            changed = False
+            if layout is not None and layout != self.layout:
                 self.layout = layout
-            if order is not None:
+                changed = True
+            if order is not None and list(order) != self.order:
                 self.order = list(order)
-            compositor = self._compositor
-            placements = self._placements()
-        if compositor is not None:
-            compositor.apply_layout(placements)
+                changed = True
+            if changed:
+                # ffmpeg filtergraph is static — restart with the new layout
+                self._next_start = self._clock()
+                mosaic = self._mosaic
+                self._mosaic = None
+            else:
+                mosaic = None
+        if mosaic is not None:
+            try:
+                mosaic.stop()
+            except Exception:
+                pass
 
     def snapshot(self):
         with self._lock:
@@ -161,10 +131,11 @@ class Session:
             tiles = []
             for slot, feed_index in enumerate(self.order):
                 feed = self.feeds[feed_index]
-                status = feed.ingest.status
                 if not feed.live:
                     status = "placeholder"
-                elif status == "live" and self.state != "running":
+                elif self.state == "running":
+                    status = "live"
+                else:
                     status = "starting"
                 tiles.append(dict(
                     rects[slot],
@@ -172,9 +143,9 @@ class Session:
                     stream=feed_index,
                     title=feed.title,
                     status=status,
-                    error=feed.ingest.error if status not in ("live", "placeholder") else "",
-                    reconnects=feed.ingest.restarts,
-                    audioTrack=slot,
+                    error="",
+                    reconnects=0,
+                    audioTrack=0,
                 ))
             return {
                 "id": self.id,
@@ -189,31 +160,21 @@ class Session:
                 "tiles": tiles,
             }
 
-    # ------------------------------------------------------------------
-    # Supervisor
-    # ------------------------------------------------------------------
-
     def _run(self):
         try:
             live = [f for f in self.feeds if f.live]
             held = [f for f in self.feeds if not f.live]
             if held:
                 self._log(f"live_feeds={len(live)} — placeholder on {len(held)} tile(s)")
-            # Open Chromium / resolve embeds once before ffmpeg starts hammering
-            if self._relay is not None and live:
-                targets = [rewrite_to_local_proxy(feed.url) for feed in live]
+            if live:
+                targets = [rewrite_to_local_proxy(f.url) for f in live]
                 self._log(f"warming {len(targets)} feed(s) through vendored proxy")
                 self._relay.warm(targets)
-            for feed in live:
-                feed.ingest.start()
-            # Slates off the supervisor thread so _stitch can mark us running
-            threading.Thread(target=self._render_slates, name="slates", daemon=True).start()
-            self._start_compositor()
-            self._pump_thread.start()
+            self._start_mosaic()
             while not self._stop.is_set():
                 self._tick()
                 self._stop.wait(TICK)
-        except Exception as exc:  # keep a bug from leaving ffmpegs orphaned
+        except Exception as exc:
             with self._lock:
                 self.state = "error"
                 self.error = f"supervisor crashed: {exc}"
@@ -221,34 +182,19 @@ class Session:
         finally:
             self._shutdown()
 
-    def _render_slates(self):
-        ffmpeg = self.settings.get("ffmpeg", "ffmpeg")
-        font = self.settings.get("font_file", "")
-        for feed in self.feeds:
-            if self._stop.is_set():
-                return
-            if not feed.live:
-                feed.slates["placeholder"] = slate.render(
-                    ffmpeg, font, feed.title, PLACEHOLDER_MESSAGE)
-                continue
-            for key, message in (("starting", "Starting..."), ("reconnecting", "Reconnecting...")):
-                if self._stop.is_set():
-                    return
-                feed.slates[key] = slate.render(ffmpeg, font, feed.title, message)
-
     def _tick(self):
         now = self._clock()
         self._stitch()
-        compositor = self._compositor
-        if compositor is None:
+        mosaic = self._mosaic
+        if mosaic is None:
             if now >= self._next_start:
-                self._start_compositor()
-        else:
-            error = compositor.poll_error() or self._pump_error
-            if error:
-                self._replace_compositor(f"pipeline error: {error}")
-            elif self._stalled(now):
-                self._replace_compositor("compositor stopped producing video")
+                self._start_mosaic()
+            return
+        error = mosaic.poll_error()
+        if error:
+            self._replace_mosaic(error)
+        elif self._stalled(now):
+            self._replace_mosaic("mosaic stopped producing video")
         self._cleanup_generations(now)
 
     def _stalled(self, now):
@@ -256,38 +202,50 @@ class Session:
             return now - self._gen_started > STARTUP_TIMEOUT
         return now - self._last_video_at > STALL_TIMEOUT
 
-    def _start_compositor(self):
+    def _feed_specs(self):
+        specs = []
+        for feed in self.feeds:
+            url = ""
+            if feed.live:
+                url = source_for({"url": feed.url}, self._relay)
+            specs.append({"live": feed.live, "url": url, "title": feed.title})
+        return specs
+
+    def _placements(self):
+        rects = tiles_for(self.layout, len(self.feeds))
+        return [(feed_index, rects[slot], 0 if slot == 0 else slot)
+                for slot, feed_index in enumerate(self.order)]
+
+    def _start_mosaic(self):
         self.generation += 1
         gen_dir = os.path.join(self.dir, f"gen-{self.generation}")
         os.makedirs(gen_dir, exist_ok=True)
-        compositor = self._compositor_factory(gen_dir, len(self.feeds), self.settings)
+        with self._lock:
+            placements = self._placements()
+            specs = self._feed_specs()
+        mosaic = self._mosaic_factory(gen_dir, specs, placements, self.settings)
         try:
-            compositor.start()
-            with self._lock:
-                compositor.apply_layout(self._placements())
+            mosaic.start()
         except Exception as exc:
             try:
-                compositor.stop()
+                mosaic.stop()
             except Exception:
                 pass
-            self._on_failure(f"could not start the compositor: {exc}")
+            self._on_failure(f"could not start mosaic: {exc}")
             return
         self._gen_started = self._clock()
         self._last_video_at = None
-        self._pump_error = ""
-        with self._push_lock:
-            self._compositor = compositor
-        self._log(f"compositor generation {self.generation} started, layout {self.layout}")
+        self._mosaic = mosaic
+        self._log(f"mosaic generation {self.generation} started, layout {self.layout}")
 
-    def _replace_compositor(self, reason):
-        with self._push_lock:
-            compositor = self._compositor
-            self._compositor = None
-        if compositor is not None:
+    def _replace_mosaic(self, reason):
+        mosaic = self._mosaic
+        self._mosaic = None
+        if mosaic is not None:
             try:
-                compositor.stop()
+                mosaic.stop()
             except Exception as exc:
-                self._log(f"compositor stop failed: {exc}")
+                self._log(f"mosaic stop failed: {exc}")
         self._stitch()
         self._on_failure(reason)
 
@@ -307,105 +265,40 @@ class Session:
                 self.state = "starting"
         self._next_start = now + delay
 
-    def _placements(self):
-        rects = tiles_for(self.layout, len(self.feeds))
-        # The main tile sits underneath, so picture-in-picture insets show on top
-        return [(feed_index, rects[slot], 0 if slot == 0 else slot)
-                for slot, feed_index in enumerate(self.order)]
-
     def _shutdown(self):
-        for feed in self.feeds:
-            feed.ingest.stop()
-        with self._push_lock:
-            compositor = self._compositor
-            self._compositor = None
-        if compositor is not None:
+        mosaic = self._mosaic
+        self._mosaic = None
+        if mosaic is not None:
             try:
-                compositor.stop()
+                mosaic.stop()
             except Exception:
                 pass
-
-    # ------------------------------------------------------------------
-    # Pump
-    # ------------------------------------------------------------------
-
-    def _pump(self):
-        fps = self.settings.get("fps", 30)
-        current = None
-        n = 0
-        started = 0.0
-        while not self._stop.is_set():
-            with self._push_lock:
-                compositor = self._compositor
-                if compositor is None:
-                    current = None
-                else:
-                    if compositor is not current:
-                        current, n, started = compositor, 0, self._clock()
-                    # If encode/push is slower than realtime, jump the frame
-                    # index forward. Bursting late pts just makes the live
-                    # compositor drop them, which looks like a slideshow.
-                    due = int((self._clock() - started) * fps)
-                    if due > n:
-                        n = due
-                    try:
-                        self._push_tick(compositor, fps, n)
-                    except Exception as exc:
-                        self._pump_error = str(exc) or exc.__class__.__name__
-            if compositor is None or self._pump_error:
-                self._stop.wait(0.05)
-                continue
-            n += 1
-            delay = started + n / fps - self._clock()
-            if delay > 0:
-                self._stop.wait(delay)
-
-    def _push_tick(self, compositor, fps, n):
-        with self._lock:
-            order = list(self.order)
-        for feed in self.feeds:
-            compositor.push_video(feed.index, feed.picture(), n)
-        samples = (n + 1) * AUDIO_RATE // fps - n * AUDIO_RATE // fps
-        for slot, feed_index in enumerate(order):
-            compositor.push_audio(slot, self.feeds[feed_index].ingest.take_audio(samples * 4), n)
-
-    # ------------------------------------------------------------------
-    # Output
-    # ------------------------------------------------------------------
 
     def _stitch(self):
         gen = self.generation
         if gen == 0:
             return
         gen_dir = os.path.join(self.dir, f"gen-{gen}")
-        counts = {}
-        for name, playlist in self._playlists.items():
-            segments = read_media_playlist(os.path.join(gen_dir, f"{name}.m3u8"))
-            if playlist.add(gen, segments, f"gen-{gen}"):
-                write_atomic(os.path.join(self.dir, f"{name}.m3u8"), playlist.render())
-                if name == "v":
-                    self._last_video_at = self._clock()
-            counts[name] = len(playlist.entries)
-        # Roku waits for state=running before GETting master.m3u8. Only the
-        # video playlist gates that — audio of silence/placeholder tiles can
-        # lag without blocking playback forever.
-        ready = counts.get("v", 0) >= 2 and self._last_video_at is not None \
-            and self._compositor is not None
+        playlist = self._playlists["v"]
+        segments = read_media_playlist(os.path.join(gen_dir, "v.m3u8"))
+        if playlist.add(gen, segments, f"gen-{gen}"):
+            write_atomic(os.path.join(self.dir, "v.m3u8"), playlist.render())
+            self._last_video_at = self._clock()
+        count = len(playlist.entries)
+        ready = count >= 2 and self._last_video_at is not None and self._mosaic is not None
         with self._lock:
             if ready and self.state != "running":
                 self.state = "running"
                 self.error = ""
-                self._log(f"running — playlists {counts}")
+                self._log(f"running — mosaic playlist segments={count}")
             elif self.state != "running" and self.generation:
                 now = self._clock()
                 if now - self._last_wait_log >= 5:
                     self._last_wait_log = now
-                    self._log(f"waiting for video playlist — {counts}")
+                    self._log(f"waiting for mosaic playlist — segments={count}")
 
     def _cleanup_generations(self, now):
-        referenced = set()
-        for playlist in self._playlists.values():
-            referenced |= playlist.generations()
+        referenced = self._playlists["v"].generations()
         for entry in os.listdir(self.dir) if os.path.isdir(self.dir) else []:
             if not entry.startswith("gen-"):
                 continue
@@ -417,8 +310,6 @@ class Session:
                 self._retired.pop(gen, None)
                 continue
             retired_at = self._retired.setdefault(gen, now)
-            # Players can still be partway through a segment that just left
-            # the window
             if now - retired_at > RETIRED_GENERATION_GRACE:
                 shutil.rmtree(os.path.join(self.dir, entry), ignore_errors=True)
                 self._retired.pop(gen, None)
