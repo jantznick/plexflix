@@ -1852,6 +1852,8 @@ sub launchWatch(ch as Object, p as Dynamic, url as String)
         if valueOr(ch.summary, "") <> "" then description = ch.summary
     end if
 
+    guid = ""
+    showGuid = ""
     if p <> invalid and p.placeholder <> true then
         if valueOr(p.title, "") <> "" then
             shortTitle = valueOr(p.title, "")
@@ -1870,6 +1872,8 @@ sub launchWatch(ch as Object, p as Dynamic, url as String)
         if p.cast <> invalid then cast = p.cast
         if p.beginsAt <> invalid then beginsAt = p.beginsAt
         if p.endsAt <> invalid then endsAt = p.endsAt
+        guid = valueOr(p.guid, "")
+        showGuid = valueOr(p.showGuid, "")
     end if
 
     m.top.selectedItem = {
@@ -1889,6 +1893,8 @@ sub launchWatch(ch as Object, p as Dynamic, url as String)
         channelName: channelName,
         beginsAt: beginsAt,
         endsAt: endsAt,
+        guid: guid,
+        showGuid: showGuid,
         programs: scheduleProgramsForWatch(ch, nowSeconds()),
         streamUrl: url,
         streamFormat: streamFormat,
@@ -1938,6 +1944,8 @@ function scheduleProgramsForWatch(ch as Object, fromAt as Integer) as Object
                     year: valueOr(p.year, ""),
                     contentRating: valueOr(p.contentRating, ""),
                     rating: valueOr(p.rating, ""),
+                    guid: valueOr(p.guid, ""),
+                    showGuid: valueOr(p.showGuid, ""),
                     art: art,
                     poster: valueOr(p.poster, ""),
                     backdrop: valueOr(p.backdrop, ""),

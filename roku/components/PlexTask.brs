@@ -856,37 +856,134 @@ function appendRowNodes(root as Object, title as String, items as Object) as Boo
         child.hdPosterUrl = item.hdPosterUrl
         ' Native ContentNode field — used by some SceneGraph widgets
         child.hdBackgroundImageUrl = item.hdBackdropUrl
-        isDiscover = false
-        if item.DoesExist("isDiscover") and item.isDiscover = true then isDiscover = true
-        child.addFields({
-            year: item.year,
-            rating: item.rating,
-            contentRating: item.contentRating,
-            mediaType: item.mediaType,
-            ratingKey: item.ratingKey,
-            key: item.key,
-            duration: item.duration,
-            viewOffset: item.viewOffset,
-            watched: watchedFlag(item),
-            unwatchedCount: unwatchedTotal(item),
-            viewedLeafCount: viewedLeaves(item),
-            leafCount: item.leafCount,
-            childCount: item.childCount,
-            grandparentRatingKey: item.grandparentRatingKey,
-            parentRatingKey: item.parentRatingKey,
-            grandparentTitle: item.grandparentTitle,
-            index: item.index,
-            shortTitle: item.shortTitle,
-            parentIndex: item.parentIndex,
-            isDiscover: isDiscover,
-            hdShowPosterUrl: item.hdShowPosterUrl,
-            ' Custom field — must be in addFields or RowList drops it
-            hdBackdropUrl: item.hdBackdropUrl,
-            showDescription: item.showDescription
-        })
+        addHomeItemFields(child, item)
     end for
     return true
 end function
+
+sub addHomeItemFields(child as Object, item as Object)
+    isDiscover = false
+    if item.DoesExist("isDiscover") and item.isDiscover = true then isDiscover = true
+    isLiveContinue = false
+    if item.DoesExist("isLiveContinue") and item.isLiveContinue = true then isLiveContinue = true
+    child.addFields({
+        year: item.year,
+        rating: item.rating,
+        contentRating: item.contentRating,
+        mediaType: item.mediaType,
+        ratingKey: item.ratingKey,
+        key: item.key,
+        duration: item.duration,
+        viewOffset: item.viewOffset,
+        watched: watchedFlag(item),
+        unwatchedCount: unwatchedTotal(item),
+        viewedLeafCount: viewedLeaves(item),
+        leafCount: item.leafCount,
+        childCount: item.childCount,
+        grandparentRatingKey: item.grandparentRatingKey,
+        parentRatingKey: item.parentRatingKey,
+        grandparentTitle: item.grandparentTitle,
+        index: item.index,
+        shortTitle: item.shortTitle,
+        parentIndex: item.parentIndex,
+        isDiscover: isDiscover,
+        hdShowPosterUrl: item.hdShowPosterUrl,
+        ' Custom field — must be in addFields or RowList drops it
+        hdBackdropUrl: item.hdBackdropUrl,
+        showDescription: item.showDescription,
+        isLiveContinue: isLiveContinue,
+        source: safeToStr(item.source),
+        channelId: safeToStr(item.channelId),
+        tuneAlt: safeToStr(item.tuneAlt),
+        dvrId: safeToStr(item.dvrId),
+        epgId: safeToStr(item.epgId),
+        feedId: safeToStr(item.feedId),
+        channelName: safeToStr(item.channelName),
+        streamUrl: safeToStr(item.streamUrl),
+        streamFormat: safeToStr(item.streamFormat),
+        beginsAt: intOrZero(item.beginsAt),
+        endsAt: intOrZero(item.endsAt),
+        guid: safeToStr(item.guid),
+        showGuid: safeToStr(item.showGuid)
+    })
+end sub
+
+function prependLiveContinueWatching(cfg as Object, items as Object) as Object
+    if items = invalid then items = []
+    profileId = ""
+    if cfg <> invalid and cfg.profileId <> invalid then profileId = safeToStr(cfg.profileId)
+    entry = LoadLiveContinueWatch(profileId)
+    liveItem = LiveContinueToHomeItem(entry)
+    if liveItem = invalid then return items
+
+    liveItem = ensureLiveContinuePoster(cfg, liveItem, entry)
+
+    out = [liveItem]
+    for each item in items
+        if item <> invalid then out.push(item)
+    end for
+    return out
+end function
+
+' Continue Watching uses portrait posters. Live EPG usually only has landscape
+' art (fine for the hero, empty-looking on a poster tile), so pull a TMDB
+' poster when we can and persist it for the next Home refresh.
+function ensureLiveContinuePoster(cfg as Object, item as Object, entry as Object) as Object
+    if item = invalid then return item
+    poster = safeToStr(item.hdPosterUrl)
+    backdrop = safeToStr(item.hdBackdropUrl)
+    needsPoster = (poster = "" or poster = backdrop or isWideLiveArtUrl(poster))
+    if not needsPoster then return item
+
+    title = safeToStr(item.shortTitle)
+    if title = "" then title = safeToStr(item.title)
+    sep = Instr(1, title, "·")
+    if sep > 1 then title = Left(title, sep - 1).Trim()
+    title = title.Trim()
+    if title = "" then
+        if poster = "" and backdrop <> "" then item.hdPosterUrl = backdrop
+        return item
+    end if
+
+    tmdbKey = ""
+    if cfg <> invalid and cfg.tmdbApiKey <> invalid then tmdbKey = safeToStr(cfg.tmdbApiKey)
+    if tmdbKey <> "" and tmdbKey <> "REPLACE_WITH_TMDB_API_KEY" then
+        kind = "tv"
+        if LCase(safeToStr(item.programKind)) = "movie" then kind = "movie"
+        tmdb = fetchTmdbTitle(tmdbKey, title, safeToStr(item.year), kind)
+        if tmdb <> invalid and safeToStr(tmdb.hdPosterUrl) <> "" then
+            item.hdPosterUrl = safeToStr(tmdb.hdPosterUrl)
+            if safeToStr(item.hdBackdropUrl) = "" and safeToStr(tmdb.hdBackdropUrl) <> "" then
+                item.hdBackdropUrl = safeToStr(tmdb.hdBackdropUrl)
+            end if
+            persistLiveContinuePoster(entry, item)
+            return item
+        end if
+    end if
+
+    if safeToStr(item.hdPosterUrl) = "" and backdrop <> "" then item.hdPosterUrl = backdrop
+    return item
+end function
+
+function isWideLiveArtUrl(url as String) as Boolean
+    if url = "" then return false
+    ' EPG stills go through width-only Plex transcodes or TMDB backdrops
+    if Instr(1, url, "/photo/:/transcode?width=") > 0 and Instr(1, url, "height=") = 0 then return true
+    if Instr(1, url, "image.tmdb.org/t/p/w1280") > 0 then return true
+    if Instr(1, url, "image.tmdb.org/t/p/w780") > 0 then return true
+    return false
+end function
+
+sub persistLiveContinuePoster(entry as Object, item as Object)
+    if entry = invalid or item = invalid then return
+    poster = safeToStr(item.hdPosterUrl)
+    if poster = "" then return
+    entry.hdPosterUrl = poster
+    if safeToStr(item.hdBackdropUrl) <> "" then entry.hdBackdropUrl = safeToStr(item.hdBackdropUrl)
+    profileId = ""
+    if entry.profileId <> invalid then profileId = safeToStr(entry.profileId)
+    writeLiveContinueJson(liveContinueRegistryKey(profileId), FormatJson(entry))
+end sub
 
 function appendRow(root as Object, title as String, items as Object) as Boolean
     ' Home shelves: enforce 15–30 + loop duplicates
@@ -927,11 +1024,18 @@ function buildHome(cfg as Object) as Object
     showSectionKeys = []
     kidsMode = ProfileIsKids(cfg)
 
+    onDeck = { ok: false }
+    recent = { ok: false }
     if not kidsMode then
         ' Continue Watching / On Deck — exempt from 15-min (always useful)
+        onDeckItems = []
         onDeck = plexGet(cfg, "/library/onDeck")
         if onDeck.ok = true then
-            addUniqueRowLoose(root, seenTitles, "Continue Watching", enrichEpisodeShowDescriptions(cfg, preferShowPosters(collectMetadata(cfg, onDeck.json))))
+            onDeckItems = enrichEpisodeShowDescriptions(cfg, preferShowPosters(collectMetadata(cfg, onDeck.json)))
+        end if
+        onDeckItems = prependLiveContinueWatching(cfg, onDeckItems)
+        if onDeckItems.count() > 0 then
+            addUniqueRowLoose(root, seenTitles, "Continue Watching", onDeckItems)
         end if
 
         ' Recently Added (global)
@@ -1640,33 +1744,7 @@ sub addUniqueRowLoose(root as Object, seenTitles as Object, title as String, ite
         child.description = item.description
         child.hdPosterUrl = item.hdPosterUrl
         child.hdBackgroundImageUrl = item.hdBackdropUrl
-        isDiscover = false
-        if item.DoesExist("isDiscover") and item.isDiscover = true then isDiscover = true
-        child.addFields({
-            year: item.year,
-            rating: item.rating,
-            contentRating: item.contentRating,
-            mediaType: item.mediaType,
-            ratingKey: item.ratingKey,
-            key: item.key,
-            duration: item.duration,
-            viewOffset: item.viewOffset,
-            watched: watchedFlag(item),
-            unwatchedCount: unwatchedTotal(item),
-            viewedLeafCount: viewedLeaves(item),
-            leafCount: item.leafCount,
-            childCount: item.childCount,
-            grandparentRatingKey: item.grandparentRatingKey,
-            parentRatingKey: item.parentRatingKey,
-            grandparentTitle: item.grandparentTitle,
-            index: item.index,
-            shortTitle: item.shortTitle,
-            parentIndex: item.parentIndex,
-            isDiscover: isDiscover,
-            hdShowPosterUrl: item.hdShowPosterUrl,
-            hdBackdropUrl: item.hdBackdropUrl,
-            showDescription: item.showDescription
-        })
+        addHomeItemFields(child, item)
     end for
     seenTitles[key] = true
 end sub

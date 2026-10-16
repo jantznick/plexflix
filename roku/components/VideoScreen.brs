@@ -142,17 +142,7 @@ sub onContentSet()
     paintMeta()
     setStatus("Preparing " + valueOrEmpty(item.title) + "...")
 
-    if directUrl <> "" and Left(directUrl, 4) = "http" then
-        playDirect(directUrl, item)
-        ' Cable/sports may ship TMDB cast on the item; Plex cast needs a ratingKey
-        loadCast()
-        ' Cable without sidecar enrichment can still fill cast from TMDB
-        maybeEnrichLiveMeta()
-        startLiveMetaTracking()
-        return
-    end if
-
-    ' Live TV channels: tune DVR then play session HLS
+    ' Live TV always retunes — a saved session URL from Continue Watching is stale
     if mediaType = "livetv" then
         setStatus("Tuning " + valueOrEmpty(item.title) + "...")
         m.task = createObject("roSGNode", "PlexTask")
@@ -163,6 +153,16 @@ sub onContentSet()
         m.task.control = "RUN"
         loadCast()
         ' Plex EPG rarely includes cast — pull from TMDB while the tune starts
+        maybeEnrichLiveMeta()
+        startLiveMetaTracking()
+        return
+    end if
+
+    if directUrl <> "" and Left(directUrl, 4) = "http" then
+        playDirect(directUrl, item)
+        ' Cable/sports may ship TMDB cast on the item; Plex cast needs a ratingKey
+        loadCast()
+        ' Cable without sidecar enrichment can still fill cast from TMDB
         maybeEnrichLiveMeta()
         startLiveMetaTracking()
         return
@@ -338,6 +338,7 @@ sub onVideoState()
     else if state = "finished" then
         m.reportTimer.control = "stop"
         if playedToEnd() then
+            rememberLiveContinueWatch()
             sendPlaybackActions([scrobbleAction(), releaseAction()])
             ' Tear the Video node down here so MainScene's follow-up stop does
             ' not race a still-observed handle.
@@ -439,6 +440,8 @@ sub failStream(reason as String)
     m.hideTimer.control = "stop"
     m.seekTimer.control = "stop"
     if m.video <> invalid then m.video.control = "stop"
+    ' Still pin Live TV / Cable when a stream dies mid-airing
+    rememberLiveContinueWatch()
     m.top.failure = message
     m.top.closed = true
 end sub
@@ -1002,6 +1005,8 @@ sub applyLiveProgram(p as Object)
     m.item.year = valueOrEmpty(p.year)
     m.item.contentRating = valueOrEmpty(p.contentRating)
     m.item.rating = valueOrEmpty(p.rating)
+    if valueOrEmpty(p.guid) <> "" then m.item.guid = valueOrEmpty(p.guid)
+    if valueOrEmpty(p.showGuid) <> "" then m.item.showGuid = valueOrEmpty(p.showGuid)
     if art <> "" then
         m.item.hdPosterUrl = art
         m.item.hdBackdropUrl = art
@@ -1163,9 +1168,9 @@ sub onLiveMetaEnriched()
     if valueOrEmpty(tmdb.contentRating) <> "" then m.item.contentRating = tmdb.contentRating
     if valueOrEmpty(tmdb.rating) <> "" then m.item.rating = tmdb.rating
     if valueOrEmpty(tmdb.hdBackdropUrl) <> "" then m.item.hdBackdropUrl = tmdb.hdBackdropUrl
-    if valueOrEmpty(m.item.hdPosterUrl) = "" and valueOrEmpty(tmdb.hdPosterUrl) <> "" then
-        m.item.hdPosterUrl = tmdb.hdPosterUrl
-    end if
+    ' Prefer TMDB's vertical poster over landscape EPG stills — Continue Watching
+    ' shelves are portrait tiles, and EPG art alone shows as an empty placeholder
+    if valueOrEmpty(tmdb.hdPosterUrl) <> "" then m.item.hdPosterUrl = tmdb.hdPosterUrl
     if tmdb.cast <> invalid and GetInterface(tmdb.cast, "ifArray") <> invalid then
         if tmdb.cast.count() > 0 then
             m.item.cast = tmdb.cast
@@ -2039,9 +2044,19 @@ sub stopAndClose()
     m.seekTimer.control = "stop"
     m.stallTimer.control = "stop"
     m.liveMetaTimer.control = "stop"
+    rememberLiveContinueWatch()
     sendPlaybackActions([timelineAction("stopped"), releaseAction()])
     hardStopVideo()
     m.top.closed = true
+end sub
+
+' m.item tracks the current airing as the guide advances; content is the launch payload
+sub rememberLiveContinueWatch()
+    if m.item = invalid then return
+    profileId = ""
+    cfg = m.top.config
+    if cfg <> invalid and cfg.profileId <> invalid then profileId = valueOrEmpty(cfg.profileId)
+    SaveLiveContinueWatch(m.item, profileId)
 end sub
 
 ' Tear the Video node out of the tree so the decoder actually releases.

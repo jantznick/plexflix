@@ -459,8 +459,23 @@ sub onBrowseSelected(event as Object)
     ' Read the payload off the event: home, library hub and library grid all share this handler
     item = event.getData()
     if item = invalid then return
+    ' Live / Cable Continue Watching jumps straight back into the stream
+    if isLiveContinueItem(item) then
+        showVideo(item)
+        return
+    end if
     showDetail(item)
 end sub
+
+function isLiveContinueItem(item as Object) as Boolean
+    if item = invalid then return false
+    if item.isLiveContinue = true then return true
+    mediaType = asString(item.mediaType)
+    source = asString(item.source)
+    if mediaType = "livetv" then return true
+    if mediaType = "sport" and source = "cable" then return true
+    return false
+end function
 
 sub onSportsItemSelected()
     item = m.sportsScreen.selectedItem
