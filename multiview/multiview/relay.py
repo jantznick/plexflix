@@ -20,10 +20,14 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 _PROXY_PATH = re.compile(r"/proxy/(.+)$")
 _PROXY_URL = re.compile(r"https?://[^/\s\"']+/proxy/[A-Za-z0-9+/=_%.-]+")
 
-MANIFEST_TTL = 1.5
-MANIFEST_STALE_TTL = 20
+# Live playlists are ~5–7s target duration. Keep Chromium off the hot path:
+# serve fresh for a few seconds, then stale immediately while a background
+# refresh runs (ffmpeg polls many times a second).
+MANIFEST_TTL = 4.0
+MANIFEST_STALE_TTL = 45
 SEGMENT_TTL = 120
-SEGMENT_CACHE_MAX = 64
+SEGMENT_CACHE_MAX = 96
+PREFETCH_SEGMENTS = 3
 TOKEN_TTL = 3600
 UPSTREAM_TIMEOUT = 90  # Chromium cold start can take ~45s per embed
 
@@ -94,6 +98,7 @@ class Relay:
         self._segment_cache = collections.OrderedDict()
         self._flight = _SingleFlight()
         self._lock = threading.RLock()
+        self._revalidating = set()
         self._server = None
 
     def _http_get(self, url, timeout):
@@ -156,50 +161,100 @@ class Relay:
         now = self._clock()
         with self._lock:
             cached_m = self._manifest_cache.get(upstream_url)
-            if cached_m is not None and cached_m[0] > now:
-                self._count("manifest_cache")
-                return cached_m[2].encode("utf-8")
             cached_s = self._segment_cache.get(upstream_url)
-            if cached_s is not None and cached_s[0] > now:
-                self._segment_cache.move_to_end(upstream_url)
-                self._count("segment_cache")
-                return cached_s[1]
 
-        def load():
-            with self._lock:
-                again_m = self._manifest_cache.get(upstream_url)
-                if again_m is not None and again_m[0] > self._clock():
-                    return again_m[2].encode("utf-8")
-                again_s = self._segment_cache.get(upstream_url)
-                if again_s is not None and again_s[0] > self._clock():
-                    return again_s[1]
-            status, body, _ = self._fetch(upstream_url, UPSTREAM_TIMEOUT)
-            if not 200 <= status < 300 or not body:
-                raise RelayError(HTTPStatus.BAD_GATEWAY, f"proxy HTTP {status}")
-            if body.lstrip().startswith(b"#EXTM3U"):
-                text = self._rewrite_playlist(body.decode("utf-8", "replace"))
-                stamp = self._clock()
-                with self._lock:
-                    self._manifest_cache[upstream_url] = (
-                        stamp + MANIFEST_TTL, stamp + MANIFEST_STALE_TTL, text)
-                self._count("manifest_proxy")
+        if cached_m is not None:
+            fresh_until, stale_until, text = cached_m
+            if fresh_until > now:
+                self._count("manifest_cache")
                 return text.encode("utf-8")
+            if stale_until > now:
+                # Don't block ffmpeg on Chromium — refresh in the background.
+                self._count("manifest_stale")
+                self._revalidate_later(upstream_url)
+                return text.encode("utf-8")
+
+        if cached_s is not None and cached_s[0] > now:
             with self._lock:
-                self._segment_cache[upstream_url] = (self._clock() + SEGMENT_TTL, body)
                 self._segment_cache.move_to_end(upstream_url)
-                while len(self._segment_cache) > SEGMENT_CACHE_MAX:
-                    self._segment_cache.popitem(last=False)
-            self._count("segment_proxy")
-            return body
+            self._count("segment_cache")
+            return cached_s[1]
 
         try:
-            return self._flight.do(("u", upstream_url), load)
+            return self._flight.do(("u", upstream_url), lambda: self._load_upstream(upstream_url))
         except RelayError:
             if cached_m is not None and cached_m[1] > now:
                 self._count("manifest_stale")
                 return cached_m[2].encode("utf-8")
             self._count("fetch_failed")
             raise
+
+    def _revalidate_later(self, upstream_url):
+        def run():
+            try:
+                self._flight.do(("u", upstream_url), lambda: self._load_upstream(upstream_url))
+                self._count("manifest_revalidate")
+            except Exception:
+                self._count("manifest_revalidate_failed")
+
+        threading.Thread(target=run, name="relay-revalidate", daemon=True).start()
+
+    def _load_upstream(self, upstream_url):
+        with self._lock:
+            again_m = self._manifest_cache.get(upstream_url)
+            if again_m is not None and again_m[0] > self._clock():
+                return again_m[2].encode("utf-8")
+            again_s = self._segment_cache.get(upstream_url)
+            if again_s is not None and again_s[0] > self._clock():
+                return again_s[1]
+        status, body, _ = self._fetch(upstream_url, UPSTREAM_TIMEOUT)
+        if not 200 <= status < 300 or not body:
+            raise RelayError(HTTPStatus.BAD_GATEWAY, f"proxy HTTP {status}")
+        if body.lstrip().startswith(b"#EXTM3U"):
+            text = self._rewrite_playlist(body.decode("utf-8", "replace"))
+            stamp = self._clock()
+            with self._lock:
+                self._manifest_cache[upstream_url] = (
+                    stamp + MANIFEST_TTL, stamp + MANIFEST_STALE_TTL, text)
+            self._count("manifest_proxy")
+            self._prefetch_from_playlist(text)
+            return text.encode("utf-8")
+        with self._lock:
+            self._segment_cache[upstream_url] = (self._clock() + SEGMENT_TTL, body)
+            self._segment_cache.move_to_end(upstream_url)
+            while len(self._segment_cache) > SEGMENT_CACHE_MAX:
+                self._segment_cache.popitem(last=False)
+        self._count("segment_proxy")
+        return body
+
+    def _prefetch_from_playlist(self, text):
+        targets = []
+        for line in text.splitlines():
+            line = line.strip()
+            if line.startswith("http://127.0.0.1:") and "/r/" in line:
+                targets.append(line)
+        for local_url in targets[-PREFETCH_SEGMENTS:]:
+            token = local_url.split("/r/", 1)[1].rsplit(".", 1)[0]
+            with self._lock:
+                entry = self._tokens.get(token)
+            if entry is None:
+                continue
+            upstream = entry[0]
+            with self._lock:
+                cached = self._segment_cache.get(upstream)
+                if cached is not None and cached[0] > self._clock():
+                    continue
+            threading.Thread(
+                target=self._prefetch_one, args=(upstream,),
+                name="relay-prefetch", daemon=True,
+            ).start()
+
+    def _prefetch_one(self, upstream_url):
+        try:
+            self._flight.do(("u", upstream_url), lambda: self._load_upstream(upstream_url))
+            self._count("segment_prefetch")
+        except Exception:
+            pass
 
     def _rewrite_playlist(self, text):
         """Point every vendored-proxy URL in the playlist back through this cache."""
