@@ -63,32 +63,5 @@
                 <Font role="font" uri="pkg:/fonts/Outfit-Medium.ttf" size="32" />
             </Label>
         </Group>
-
-        <!-- Feed refresh — same panel as Live TV -->
-        <Group id="menu" visible="false">
-            <Rectangle width="1920" height="1080" color="0x000000" opacity="0.65" />
-            <Rectangle id="menuPanel" translation="[560, 260]" width="800" height="520" color="0x141A27" />
-            <Rectangle id="menuAccent" translation="[560, 260]" width="800" height="6" color="0xE50914" />
-            <Label id="menuTitle" translation="[608, 296]" width="704" height="52" color="0xFFFFFF" wrap="false" text="">
-                <Font role="font" uri="pkg:/fonts/Outfit-Bold.ttf" size="40" />
-            </Label>
-            <Label id="menuSub" translation="[608, 352]" width="704" height="36" color="0x8FA0B8" wrap="false" text="">
-                <Font role="font" uri="pkg:/fonts/Outfit-Medium.ttf" size="26" />
-            </Label>
-            <LabelList
-                id="menuList"
-                translation="[592, 412]"
-                itemSize="[736, 64]"
-                itemSpacing="[0, 8]"
-                numRows="9"
-                vertFocusAnimationStyle="floatingFocus"
-                focusBitmapUri="pkg:/images/menu_focus.9.png"
-                color="0xC5CCD8"
-                focusedColor="0x0A0E18"
-            >
-                <Font role="font" uri="pkg:/fonts/Outfit-SemiBold.ttf" size="30" />
-                <Font role="focusedFont" uri="pkg:/fonts/Outfit-SemiBold.ttf" size="30" />
-            </LabelList>
-        </Group>
     </children>
 </component>
