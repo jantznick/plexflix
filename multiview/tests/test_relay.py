@@ -71,6 +71,22 @@ class VendoredProxyRoutingTests(unittest.TestCase):
         self.assertNotIn("127.0.0.1", text)
 
 
+class FeedPlayoutPathTests(unittest.TestCase):
+    def test_feed_play_path_matches_session_feed_playlist(self):
+        from multiview.server import FEED_PLAY_PATH
+
+        match = FEED_PLAY_PATH.match(
+            "/sessions/aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee/feed/1/index.m3u8"
+        )
+        self.assertIsNotNone(match)
+        self.assertEqual(match.group(2), "1")
+        self.assertEqual(match.group(3), "index.m3u8")
+        seg = FEED_PLAY_PATH.match(
+            "/sessions/aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee/feed/0/r/tokents.ts"
+        )
+        self.assertIsNotNone(seg)
+        self.assertEqual(seg.group(3), "r/tokents.ts")
+
 
 if __name__ == "__main__":
     unittest.main()

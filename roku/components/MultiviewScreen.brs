@@ -457,7 +457,13 @@ sub onSettled()
     end if
     m.tileLayer.visible = true
     paintTiles()
-    if m.video <> invalid and m.video.state = "playing" then clearStatus()
+    ' Always drop "Switching games…": the mosaic may still be buffering, and
+    ' leaving the banner up forever made rotates look stuck.
+    if m.video <> invalid and m.video.state = "playing" then
+        clearStatus()
+    else if m.notice = "" then
+        setStatus("Loading games...")
+    end if
     applyAudio()
     ' More FF/RW landed during the restart — send the coalesced order next
     if m.pendingOrder <> invalid then
@@ -485,12 +491,16 @@ sub promoteFocused()
     index = Int(tile.stream)
     if index < 0 or index >= m.streams.count() then return
     stream = m.streams[index]
-    url = asString(stream.url)
+    ' Same vendored proxy path the mosaic uses — not the LAN :8787 URL, which
+    ' races the in-container proxy and often dies with HTTP -1 on the Roku.
+    url = feedPlayoutUrl(index)
+    if url = "" then url = asString(stream.url)
     if url = "" then return
 
     ' Flag first so a sync stop/finished callback cannot start a reconnect
     m.promoted = true
-    m.pollTimer.control = "stop"
+    ' Keep polling: idle reap uses last_seen, and stopping the heartbeat
+    ' deletes the session under the fullscreen player.
     hideOverlay()
     clearStatus()
     ' Free the decoder — stop alone leaves sports HLS holding it
@@ -498,6 +508,7 @@ sub promoteFocused()
 
     format = asString(stream.streamFormat)
     if format = "" then format = "hls"
+    print "[plexflix:multiview] promote stream=" + StrI(index).Trim() + " " + url
     m.top.playRequested = {
         title: asString(stream.title),
         description: asString(stream.league),
@@ -511,6 +522,19 @@ sub promoteFocused()
         viewOffset: 0
     }
 end sub
+
+function feedPlayoutUrl(streamIndex as Integer) as String
+    if m.sessionId = "" then return ""
+    base = ""
+    cfg = m.top.config
+    if cfg <> invalid and cfg.multiviewUrl <> invalid then base = cfg.multiviewUrl.Trim()
+    while Right(base, 1) = "/"
+        base = Left(base, Len(base) - 1)
+    end while
+    if base = "" then return ""
+    if Instr(1, base, "://") = 0 then base = "http://" + base
+    return base + "/sessions/" + m.sessionId + "/feed/" + StrI(streamIndex).Trim() + "/index.m3u8"
+end function
 
 sub onResume()
     if m.top.resume <> true then return
