@@ -105,7 +105,8 @@ def normalize_event(raw: dict[str, Any], league: str) -> dict[str, Any] | None:
         "period": int(clock_status.get("period") or 0),
         "home": home,
         "away": away,
-        "teamIds": {home["id"], away["id"]},
+        # List (not set) so /v1/scoreboard can json.dumps cleanly
+        "teamIds": [away["id"], home["id"]],
         "broadcasts": broadcasts,
         "startTime": str(comp.get("date") or raw.get("date") or ""),
     }

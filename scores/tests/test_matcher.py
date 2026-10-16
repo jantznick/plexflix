@@ -31,7 +31,7 @@ def _event(league, eid, away_id, away_abbr, away_score, home_id, home_abbr, home
             "score": away_score,
             "homeAway": "away",
         },
-        "teamIds": {away_id, home_id},
+        "teamIds": [away_id, home_id],
         "broadcasts": ["ESPN"],
         "startTime": "2026-10-10T00:00Z",
     }

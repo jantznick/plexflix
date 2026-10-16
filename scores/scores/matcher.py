@@ -17,6 +17,10 @@ def index_events_by_teams(events: list[dict[str, Any]]) -> dict[frozenset[str], 
     out: dict[frozenset[str], list[dict[str, Any]]] = {}
     for event in events:
         key = _pair_key(event["home"]["id"], event["away"]["id"])
+        # Keep teamIds JSON-safe if a caller mutated it to a set
+        ids = event.get("teamIds")
+        if isinstance(ids, set):
+            event["teamIds"] = sorted(ids)
         out.setdefault(key, []).append(event)
     return out
 
@@ -161,7 +165,7 @@ def _disambiguate_with_slate(
     opponent = known[0]
     slate_opponents: set[str] = set()
     for event in events:
-        ids = event["teamIds"]
+        ids = set(event.get("teamIds") or [])
         if opponent in ids:
             slate_opponents |= ids - {opponent}
 
