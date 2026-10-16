@@ -190,7 +190,8 @@ sub startPlayback()
     node.url = base + asString(m.session.playlistUrl)
     node.streamFormat = "hls"
     node.title = "Multiview"
-    node.live = true
+    ' Do not mark live: Roku routes FF/RW to trickplay for live ContentNodes
+    ' and MultiviewScreen almost never sees those keys. Same as sports direct play.
     m.video.content = node
     m.video.control = "play"
     m.playing = true
@@ -746,6 +747,7 @@ end function
 function onKeyEvent(key as String, press as Boolean) as Boolean
     if not press then return false
     print "[plexflix:multiview] key=" + key
+    ensureFocus()
 
     if key = "back" then
         closeScreen()

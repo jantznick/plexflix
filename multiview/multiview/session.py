@@ -57,10 +57,12 @@ class Session:
         self._relay = relay
         self._mosaic_factory = mosaic_factory
 
-        # Incremental build: only the first stream is decoded into the mosaic.
-        # Everything else is a placeholder tile until more of the function lands.
-        self.feeds = [Feed(i, spec, live=(i == 0)) for i, spec in enumerate(feeds)]
+        # Incremental build: only the stream in layout slot 0 is decoded.
+        # FF/RW on the Roku rotates `order`, so the live game follows slot 0
+        # rather than staying glued to feed index 0 while placeholders shuffle.
+        self.feeds = [Feed(i, spec, live=False) for i, spec in enumerate(feeds)]
         self.order = list(range(len(feeds)))
+        self._sync_live_flags()
 
         self.state = "starting"
         self.error = ""
@@ -118,6 +120,7 @@ class Session:
                 changed = True
             if order is not None and order != self.order:
                 self.order = list(order)
+                self._sync_live_flags()
                 changed = True
             if changed:
                 # ffmpeg filtergraph is static — restart with the new layout
@@ -131,6 +134,11 @@ class Session:
                 mosaic.stop()
             except Exception:
                 pass
+
+    def _sync_live_flags(self):
+        primary = self.order[0] if self.order else 0
+        for feed in self.feeds:
+            feed.live = feed.index == primary
 
     def snapshot(self):
         with self._lock:
@@ -228,8 +236,15 @@ class Session:
         gen_dir = os.path.join(self.dir, f"gen-{self.generation}")
         os.makedirs(gen_dir, exist_ok=True)
         with self._lock:
+            self._sync_live_flags()
             placements = self._placements()
             specs = self._feed_specs()
+            warm = [f.url for f in self.feeds if f.live]
+        if warm:
+            try:
+                self._relay.warm([rewrite_to_local_proxy(url) for url in warm])
+            except Exception as exc:
+                self._log(f"proxy warm failed: {exc}")
         mosaic = self._mosaic_factory(gen_dir, specs, placements, self.settings)
         try:
             mosaic.start()

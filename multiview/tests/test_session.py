@@ -124,6 +124,20 @@ class SessionReconfigureTests(unittest.TestCase):
         self.assertEqual(snap["tiles"][0]["stream"], 1)
         self.assertEqual(snap["tiles"][0]["title"], "B")
 
+    def test_live_decode_follows_slot_zero_after_rotate(self):
+        session = self._session()
+        self.assertTrue(session.feeds[0].live)
+        self.assertFalse(session.feeds[1].live)
+        session._mosaic = _FakeMosaic()
+        session.reconfigure(order=[1, 0])
+        self.assertFalse(session.feeds[0].live)
+        self.assertTrue(session.feeds[1].live)
+        snap = session.snapshot()
+        self.assertEqual(snap["tiles"][0]["stream"], 1)
+        self.assertEqual(snap["tiles"][1]["stream"], 0)
+        self.assertEqual(snap["tiles"][1]["status"], "placeholder")
+        self.assertTrue(session.feeds[snap["tiles"][0]["stream"]].live)
+
 
 if __name__ == "__main__":
     unittest.main()
