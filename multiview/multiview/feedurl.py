@@ -14,12 +14,17 @@ import re
 import urllib.parse
 from dataclasses import dataclass, field
 
+# Keep in lockstep with roku-feed/src/proxy-payload.js
 DEFAULT_REFERER = "https://embedsports.top/"
 BROWSER_USER_AGENT = (
-    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
-    "(KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36"
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+    "(KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36"
 )
 PNG_SIGNATURE = bytes.fromhex("89504e470d0a1a0a")
+RIFF_MAGIC = b"RIFF"
+WEBP_MAGIC = b"WEBP"
+MPEG_TS_PACKET_SIZE = 188
+MPEG_TS_SYNC = 0x47
 # Payloads are standard base64, which can itself contain "/"
 _PROXY_PATH = re.compile(r"/proxy/(.+)$")
 _URI_ATTR = re.compile(r'URI="([^"]+)"')
@@ -48,12 +53,7 @@ class Upstream:
 def _b64decode(text):
     text = urllib.parse.unquote(text).strip()
     padded = text + "=" * (-len(text) % 4)
-    for decoder in (base64.b64decode, base64.urlsafe_b64decode):
-        try:
-            return decoder(padded).decode("utf-8")
-        except (binascii.Error, ValueError, UnicodeDecodeError):
-            continue
-    return None
+    return base64.b64decode(padded, validate=False)
 
 
 def proxy_base(url):
@@ -65,18 +65,18 @@ def proxy_base(url):
 
 
 def parse_feed_url(url):
-    """The upstream behind a feed URL. Plain URLs are their own upstream."""
-    parts = urllib.parse.urlsplit(url)
-    match = _PROXY_PATH.search(parts.path)
+    """Decode a feed URL into an Upstream (CDN URL + headers), or a plain URL."""
+    match = _PROXY_PATH.search(urllib.parse.urlsplit(url).path)
     if not match:
         return Upstream(url=url)
-    raw = _b64decode(match.group(1))
-    if raw is None:
+    try:
+        raw = _b64decode(match.group(1)).decode("utf-8", "replace")
+    except (binascii.Error, ValueError):
         return Upstream(url=url)
     if raw.startswith("{"):
         try:
             payload = json.loads(raw)
-        except ValueError:
+        except json.JSONDecodeError:
             payload = None
         if isinstance(payload, dict) and payload.get("u"):
             return Upstream(
@@ -102,12 +102,11 @@ def encode_proxy_payload(url, referer, headers=None, embed="", direct_ok=False):
         payload["d"] = 1
     if headers:
         payload["h"] = headers
-    raw = json.dumps(payload, separators=(",", ":"), ensure_ascii=False)
-    return base64.b64encode(raw.encode("utf-8")).decode("ascii")
+    return base64.b64encode(json.dumps(payload, separators=(",", ":")).encode()).decode()
 
 
 def manifest_headers(referer, extra=None):
-    """buildFetchHeaders(): what the proxy sends for a direct manifest fetch."""
+    """buildFetchHeaders(): what the proxy sends for a non-minimal manifest fetch."""
     extra = {k.lower(): v for k, v in (extra or {}).items()}
     headers = {
         "User-Agent": BROWSER_USER_AGENT,
@@ -134,8 +133,25 @@ def manifest_headers(referer, extra=None):
     return headers
 
 
+def minimal_headers(referer, extra=None):
+    """fetchViaHttp(..., { minimal: true }): TimStreams / TikTok — no Origin.
+
+    TikTok's image CDN often 403s (or stalls) when Origin is set.
+    """
+    headers = {
+        "User-Agent": BROWSER_USER_AGENT,
+        "Accept": "*/*",
+    }
+    if referer:
+        headers["Referer"] = referer
+    cookie = {k.lower(): v for k, v in (extra or {}).items()}.get("cookie")
+    if cookie:
+        headers["Cookie"] = cookie
+    return headers
+
+
 def segment_headers(referer, extra=None):
-    """tryDirectSegmentFetch(): the lighter set the proxy uses for segments."""
+    """tryDirectSegmentFetch(): lighter set used on the Chromium segment path."""
     headers = {"User-Agent": BROWSER_USER_AGENT}
     if referer:
         headers["Referer"] = referer
@@ -155,45 +171,49 @@ def _origin(url):
     return ""
 
 
-_WEBP_CHUNKS = {
-    b"VP8 ", b"VP8L", b"VP8X", b"ALPH", b"ANIM", b"ANMF", b"ICCP", b"EXIF", b"XMP ",
-}
+def unwrap_goat_segment(body):
+    """unwrapGoatSegment(): PNG wrapper; TS starts after IEND + CRC."""
+    if not isinstance(body, (bytes, bytearray)) or len(body) < 8:
+        return body
+    if body[:8] != PNG_SIGNATURE:
+        return body
+    iend = body.find(b"IEND")
+    if iend == -1:
+        return body
+    return body[iend + 8:]
 
 
-def _mpegts_offset(body, start=0):
-    """First offset where three 188-byte MPEG-TS syncs line up, or -1."""
-    limit = min(len(body) - 376, start + 512 * 1024)
-    for i in range(start, max(start, limit)):
-        if body[i] == 0x47 and body[i + 188] == 0x47 and body[i + 376] == 0x47:
-            return i
-    return -1
+def unwrap_webp_ts_segment(body):
+    """unwrapWebpTsSegment(): fake WEBP whose payload is raw MPEG-TS.
+
+    Find a sustained 0x47 sync run (188-byte packets) and return it — same as
+    roku-feed/proxy/advanced-proxy.js.
+    """
+    if not isinstance(body, (bytes, bytearray)) or len(body) < 16:
+        return body
+    if body[:4] != RIFF_MAGIC or body[8:12] != WEBP_MAGIC:
+        return body
+    min_packets = 3
+    search_limit = min(len(body), 64 * 1024)
+    for i in range(search_limit):
+        if body[i] != MPEG_TS_SYNC:
+            continue
+        packets = 0
+        offset = i
+        while offset + MPEG_TS_PACKET_SIZE <= len(body) and body[offset] == MPEG_TS_SYNC:
+            packets += 1
+            offset += MPEG_TS_PACKET_SIZE
+        if packets >= min_packets:
+            return body[i:i + packets * MPEG_TS_PACKET_SIZE]
+    return body
 
 
 def unwrap_goat(body):
-    """GOAT hides MPEG-TS inside a PNG or WEBP; return the media payload."""
-    if len(body) >= 12 and body[:4] == b"RIFF" and body[8:12] == b"WEBP":
-        pos = 12
-        while pos + 8 <= len(body):
-            fourcc = body[pos:pos + 4]
-            size = int.from_bytes(body[pos + 4:pos + 8], "little")
-            data_start = pos + 8
-            data_end = data_start + size
-            if fourcc not in _WEBP_CHUNKS:
-                return body[pos:]
-            if data_end > len(body):
-                # Declared chunk past EOF — rest is usually the TS
-                return body[data_start:] if data_start < len(body) else body
-            pos = data_end + (size & 1)
-        if pos < len(body):
-            return body[pos:]
-        off = _mpegts_offset(body, 12)
-        return body[off:] if off >= 0 else body
-
-    if len(body) >= 8 and body[:8] == PNG_SIGNATURE:
-        end = body.find(b"IEND")
-        if end != -1:
-            return body[end + 8:]
-    return body
+    """unwrapDisguisedSegment(): PNG GOAT first, then WebP-TS."""
+    after_png = unwrap_goat_segment(body)
+    if after_png is not body:
+        return after_png
+    return unwrap_webp_ts_segment(body)
 
 
 def is_manifest_url(url):
@@ -237,21 +257,23 @@ def rewrite_manifest(text, base_url, context, local_url):
                         embed=context.embed, direct_ok=context.direct_ok, proxy_url=fallback)
 
     out = []
-    for line in text.split("\n"):
+    for line in text.splitlines():
         stripped = line.strip()
-        if stripped.startswith(("#EXT-X-KEY:", "#EXT-X-MAP:", "#EXT-X-MEDIA:")):
-            match = _URI_ATTR.search(line)
-            if match:
-                target = resolve(match.group(1))
-                manifest = stripped.startswith("#EXT-X-MEDIA:")
-                line = line.replace(match.group(1), local_url(target, manifest))
+        if not stripped:
             out.append(line)
             continue
-        if stripped and not stripped.startswith("#"):
-            if not is_hls_media_uri(stripped):
-                continue
-            target = resolve(stripped)
-            out.append(local_url(target, is_manifest_url(target.url)))
+        if stripped.startswith("#"):
+            match = _URI_ATTR.search(stripped)
+            if match:
+                child = resolve(match.group(1))
+                is_man = is_manifest_url(child.url) or "TYPE=AUDIO" in stripped or "TYPE=SUBTITLES" in stripped
+                out.append(_URI_ATTR.sub(f'URI="{local_url(child, is_man)}"', stripped, count=1))
+            else:
+                out.append(stripped)
             continue
-        out.append(line)
-    return "\n".join(out)
+        if not is_hls_media_uri(stripped):
+            out.append(stripped)
+            continue
+        child = resolve(stripped)
+        out.append(local_url(child, is_manifest_url(child.url)))
+    return "\n".join(out) + ("\n" if text.endswith("\n") else "")
