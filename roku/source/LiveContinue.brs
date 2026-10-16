@@ -123,6 +123,7 @@ function LiveContinueToHomeItem(entry as Object) as Dynamic
         year: liveContinueStr(entry.year),
         contentRating: liveContinueStr(entry.contentRating),
         rating: liveContinueStr(entry.rating),
+        programKind: liveContinueStr(entry.programKind),
         duration: 0,
         viewOffset: 0,
         watched: false,
