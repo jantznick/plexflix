@@ -5,42 +5,17 @@ services:
       dockerfile: multiview/Dockerfile
     container_name: plexflix-multiview
     restart: unless-stopped
-    # Host network so :8095 is on the host directly (no ports: mapping).
     # Host network so :8095 is on the host. Vendored advanced-proxy binds
     # 127.0.0.1:18787 (not :8787) so it doesn't collide with the LAN sidecar.
     network_mode: host
     environment:
-      # x264 works anywhere but is CPU-heavy at 1080p. With an Intel or AMD GPU
-      # use va (or qsv on Intel) and the devices block below; with NVIDIA,
-      # nvenc and the deploy block below. Unusable hardware falls back to x264.
-      ENCODER: x264
-      # Soft defaults for software encode; with va/qsv/nvenc you can raise these
-      VIDEO_BITRATE: 3M
-      FPS: "20"
-      # Which rendition each feed is decoded from (closest at or above this)
       VARIANT_HEIGHT: "480"
       MAX_SESSIONS: "2"
       IDLE_TIMEOUT: "90"
       # Optional shared secret; set the same value as multiviewToken in PlexConfig.brs
       MULTIVIEW_TOKEN: ""
-      # 1 = serve feed 1 as proxied HLS (no compositor); other tiles placeholder.
-      # 2+ = decode+composite that many feeds.
-      LIVE_FEEDS: "1"
-      # Vendored proxy (copied from roku-feed) — same process tree as multiview
       PROXY_HEADLESS: "true"
       MULTIVIEW_PROXY_PORT: "18787"
       PROXY_HOST: "127.0.0.1:18787"
-    # Segments churn constantly, so keep them in RAM rather than on disk
     tmpfs:
       - /data:size=1g
-    # Intel / AMD hardware encoding:
-    # devices:
-    #   - /dev/dri:/dev/dri
-    # NVIDIA (needs nvidia-container-toolkit on the host):
-    # deploy:
-    #   resources:
-    #     reservations:
-    #       devices:
-    #         - driver: nvidia
-    #           count: 1
-    #           capabilities: [gpu, video]

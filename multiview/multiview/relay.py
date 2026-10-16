@@ -1,9 +1,9 @@
 """Caching front for the vendored roku-feed advanced-proxy.
 
 entrypoint.sh runs advanced-proxy on 127.0.0.1:18787 (exact proxy JS). This
-module is only a loopback cache so ffmpeg's aggressive HLS re-polls do not
-re-open Puppeteer / re-fetch multi‑MB segments on every tick. Fetch + unwrap
-still happen in the Node proxy — we just memoize the responses.
+module memoizes manifests/segments so playlist polls do not re-open Puppeteer
+or re-fetch multi‑MB segments on every tick. Fetch + unwrap still happen in
+the Node proxy.
 """
 
 import collections

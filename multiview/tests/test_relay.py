@@ -72,7 +72,7 @@ class VendoredProxyRoutingTests(unittest.TestCase):
 
 
 class PassThroughSessionTests(unittest.TestCase):
-    def test_one_live_feed_skips_compositor_and_goes_running(self):
+    def test_session_pass_through_goes_running(self):
         import tempfile
         import time
         from multiview.session import Session
@@ -91,10 +91,9 @@ class PassThroughSessionTests(unittest.TestCase):
                  {"url": proxy_url("https://cdn.example/other.m3u8"), "title": "B"}],
                 "grid",
                 root,
-                {"live_feeds": 1, "allow_local_inputs": True, "video_bitrate": "2M"},
+                {"allow_local_inputs": True},
                 relay=relay,
             )
-            self.assertTrue(session.passthrough)
             session.start()
             deadline = time.monotonic() + 5
             while time.monotonic() < deadline and session.state == "starting":
