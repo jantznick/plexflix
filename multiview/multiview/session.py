@@ -20,7 +20,7 @@ from .compositor import Compositor, bitrate_bps
 from .ingest import AUDIO_RATE, Ingest
 from .layouts import LAYOUTS, tiles_for
 from .playlist import StitchedPlaylist, master_playlist, read_media_playlist, write_atomic
-from .relay import source_for
+from .relay import rewrite_to_local_proxy, source_for
 
 TICK = 0.5
 STARTUP_TIMEOUT = 20
@@ -67,6 +67,7 @@ class Session:
         self.settings = settings
         self._clock = clock
         self._compositor_factory = compositor_factory
+        self._relay = relay
         self.feeds = [
             Feed(i, spec, ingest_factory(source_for(spec, relay), settings, f"{session_id[:8]}/{i}"))
             for i, spec in enumerate(feeds)
@@ -175,6 +176,11 @@ class Session:
 
     def _run(self):
         try:
+            # Open Chromium / resolve embeds once before ffmpeg starts hammering
+            if self._relay is not None:
+                targets = [rewrite_to_local_proxy(feed.url) for feed in self.feeds]
+                self._log(f"warming {len(targets)} feed(s) through vendored proxy")
+                self._relay.warm(targets)
             for feed in self.feeds:
                 feed.ingest.start()
             self._start_compositor()

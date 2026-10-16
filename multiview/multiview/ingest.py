@@ -40,7 +40,8 @@ AUDIO_TRIM_SECONDS = 0.1
 def build_command(ffmpeg, source, audio_fd, fps):
     cmd = [ffmpeg, "-hide_banner", "-nostdin", "-loglevel", "error"]
     if source.startswith(("http://", "https://")):
-        cmd += ["-rw_timeout", "10000000"]
+        # 90s: first playlist can wait on Chromium embed resolve behind the relay
+        cmd += ["-rw_timeout", "90000000"]
     cmd += [
         "-live_start_index", "-3",
         "-fflags", "+genpts+discardcorrupt",
