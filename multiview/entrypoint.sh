@@ -1,15 +1,16 @@
 #!/bin/bash
-# Start the vendored roku-feed advanced-proxy (same code), then multiview.
+# Start the vendored roku-feed advanced-proxy, then multiview on :8095.
+# Do NOT export PORT — Node and Python both read it; leaking the proxy port
+# makes multiview try to bind the same address (EADDRINUSE).
 set -euo pipefail
 
-# Use 18787 by default so we don't collide with the LAN roku-feed proxy on :8787
-# when running with network_mode: host.
+PROXY_PORT="${MULTIVIEW_PROXY_PORT:-18787}"
 export PROXY_HEADLESS="${PROXY_HEADLESS:-true}"
-export PORT="${MULTIVIEW_PROXY_PORT:-18787}"
-export PROXY_HOST="${PROXY_HOST:-127.0.0.1:${PORT}}"
+export PROXY_HOST="${PROXY_HOST:-127.0.0.1:${PROXY_PORT}}"
+export MULTIVIEW_PROXY_PORT="${PROXY_PORT}"
 
 cd /app/proxy
-node advanced-proxy.js &
+PORT="${PROXY_PORT}" node advanced-proxy.js &
 proxy_pid=$!
 
 cleanup() {
@@ -18,7 +19,7 @@ cleanup() {
 trap cleanup EXIT
 
 for _ in $(seq 1 60); do
-  if curl -sf "http://127.0.0.1:${PORT}/" >/dev/null 2>&1; then
+  if curl -sf "http://127.0.0.1:${PROXY_PORT}/" >/dev/null 2>&1; then
     break
   fi
   if ! kill -0 "$proxy_pid" 2>/dev/null; then
@@ -30,4 +31,6 @@ for _ in $(seq 1 60); do
 done
 
 cd /app
+# Multiview listens on 8095 (compose / default). Never inherit the proxy PORT.
+export PORT="${MULTIVIEW_PORT:-8095}"
 exec python3 -m multiview.server
