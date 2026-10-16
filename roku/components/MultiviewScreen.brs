@@ -17,6 +17,8 @@ sub init()
     m.retryTimer.observeField("fire", "onRetry")
     m.stallTimer = m.top.findNode("stallTimer")
     m.stallTimer.observeField("fire", "onStall")
+    m.rotateTimer = m.top.findNode("rotateTimer")
+    m.rotateTimer.observeField("fire", "onRotateDebounced")
 
     m.streams = []
     m.session = invalid
@@ -37,8 +39,10 @@ sub init()
     m.focusAfterSwitch = invalid
     m.switchMessage = ""
     m.requestedLayout = "grid"
+    m.pendingOrder = invalid
 
     m.video.focusable = false
+    m.video.enableUI = false
     m.video.observeField("state", "onVideoState")
     m.video.observeField("availableAudioTracks", "onAudioTracks")
     m.top.observeField("focusedChild", "onFocusedChild")
@@ -297,35 +301,67 @@ sub cycleLayout()
     requestUpdate({ layout: nextLayout }, "Switching to " + layoutName(nextLayout) + "...")
 end sub
 
-' Moves the focused game into the first slot: the big tile in Spotlight and
-' Picture in picture, top left in Grid.
-' Bound to OK (when not already main). FF/RW stay wired but Roku Video often
-' eats those keys during HLS even with enableUI=false.
-sub makeMain()
-    if m.switching or m.session = invalid or m.session.order = invalid then return
-    if m.focus = 0 then
-        showNotice("Already the main tile — press Play for fullscreen")
-        return
+' Rotate which stream sits in each layout slot. FF/RW call this; taps within
+' ~350ms coalesce into one PUT so two quick presses skip ahead by two.
+sub rotateFeeds(delta as Integer)
+    if m.session = invalid or m.session.order = invalid then return
+    if m.session.order.count() < 2 then return
+
+    base = m.pendingOrder
+    if base = invalid then
+        base = []
+        for each stream in m.session.order
+            base.push(Int(stream))
+        end for
     end if
-    order = m.session.order
-    if m.focus < 0 or m.focus >= order.count() then return
-    ' ParseJson leaves stream indexes as floats; coerce so PUT matches server ints
-    focused = Int(order[m.focus])
-    reordered = [focused]
-    for each stream in order
-        idx = Int(stream)
-        if idx <> focused then reordered.push(idx)
-    end for
-    print "[plexflix:multiview] makeMain focus=" + StrI(m.focus).Trim() + " order -> " + FormatJson(reordered)
+    m.pendingOrder = rotatedOrder(base, delta)
     m.focusAfterSwitch = 0
-    requestUpdate({ order: reordered }, "Moving " + tileTitle(m.focus) + " to the main spot...")
+    print "[plexflix:multiview] rotate delta=" + StrI(delta).Trim() + " pending -> " + FormatJson(m.pendingOrder)
+
+    ' While a mosaic restart is already in flight, just queue; onSettled flushes
+    if m.switching then return
+    m.rotateTimer.control = "stop"
+    m.rotateTimer.duration = 0.35
+    m.rotateTimer.control = "start"
+end sub
+
+function rotatedOrder(order as Object, delta as Integer) as Object
+    n = order.count()
+    out = []
+    if n = 0 then return out
+    steps = delta
+    while steps < 0
+        steps = steps + n
+    end while
+    steps = steps MOD n
+    for i = 0 to n - 1
+        out.push(Int(order[(i + steps) MOD n]))
+    end for
+    return out
+end function
+
+sub onRotateDebounced()
+    if m.closing or m.pendingOrder = invalid then return
+    if m.switching then return
+    order = m.pendingOrder
+    m.pendingOrder = invalid
+    if m.session = invalid or m.session.order = invalid then return
+    if order.count() <> m.session.order.count() then return
+    unchanged = true
+    for i = 0 to order.count() - 1
+        if order[i] <> Int(m.session.order[i]) then
+            unchanged = false
+            exit for
+        end if
+    end for
+    if unchanged then return
+    requestUpdate({ order: order }, "Switching games...")
 end sub
 
 sub requestUpdate(payload as Object, message as String)
     if m.switching or m.sessionId = "" then return
     payload.id = m.sessionId
     m.switchMessage = message
-    ' Block further remotes until the PUT finishes (or fails)
     m.switching = true
     hideOverlay()
     setStatus(message)
@@ -374,6 +410,11 @@ sub onSettled()
     paintTiles()
     if m.video.state = "playing" then clearStatus()
     applyAudio()
+    ' More FF/RW landed during the restart — send the coalesced order next
+    if m.pendingOrder <> invalid then
+        onRotateDebounced()
+        return
+    end if
     showOverlay()
 end sub
 
@@ -561,8 +602,7 @@ sub showOverlay()
     m.hintBar.visible = true
     layout = ""
     if m.session <> invalid then layout = layoutName(asString(m.session.layout))
-    ' OK is make-main: FF/RW almost never reach us while Video is playing HLS
-    m.layoutLabel.text = "Multiview  ·  " + layout + "  ·  OK = main tile  ·  Play = fullscreen  ·  * = layout"
+    m.layoutLabel.text = layout
     paintFocus()
     m.hideTimer.control = "stop"
     m.hideTimer.control = "start"
@@ -647,31 +687,35 @@ end function
 
 function onKeyEvent(key as String, press as Boolean) as Boolean
     if not press then return false
+    print "[plexflix:multiview] key=" + key
 
     if key = "back" then
         closeScreen()
         return true
     end if
 
-    if m.session = invalid or m.tiles.count() = 0 or m.switching then return true
+    if m.session = invalid or m.tiles.count() = 0 then return true
+
+    ' FF/RW still land while a mosaic restart settles so rapid taps queue
+    if m.switching then
+        if key = "fastforward" then
+            rotateFeeds(1)
+        else if key = "rewind" then
+            rotateFeeds(-1)
+        end if
+        return true
+    end if
 
     if key = "up" or key = "down" or key = "left" or key = "right" then
         moveFocus(key)
-    else if key = "OK" then
-        ' Primary make-main control. FF/RW are unreliable on real hardware
-        ' because Video steals them for trickplay even with enableUI=false.
-        if m.focus = 0 then
-            promoteFocused()
-        else
-            makeMain()
-        end if
+    else if key = "OK" or key = "play" then
+        promoteFocused()
     else if key = "options" then
         cycleLayout()
-    else if key = "fastforward" or key = "rewind" then
-        makeMain()
-    else if key = "play" then
-        ' Fullscreen for the focused tile (works from any slot)
-        promoteFocused()
+    else if key = "fastforward" then
+        rotateFeeds(1)
+    else if key = "rewind" then
+        rotateFeeds(-1)
     else
         showOverlay()
     end if
@@ -680,12 +724,17 @@ function onKeyEvent(key as String, press as Boolean) as Boolean
 end function
 
 sub onFocusedChild()
+    if m.video = invalid then return
     child = m.top.focusedChild
-    if child <> invalid and child.isSameNode(m.video) then ensureFocus()
+    if child = invalid then return
+    if child.isSameNode(m.video) then ensureFocus()
 end sub
 
 sub ensureFocus()
+    if m.video = invalid then return
     m.video.focusable = false
+    ' Always re-assert: hasFocus() is false while Video holds focus, and that
+    ' is exactly when FF/RW never reach onKeyEvent
     m.top.setFocus(true)
 end sub
 
@@ -703,6 +752,8 @@ sub closeScreen()
     m.pollTimer.control = "stop"
     m.hideTimer.control = "stop"
     m.settleTimer.control = "stop"
+    m.rotateTimer.control = "stop"
+    m.pendingOrder = invalid
     stopVideo()
     m.top.closed = true
 end sub
