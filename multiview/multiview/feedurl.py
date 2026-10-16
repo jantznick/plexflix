@@ -32,8 +32,7 @@ class Upstream:
     headers: dict = field(default_factory=dict)
     embed: str = ""
     direct_ok: bool = True
-    # Where the roku-feed proxy would serve this same resource; the fallback
-    # whenever fetching it directly doesn't work
+    # Original proxy URL the feed came from (decode only; never fetched)
     proxy_url: str = ""
 
     def to_json(self):

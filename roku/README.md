@@ -264,25 +264,24 @@ the tile rectangles the server reports.
 
 On the server, every feed is decoded by its own ffmpeg into raw 720p frames,
 and a GStreamer pipeline tiles whatever frames it has, encodes, and writes
-the HLS output. The feeds are fetched the way roku-feed's proxy fetches them
-(same referer, cookies and headers, straight from the CDN, PNG-wrapped GOAT
-segments unwrapped), not through it: the proxy is only asked for manifests
-that need its Chromium session (`d=0` payloads) and for anything a direct
-fetch fails on. `GET /healthz` counts how fetches went, so you can see how
-much still lands on the proxy.
+the HLS output. Proxy feed URLs are decoded for their CDN URL and headers;
+multiview then fetches the CDN itself (Chrome TLS fingerprint, same referer /
+cookies / headers, GOAT unwrap). It never calls the roku-feed proxy — same
+machine, same outcome, only extra load. `GET /healthz` should show
+`manifest_direct` / `segment_direct` (and cache hits), not `*_proxy`.
 
 ### Server (home server, Docker Compose)
 
 ```bash
 cd multiview
 # pick ENCODER (x264 / va / qsv / nvenc) and uncomment the matching GPU block
-# in docker-compose.yml first. Compose uses network_mode: host so the container
-# can reach the roku-feed proxy on this machine's LAN IP (e.g. :8787).
+# in docker-compose.yml first. Compose uses network_mode: host (listens on
+# :8095 on the host).
 docker compose up -d --build
 docker compose logs -f
 curl http://localhost:8095/healthz
-# After a failed session, relay.manifest_failed / segment_failed here means the
-# container could not fetch the sports feeds (direct CDN or the local proxy).
+# After a failed session, relay.manifest_failed / segment_failed means the
+# container could not fetch the sports CDN feeds itself.
 ```
 
 Then set `multiviewUrl` in `PlexConfig.brs` to `http://<server-ip>:8095` and

@@ -5,7 +5,7 @@
     PUT    /sessions/<id>       {"layout"?, "order"?}  applied live
     DELETE /sessions/<id>
     GET    /sessions/<id>/master.m3u8 (and the playlists/segments under it)
-    GET    /healthz             also counts how relay fetches went (direct vs proxy)
+    GET    /healthz             relay fetch counts (direct / cache / failed; never proxy)
 """
 
 import json

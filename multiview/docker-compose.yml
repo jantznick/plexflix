@@ -5,12 +5,8 @@ services:
       dockerfile: multiview/Dockerfile
     container_name: plexflix-multiview
     restart: unless-stopped
-    # Same machine as roku-feed / other sidecars: use the host network so the
-    # container can reach http://192.168.x.x:8787 the same way the host can.
-    # With bridge networking, hairpin NAT to the host's LAN IP often breaks
-    # proxy fallbacks and the ingest demux fails with "Invalid argument".
-    # (network_mode: host makes the ports: mapping unnecessary; it listens on
-    # :8095 on the host directly.)
+    # Host network so :8095 is on the host directly (no ports: mapping).
+    # Multiview fetches sports CDNs itself; it does not call roku-feed's proxy.
     network_mode: host
     environment:
       # x264 works anywhere but is CPU-heavy at 1080p. With an Intel or AMD GPU
