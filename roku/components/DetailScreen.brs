@@ -529,6 +529,7 @@ sub loadChildren(item as Object, mode as String)
             showTitle: "",
             showYear: "",
             showTmdbId: m.showTmdbId,
+            showPosterUrl: "",
             grandparentTitle: ""
         }
         if show <> invalid then
@@ -536,6 +537,8 @@ sub loadChildren(item as Object, mode as String)
             payload.showTitle = asString(show.title)
             payload.showYear = asString(show.year)
             payload.grandparentTitle = asString(show.title)
+            payload.showPosterUrl = asString(show.hdPosterUrl)
+            if payload.showPosterUrl = "" then payload.showPosterUrl = asString(show.hdShowPosterUrl)
             if m.showTmdbId = "" and show.DoesExist("tmdbId") then
                 payload.showTmdbId = asString(show.tmdbId)
             end if

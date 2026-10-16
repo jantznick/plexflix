@@ -1753,17 +1753,24 @@ function fetchSeasonEpisodes(cfg as Object, item as Object) as Object
     showTitle = safeToStr(item.showTitle)
     if showTitle = "" then showTitle = safeToStr(item.grandparentTitle)
     showYear = safeToStr(item.showYear)
+    showPosterUrl = safeToStr(item.showPosterUrl)
 
     tmdbId = safeToStr(item.showTmdbId)
     if tmdbId = "" and showKey <> "" then tmdbId = resolveShowTmdbId(cfg, showKey)
     if tmdbId = "" and showTitle <> "" then tmdbId = searchTmdbShowId(cfg, showTitle, showYear)
+
+    ' Prefer the show's Plex poster for missing tiles — TMDB episode stills are
+    ' often tiny/grainy in the episode rail.
+    if showPosterUrl = "" and showKey <> "" then
+        showPosterUrl = resolveShowPosterUrl(cfg, showKey)
+    end if
 
     guide = []
     if tmdbId <> "" and seasonNum <> "" then
         guide = fetchTmdbSeasonGuide(cfg, tmdbId, seasonNum)
     end if
 
-    merged = mergeSeasonEpisodes(owned, guide, seasonNum, tmdbId, showKey, showTitle)
+    merged = mergeSeasonEpisodes(owned, guide, seasonNum, tmdbId, showKey, showTitle, showPosterUrl)
     return { ok: true, items: merged, showTmdbId: tmdbId }
 end function
 
@@ -1804,6 +1811,18 @@ function resolveShowTmdbId(cfg as Object, showRatingKey as String) as String
     end if
     ids = extractExternalIds(meta)
     return safeToStr(ids.tmdbId)
+end function
+
+function resolveShowPosterUrl(cfg as Object, showRatingKey as String) as String
+    if showRatingKey = "" then return ""
+    details = plexGet(cfg, "/library/metadata/" + showRatingKey)
+    if details.ok <> true then return ""
+    mapped = collectMetadata(cfg, details.json)
+    if mapped.count() = 0 then return ""
+    show = mapped[0]
+    poster = safeToStr(show.hdPosterUrl)
+    if poster = "" then poster = safeToStr(show.hdShowPosterUrl)
+    return poster
 end function
 
 function extractExternalIds(meta as Object) as Object
@@ -1880,7 +1899,7 @@ function fetchTmdbSeasonGuide(cfg as Object, tmdbId as String, seasonNum as Stri
     return data.episodes
 end function
 
-function mergeSeasonEpisodes(owned as Object, guide as Object, seasonNum as String, tmdbId as String, showKey as String, showTitle as String) as Object
+function mergeSeasonEpisodes(owned as Object, guide as Object, seasonNum as String, tmdbId as String, showKey as String, showTitle as String, showPosterUrl as String) as Object
     if owned = invalid then owned = []
     if guide = invalid then guide = []
 
@@ -1908,10 +1927,8 @@ function mergeSeasonEpisodes(owned as Object, guide as Object, seasonNum as Stri
                 else
                     name = safeToStr(g.name)
                     if name = "" then name = "Episode " + epNum
-                    still = ""
-                    if g.still_path <> invalid and safeToStr(g.still_path) <> "" then
-                        still = "https://image.tmdb.org/t/p/w500" + safeToStr(g.still_path)
-                    end if
+                    ' Use the show poster — matches owned-episode look; TMDB stills are grainy here
+                    art = showPosterUrl
                     merged.push({
                         title: name,
                         shortTitle: name,
@@ -1925,8 +1942,8 @@ function mergeSeasonEpisodes(owned as Object, guide as Object, seasonNum as Stri
                         watched: false,
                         duration: 0,
                         viewOffset: 0,
-                        hdPosterUrl: still,
-                        hdBackdropUrl: still,
+                        hdPosterUrl: art,
+                        hdBackdropUrl: art,
                         grandparentTitle: showTitle,
                         tmdbId: tmdbId,
                         showRatingKey: showKey,
