@@ -17,10 +17,14 @@ import time
 
 from . import slate
 from .compositor import Compositor, bitrate_bps
-from .ingest import AUDIO_RATE, Ingest
+from .ingest import AUDIO_RATE, Ingest, PlaceholderIngest
 from .layouts import LAYOUTS, tiles_for
 from .playlist import StitchedPlaylist, master_playlist, read_media_playlist, write_atomic
 from .relay import rewrite_to_local_proxy, source_for
+
+# Only the first N feeds are fetched/decoded. The rest stay on a placeholder
+# slate so we can prove one stream works before turning the rest on.
+PLACEHOLDER_MESSAGE = "Other stream will play here"
 
 TICK = 0.5
 STARTUP_TIMEOUT = 20
@@ -32,16 +36,23 @@ STITCH_WINDOW = 10
 
 
 class Feed:
-    def __init__(self, index, spec, ingest):
+    def __init__(self, index, spec, ingest, live=True):
         self.index = index
         self.url = spec["url"]
         self.title = spec.get("title") or "Stream"
         self.ingest = ingest
+        self.live = live
         self.frame = None
         blank = slate.blank_frame()
-        self.slates = {"starting": blank, "reconnecting": blank}
+        self.slates = {
+            "starting": blank,
+            "reconnecting": blank,
+            "placeholder": blank,
+        }
 
     def picture(self):
+        if not self.live:
+            return self.slates["placeholder"]
         fresh = self.ingest.take_video()
         if fresh is not None:
             self.frame = fresh
@@ -68,11 +79,17 @@ class Session:
         self._clock = clock
         self._compositor_factory = compositor_factory
         self._relay = relay
-        self.feeds = [
-            Feed(i, spec, ingest_factory(source_for(spec, relay), settings, f"{session_id[:8]}/{i}"))
-            for i, spec in enumerate(feeds)
-        ]
+        live_limit = max(0, int(settings.get("live_feeds", 1)))
+        self.feeds = []
+        for i, spec in enumerate(feeds):
+            live = i < live_limit
+            if live:
+                ingest = ingest_factory(source_for(spec, relay), settings, f"{session_id[:8]}/{i}")
+            else:
+                ingest = PlaceholderIngest(name=f"{session_id[:8]}/{i}")
+            self.feeds.append(Feed(i, spec, ingest, live=live))
         self.order = list(range(len(feeds)))
+        self._log_once = False
 
         self.state = "starting"  # starting | running | error | stopped
         self.error = ""
@@ -145,7 +162,9 @@ class Session:
             for slot, feed_index in enumerate(self.order):
                 feed = self.feeds[feed_index]
                 status = feed.ingest.status
-                if status == "live" and self.state != "running":
+                if not feed.live:
+                    status = "placeholder"
+                elif status == "live" and self.state != "running":
                     status = "starting"
                 tiles.append(dict(
                     rects[slot],
@@ -153,7 +172,7 @@ class Session:
                     stream=feed_index,
                     title=feed.title,
                     status=status,
-                    error=feed.ingest.error if status != "live" else "",
+                    error=feed.ingest.error if status not in ("live", "placeholder") else "",
                     reconnects=feed.ingest.restarts,
                     audioTrack=slot,
                 ))
@@ -176,12 +195,16 @@ class Session:
 
     def _run(self):
         try:
+            live = [f for f in self.feeds if f.live]
+            held = [f for f in self.feeds if not f.live]
+            if held:
+                self._log(f"live_feeds={len(live)} — placeholder on {len(held)} tile(s)")
             # Open Chromium / resolve embeds once before ffmpeg starts hammering
-            if self._relay is not None:
-                targets = [rewrite_to_local_proxy(feed.url) for feed in self.feeds]
+            if self._relay is not None and live:
+                targets = [rewrite_to_local_proxy(feed.url) for feed in live]
                 self._log(f"warming {len(targets)} feed(s) through vendored proxy")
                 self._relay.warm(targets)
-            for feed in self.feeds:
+            for feed in live:
                 feed.ingest.start()
             self._start_compositor()
             self._pump_thread.start()
@@ -198,12 +221,19 @@ class Session:
             self._shutdown()
 
     def _render_slates(self):
+        ffmpeg = self.settings.get("ffmpeg", "ffmpeg")
+        font = self.settings.get("font_file", "")
         for feed in self.feeds:
+            if self._stop.is_set():
+                return
+            if not feed.live:
+                feed.slates["placeholder"] = slate.render(
+                    ffmpeg, font, feed.title, PLACEHOLDER_MESSAGE)
+                continue
             for key, message in (("starting", "Starting..."), ("reconnecting", "Reconnecting...")):
                 if self._stop.is_set():
                     return
-                feed.slates[key] = slate.render(self.settings.get("ffmpeg", "ffmpeg"),
-                                                self.settings.get("font_file", ""), feed.title, message)
+                feed.slates[key] = slate.render(ffmpeg, font, feed.title, message)
 
     def _tick(self):
         now = self._clock()

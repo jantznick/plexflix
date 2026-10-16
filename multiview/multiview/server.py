@@ -55,6 +55,9 @@ def settings_from_env(env=os.environ):
         "token": env.get("MULTIVIEW_TOKEN", ""),
         "port": int(env.get("PORT", "8095")),
         "allow_local_inputs": env.get("ALLOW_LOCAL_INPUTS", "") == "1",
+        # How many feeds actually decode; the rest show a placeholder slate.
+        # Set to 1 while proving a single stream, then raise.
+        "live_feeds": int(env.get("LIVE_FEEDS", "1")),
     }
 
 

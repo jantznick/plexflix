@@ -62,6 +62,33 @@ def build_command(ffmpeg, source, audio_fd, fps):
     return cmd
 
 
+class PlaceholderIngest:
+    """Tile with no network fetch — shows a fixed slate message and silence."""
+
+    def __init__(self, name="placeholder"):
+        self.source = ""
+        self.name = name
+        self.status = "placeholder"
+        self.error = ""
+        self.restarts = 0
+        self.has_audio = False
+
+    def start(self):
+        pass
+
+    def stop(self):
+        pass
+
+    def take_video(self):
+        return None
+
+    def take_audio(self, size):
+        return bytes(size)
+
+    def showing_live(self):
+        return False
+
+
 class Ingest:
     def __init__(self, source, settings, name="feed", popen=subprocess.Popen, clock=time.monotonic):
         self.source = source

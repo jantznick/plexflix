@@ -23,6 +23,9 @@ services:
       IDLE_TIMEOUT: "90"
       # Optional shared secret; set the same value as multiviewToken in PlexConfig.brs
       MULTIVIEW_TOKEN: ""
+      # Only decode this many feeds; other tiles show a placeholder slate.
+      # Bump to 2+ once a single stream is solid.
+      LIVE_FEEDS: "1"
       # Vendored proxy (copied from roku-feed) — same process tree as multiview
       PROXY_HEADLESS: "true"
       MULTIVIEW_PROXY_PORT: "18787"
