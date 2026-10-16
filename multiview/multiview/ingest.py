@@ -32,7 +32,7 @@ VIDEO_QUEUE = 3
 AUDIO_MAX_SECONDS = 0.3
 AUDIO_TRIM_SECONDS = 0.1
 
-_NO_AUDIO_MARKERS = ("matches no streams", "does not contain any stream")
+# Only the audio map failing; a dead playlist says other things and must retry fully
 
 
 def build_command(ffmpeg, source, audio_fd, fps):
@@ -42,7 +42,8 @@ def build_command(ffmpeg, source, audio_fd, fps):
     cmd += [
         "-live_start_index", "-3",
         "-fflags", "+genpts+discardcorrupt",
-        "-re",
+        # No -re: these are live HLS feeds through the local relay; reading at
+        # "native" rate just makes ffmpeg treat a short playlist as EOF
         "-i", source,
         "-map", "0:v:0",
         "-vf", (f"scale={FRAME_W}:{FRAME_H}:force_original_aspect_ratio=decrease,"
@@ -175,7 +176,7 @@ class Ingest:
 
     def _on_exit(self, code):
         tail = " | ".join(self._stderr)
-        if self.has_audio and any(marker in tail for marker in _NO_AUDIO_MARKERS):
+        if self.has_audio and "0:a:0" in tail and "matches no streams" in tail:
             self._log("no audio stream; decoding picture only")
             self.has_audio = False
             self._next_start = self._clock()
