@@ -856,36 +856,71 @@ function appendRowNodes(root as Object, title as String, items as Object) as Boo
         child.hdPosterUrl = item.hdPosterUrl
         ' Native ContentNode field — used by some SceneGraph widgets
         child.hdBackgroundImageUrl = item.hdBackdropUrl
-        isDiscover = false
-        if item.DoesExist("isDiscover") and item.isDiscover = true then isDiscover = true
-        child.addFields({
-            year: item.year,
-            rating: item.rating,
-            contentRating: item.contentRating,
-            mediaType: item.mediaType,
-            ratingKey: item.ratingKey,
-            key: item.key,
-            duration: item.duration,
-            viewOffset: item.viewOffset,
-            watched: watchedFlag(item),
-            unwatchedCount: unwatchedTotal(item),
-            viewedLeafCount: viewedLeaves(item),
-            leafCount: item.leafCount,
-            childCount: item.childCount,
-            grandparentRatingKey: item.grandparentRatingKey,
-            parentRatingKey: item.parentRatingKey,
-            grandparentTitle: item.grandparentTitle,
-            index: item.index,
-            shortTitle: item.shortTitle,
-            parentIndex: item.parentIndex,
-            isDiscover: isDiscover,
-            hdShowPosterUrl: item.hdShowPosterUrl,
-            ' Custom field — must be in addFields or RowList drops it
-            hdBackdropUrl: item.hdBackdropUrl,
-            showDescription: item.showDescription
-        })
+        addHomeItemFields(child, item)
     end for
     return true
+end function
+
+sub addHomeItemFields(child as Object, item as Object)
+    isDiscover = false
+    if item.DoesExist("isDiscover") and item.isDiscover = true then isDiscover = true
+    isLiveContinue = false
+    if item.DoesExist("isLiveContinue") and item.isLiveContinue = true then isLiveContinue = true
+    child.addFields({
+        year: item.year,
+        rating: item.rating,
+        contentRating: item.contentRating,
+        mediaType: item.mediaType,
+        ratingKey: item.ratingKey,
+        key: item.key,
+        duration: item.duration,
+        viewOffset: item.viewOffset,
+        watched: watchedFlag(item),
+        unwatchedCount: unwatchedTotal(item),
+        viewedLeafCount: viewedLeaves(item),
+        leafCount: item.leafCount,
+        childCount: item.childCount,
+        grandparentRatingKey: item.grandparentRatingKey,
+        parentRatingKey: item.parentRatingKey,
+        grandparentTitle: item.grandparentTitle,
+        index: item.index,
+        shortTitle: item.shortTitle,
+        parentIndex: item.parentIndex,
+        isDiscover: isDiscover,
+        hdShowPosterUrl: item.hdShowPosterUrl,
+        ' Custom field — must be in addFields or RowList drops it
+        hdBackdropUrl: item.hdBackdropUrl,
+        showDescription: item.showDescription,
+        isLiveContinue: isLiveContinue,
+        source: safeToStr(item.source),
+        channelId: safeToStr(item.channelId),
+        tuneAlt: safeToStr(item.tuneAlt),
+        dvrId: safeToStr(item.dvrId),
+        epgId: safeToStr(item.epgId),
+        feedId: safeToStr(item.feedId),
+        channelName: safeToStr(item.channelName),
+        streamUrl: safeToStr(item.streamUrl),
+        streamFormat: safeToStr(item.streamFormat),
+        beginsAt: intOrZero(item.beginsAt),
+        endsAt: intOrZero(item.endsAt),
+        guid: safeToStr(item.guid),
+        showGuid: safeToStr(item.showGuid)
+    })
+end sub
+
+function prependLiveContinueWatching(cfg as Object, items as Object) as Object
+    if items = invalid then items = []
+    profileId = ""
+    if cfg <> invalid and cfg.profileId <> invalid then profileId = safeToStr(cfg.profileId)
+    entry = LoadLiveContinueWatch(profileId)
+    liveItem = LiveContinueToHomeItem(entry)
+    if liveItem = invalid then return items
+
+    out = [liveItem]
+    for each item in items
+        if item <> invalid then out.push(item)
+    end for
+    return out
 end function
 
 function appendRow(root as Object, title as String, items as Object) as Boolean
@@ -927,11 +962,18 @@ function buildHome(cfg as Object) as Object
     showSectionKeys = []
     kidsMode = ProfileIsKids(cfg)
 
+    onDeck = { ok: false }
+    recent = { ok: false }
     if not kidsMode then
         ' Continue Watching / On Deck — exempt from 15-min (always useful)
+        onDeckItems = []
         onDeck = plexGet(cfg, "/library/onDeck")
         if onDeck.ok = true then
-            addUniqueRowLoose(root, seenTitles, "Continue Watching", enrichEpisodeShowDescriptions(cfg, preferShowPosters(collectMetadata(cfg, onDeck.json))))
+            onDeckItems = enrichEpisodeShowDescriptions(cfg, preferShowPosters(collectMetadata(cfg, onDeck.json)))
+        end if
+        onDeckItems = prependLiveContinueWatching(cfg, onDeckItems)
+        if onDeckItems.count() > 0 then
+            addUniqueRowLoose(root, seenTitles, "Continue Watching", onDeckItems)
         end if
 
         ' Recently Added (global)
@@ -1640,33 +1682,7 @@ sub addUniqueRowLoose(root as Object, seenTitles as Object, title as String, ite
         child.description = item.description
         child.hdPosterUrl = item.hdPosterUrl
         child.hdBackgroundImageUrl = item.hdBackdropUrl
-        isDiscover = false
-        if item.DoesExist("isDiscover") and item.isDiscover = true then isDiscover = true
-        child.addFields({
-            year: item.year,
-            rating: item.rating,
-            contentRating: item.contentRating,
-            mediaType: item.mediaType,
-            ratingKey: item.ratingKey,
-            key: item.key,
-            duration: item.duration,
-            viewOffset: item.viewOffset,
-            watched: watchedFlag(item),
-            unwatchedCount: unwatchedTotal(item),
-            viewedLeafCount: viewedLeaves(item),
-            leafCount: item.leafCount,
-            childCount: item.childCount,
-            grandparentRatingKey: item.grandparentRatingKey,
-            parentRatingKey: item.parentRatingKey,
-            grandparentTitle: item.grandparentTitle,
-            index: item.index,
-            shortTitle: item.shortTitle,
-            parentIndex: item.parentIndex,
-            isDiscover: isDiscover,
-            hdShowPosterUrl: item.hdShowPosterUrl,
-            hdBackdropUrl: item.hdBackdropUrl,
-            showDescription: item.showDescription
-        })
+        addHomeItemFields(child, item)
     end for
     seenTitles[key] = true
 end sub

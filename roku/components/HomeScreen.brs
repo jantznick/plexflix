@@ -437,6 +437,8 @@ function titleCaseType(mediaType as String) as String
     if mediaType = "show" then return "Series"
     if mediaType = "episode" then return "Episode"
     if mediaType = "season" then return "Season"
+    if mediaType = "livetv" then return "Live TV"
+    if mediaType = "sport" then return "Live"
     if Len(mediaType) = 0 then return ""
     return UCase(Left(mediaType, 1)) + Right(mediaType, Len(mediaType) - 1)
 end function
@@ -499,7 +501,21 @@ sub onRowItemSelected()
         index: item.index,
         shortTitle: item.shortTitle,
         parentIndex: item.parentIndex,
-        isDiscover: item.isDiscover
+        isDiscover: item.isDiscover,
+        isLiveContinue: item.isLiveContinue,
+        source: item.source,
+        channelId: item.channelId,
+        tuneAlt: item.tuneAlt,
+        dvrId: item.dvrId,
+        epgId: item.epgId,
+        feedId: item.feedId,
+        channelName: item.channelName,
+        streamUrl: item.streamUrl,
+        streamFormat: item.streamFormat,
+        beginsAt: item.beginsAt,
+        endsAt: item.endsAt,
+        guid: item.guid,
+        showGuid: item.showGuid
     }
 end sub
 

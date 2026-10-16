@@ -41,7 +41,10 @@ This is intentionally a **design/UX shell** on top of existing Plex data. Creden
 - **Continue Watching**, **Recently Added**, Plex hubs, library shelves, **genre rows**, and **Discover** trending (Netflix/Disney+/etc.)
 - Home **infinite-scrolls** like the web app: as you move down, it appends more random Discover shelves (popular genres per service + trending / exclusives / recently released / popular / watchlist)
 - Home shelves require **15–30** items (except Continue Watching) and **loop** horizontally
-- Continue Watching episodes open the parent show with that episode focused
+- Continue Watching episodes open the parent show with that episode focused.
+  Recently watched **Live TV / Cable** channels pin to the front of that row while
+  the same airing is still on, or for about an hour after it ends (sports overruns
+  included); OK retunes the channel
 - Title detail screen (Cast + More Like This) with larger hero art
 - **Random** on TV show detail picks a random episode (hidden for movies)
 - Cast pages: bio, birthday/place, Movies + TV filmography (TMDB when configured)

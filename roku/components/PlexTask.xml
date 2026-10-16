@@ -9,4 +9,5 @@
     <script type="text/brightscript" uri="PlexTask.brs" />
     <script type="text/brightscript" uri="pkg:/source/PlexConfig.brs" />
     <script type="text/brightscript" uri="pkg:/source/Profiles.brs" />
+    <script type="text/brightscript" uri="pkg:/source/LiveContinue.brs" />
 </component>
