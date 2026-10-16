@@ -35,8 +35,15 @@ sub init()
     m.events = []
     m.currentIndex = 0
     m.feedLoading = false
-    m.feedDialog = invalid
-    m.feedDialogActions = []
+    m.menuActions = []
+    m.menuReturnZone = "list"
+
+    m.menu = m.top.findNode("menu")
+    m.menuPanel = m.top.findNode("menuPanel")
+    m.menuAccent = m.top.findNode("menuAccent")
+    m.menuTitle = m.top.findNode("menuTitle")
+    m.menuSub = m.top.findNode("menuSub")
+    m.menuList = m.top.findNode("menuList")
 
     ' Scores sidecar (optional). Failures leave the guide exactly as before.
     m.scoresEnabled = false
@@ -59,6 +66,7 @@ sub init()
     m.guideList.observeField("escapeLeft", "onGuideEscapeLeft")
     m.guideList.observeField("escapeBack", "onGuideEscapeBack")
     m.guideList.observeField("escapeOptions", "onGuideEscapeOptions")
+    m.menuList.observeField("itemSelected", "onMenuSelected")
 
     m.clockTimer = createObject("roSGNode", "Timer")
     m.clockTimer.repeat = true
@@ -615,88 +623,104 @@ sub paintMultiTray()
 end sub
 
 ' ---------------------------------------------------------------------------
-' * (options) — refresh feed and Multiview actions
+' * (options) — refresh feed and Multiview actions (custom panel, like Live TV)
 ' ---------------------------------------------------------------------------
 
 sub openFeedOptions()
-    scene = m.top.getScene()
-    if scene = invalid then return
-    if m.feedDialog <> invalid then return
+    if m.zone = "menu" then return
 
-    buttons = ["Refresh feed"]
-    actions = ["refresh"]
+    actions = []
+    if m.feedLoading = true then
+        actions.push({ label: "Refresh already in progress", act: "none" })
+    else
+        actions.push({ label: "Refresh feed", act: "refresh" })
+    end if
     if m.multiEnabled = true and m.zone = "list" and m.events.count() > 0 then
         if m.currentIndex >= 0 and m.currentIndex < m.events.count() then
             item = m.events[m.currentIndex]
             if eventInMultiview(item) then
-                buttons.push("Remove from Multiview")
+                actions.push({ label: "Remove from Multiview", act: "multi" })
             else
-                buttons.push("Add to Multiview")
+                actions.push({ label: "Add to Multiview", act: "multi" })
             end if
-            actions.push("multi")
         end if
         if m.multi.count() >= 2 then
-            buttons.push("Watch Multiview")
-            actions.push("watchMulti")
+            actions.push({ label: "Watch Multiview", act: "watchMulti" })
         end if
     end if
-    buttons.push("Cancel")
-    actions.push("cancel")
+    actions.push({ label: "Close", act: "close" })
 
-    dialog = createObject("roSGNode", "Dialog")
-    dialog.title = "Live Sports"
-    if m.feedLoading = true then
-        dialog.message = "A feed refresh is already running."
-    else
-        dialog.message = "Reload the sports feed from the CDN, or manage Multiview."
-    end if
-    dialog.buttons = buttons
-    dialog.observeField("buttonSelected", "onFeedDialogButton")
-    dialog.observeField("wasClosed", "onFeedDialogClosed")
-    m.feedDialog = dialog
-    m.feedDialogActions = actions
-    scene.dialog = dialog
+    subText = "Reload the sports feed from the CDN"
+    if m.multiEnabled = true then subText = "Feed refresh and Multiview"
+    openActionMenu("Live Sports", subText, actions)
 end sub
 
-sub onFeedDialogButton()
-    dialog = m.feedDialog
-    if dialog = invalid then return
-    idx = dialog.buttonSelected
-    act = "cancel"
-    if m.feedDialogActions <> invalid and idx <> invalid and idx >= 0 and idx < m.feedDialogActions.count() then
-        act = m.feedDialogActions[idx]
+sub openActionMenu(title as String, subText as String, actions as Object)
+    m.menuReturnZone = m.zone
+    m.zone = "menu"
+    m.menuTitle.text = title
+    m.menuSub.text = subText
+    setMenuActions(actions)
+    m.menu.visible = true
+    m.menuList.jumpToItem = 0
+    m.menuList.setFocus(true)
+end sub
+
+sub setMenuActions(actions as Object)
+    m.menuActions = actions
+    root = createObject("roSGNode", "ContentNode")
+    for each action in actions
+        item = root.createChild("ContentNode")
+        item.title = "   " + action.label
+    end for
+    m.menuList.content = root
+    rows = actions.count()
+    if rows > 9 then rows = 9
+    h = 176 + rows * 72
+    y = Int((1080 - h) / 2)
+    m.menuPanel.height = h
+    m.menuPanel.translation = [560, y]
+    m.menuAccent.translation = [560, y]
+    m.menuTitle.translation = [608, y + 36]
+    m.menuSub.translation = [608, y + 92]
+    m.menuList.translation = [592, y + 152]
+end sub
+
+sub closeActionMenu()
+    m.menu.visible = false
+    m.zone = m.menuReturnZone
+    if m.zone = "list" and m.events.count() > 0 then
+        m.guideList.setFocus(true)
+        if m.currentIndex >= 0 and m.currentIndex < m.events.count() then
+            m.guideList.jumpToItem = m.currentIndex
+        end if
+    else
+        m.top.setFocus(true)
+        paintPills()
     end if
-    closeFeedDialog()
-    if act = "refresh" then
+end sub
+
+sub onMenuSelected()
+    idx = m.menuList.itemSelected
+    if idx = invalid or idx < 0 or idx >= m.menuActions.count() then return
+    action = m.menuActions[idx]
+    if action.act = "none" then return
+    if action.act = "close" then
+        closeActionMenu()
+    else if action.act = "refresh" then
+        closeActionMenu()
         if m.feedLoading = true then
             m.statusLabel.text = "Refresh already in progress"
         else
             loadFeed()
         end if
-    else if act = "multi" then
+    else if action.act = "multi" then
+        closeActionMenu()
         toggleFocusedEvent()
-    else if act = "watchMulti" then
+    else if action.act = "watchMulti" then
+        closeActionMenu()
         message = requestMultiview()
         if message <> "" then m.statusLabel.text = message
-    end if
-end sub
-
-sub onFeedDialogClosed()
-    closeFeedDialog()
-end sub
-
-sub closeFeedDialog()
-    dialog = m.feedDialog
-    m.feedDialog = invalid
-    m.feedDialogActions = []
-    if dialog <> invalid then dialog.close = true
-    scene = m.top.getScene()
-    if scene <> invalid and scene.dialog <> invalid then scene.dialog = invalid
-    ' Put focus back where the remote left off
-    if m.zone = "list" and m.events.count() > 0 then
-        m.guideList.setFocus(true)
-    else
-        m.top.setFocus(true)
     end if
 end sub
 
@@ -791,6 +815,10 @@ end sub
 
 sub onRefocus()
     if m.top.refocus <> true then return
+    if m.zone = "menu" then
+        m.menu.visible = false
+        m.zone = m.menuReturnZone
+    end if
     if m.zone = "pills" then
         m.top.setFocus(true)
         paintPills()
@@ -810,6 +838,12 @@ end sub
 
 function onKeyEvent(key as String, press as Boolean) as Boolean
     if not press then return false
+
+    if m.zone = "menu" then
+        if key = "back" or key = "options" then closeActionMenu()
+        return true
+    end if
+
     if key = "options" then
         openFeedOptions()
         return true

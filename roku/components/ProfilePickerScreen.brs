@@ -151,31 +151,39 @@ sub buildPinKeypad()
     end while
     m.pinKeys = []
 
-    ' Phone layout: 1-9, then centered 0. Back on the remote clears digits.
+    ' Phone layout: 1-9, then a full-width 0 so Down from 7/8/9 all land on it.
+    ' Back on the remote clears digits.
     labels = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "0"]
     cellW = 96
     cellH = 72
     gapX = 16
     gapY = 14
+    gridW = 3 * cellW + 2 * gapX
     for i = 0 to labels.count() - 1
         if i < 9 then
             row = Int(i / 3)
             col = i mod 3
+            x = col * (cellW + gapX)
+            w = cellW
+            span = false
         else
             row = 3
-            col = 1
+            col = 1 ' Up from 0 returns to 8
+            x = 0
+            w = gridW
+            span = true
         end if
 
         g = m.pinKeypad.createChild("Group")
-        g.translation = [col * (cellW + gapX), row * (cellH + gapY)]
+        g.translation = [x, row * (cellH + gapY)]
 
         bg = g.createChild("Rectangle")
-        bg.width = cellW
+        bg.width = w
         bg.height = cellH
         bg.color = "0x1A2438"
 
         lbl = g.createChild("Label")
-        lbl.width = cellW
+        lbl.width = w
         lbl.height = cellH
         lbl.horizAlign = "center"
         lbl.vertAlign = "center"
@@ -188,10 +196,11 @@ sub buildPinKeypad()
             bg: bg,
             row: row,
             col: col,
+            span: span,
             digit: labels[i]
         })
     end for
-    m.pinKeyIndex = 4
+    m.pinKeyIndex = 0
     paintPinKeypad()
 end sub
 
@@ -209,7 +218,10 @@ end sub
 function pinKeyIndexAt(row as Integer, col as Integer) as Integer
     for i = 0 to m.pinKeys.count() - 1
         keyEntry = m.pinKeys[i]
-        if keyEntry.row = row and keyEntry.col = col then return i
+        if keyEntry.row = row then
+            if keyEntry.span = true then return i
+            if keyEntry.col = col then return i
+        end if
     end for
     return -1
 end function
@@ -285,7 +297,7 @@ sub openPin(profile as Object)
     m.pinValue = ""
     m.pinError.text = ""
     m.pinOverlay.visible = true
-    m.pinKeyIndex = 4
+    m.pinKeyIndex = 0
     paintPin()
     paintPinKeypad()
     paintTiles()
