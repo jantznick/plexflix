@@ -57,8 +57,9 @@ class Session:
         self._relay = relay
         self._mosaic_factory = mosaic_factory
 
-        live_limit = max(0, int(settings.get("live_feeds", 1)))
-        self.feeds = [Feed(i, spec, live=(i < live_limit)) for i, spec in enumerate(feeds)]
+        # Incremental build: only the first stream is decoded into the mosaic.
+        # Everything else is a placeholder tile until more of the function lands.
+        self.feeds = [Feed(i, spec, live=(i == 0)) for i, spec in enumerate(feeds)]
         self.order = list(range(len(feeds)))
 
         self.state = "starting"
@@ -165,7 +166,7 @@ class Session:
             live = [f for f in self.feeds if f.live]
             held = [f for f in self.feeds if not f.live]
             if held:
-                self._log(f"live_feeds={len(live)} — placeholder on {len(held)} tile(s)")
+                self._log(f"decoding feed 1; placeholder on {len(held)} tile(s)")
             if live:
                 targets = [rewrite_to_local_proxy(f.url) for f in live]
                 self._log(f"warming {len(targets)} feed(s) through vendored proxy")

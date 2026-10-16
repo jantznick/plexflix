@@ -54,9 +54,6 @@ def settings_from_env(env=os.environ):
         "token": env.get("MULTIVIEW_TOKEN", ""),
         "port": int(env.get("PORT", "8095")),
         "allow_local_inputs": env.get("ALLOW_LOCAL_INPUTS", "") == "1",
-        # How many feeds actually decode; the rest show a placeholder slate.
-        # Set to 1 while proving a single stream, then raise.
-        "live_feeds": int(env.get("LIVE_FEEDS", "1")),
     }
 
 
@@ -277,11 +274,7 @@ def main():
             manager.reap()
 
     threading.Thread(target=reaper, daemon=True).start()
-    print(
-        f"[manager] multiview listening on :{settings['port']} "
-        f"(ffmpeg mosaic, live_feeds={settings['live_feeds']})",
-        flush=True,
-    )
+    print(f"[manager] multiview listening on :{settings['port']} (ffmpeg mosaic)", flush=True)
     try:
         server.serve_forever()
     except KeyboardInterrupt:

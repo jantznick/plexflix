@@ -14,8 +14,6 @@ services:
       MAX_SESSIONS: "2"
       IDLE_TIMEOUT: "90"
       MULTIVIEW_TOKEN: ""
-      # Decode this many feeds into the mosaic; others are placeholder tiles.
-      LIVE_FEEDS: "1"
       PROXY_HEADLESS: "true"
       MULTIVIEW_PROXY_PORT: "18787"
       PROXY_HOST: "127.0.0.1:18787"
