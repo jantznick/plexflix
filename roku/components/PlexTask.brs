@@ -1927,8 +1927,12 @@ function mergeSeasonEpisodes(owned as Object, guide as Object, seasonNum as Stri
                 else
                     name = safeToStr(g.name)
                     if name = "" then name = "Episode " + epNum
-                    ' Use the show poster — matches owned-episode look; TMDB stills are grainy here
-                    art = showPosterUrl
+                    ' Episode rail still from TMDB; header keeps show art separately
+                    still = ""
+                    if g.still_path <> invalid and safeToStr(g.still_path) <> "" then
+                        still = "https://image.tmdb.org/t/p/w780" + safeToStr(g.still_path)
+                    end if
+                    if still = "" then still = showPosterUrl
                     merged.push({
                         title: name,
                         shortTitle: name,
@@ -1942,8 +1946,8 @@ function mergeSeasonEpisodes(owned as Object, guide as Object, seasonNum as Stri
                         watched: false,
                         duration: 0,
                         viewOffset: 0,
-                        hdPosterUrl: art,
-                        hdBackdropUrl: art,
+                        hdPosterUrl: still,
+                        hdBackdropUrl: showPosterUrl,
                         grandparentTitle: showTitle,
                         tmdbId: tmdbId,
                         showRatingKey: showKey,

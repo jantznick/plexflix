@@ -228,8 +228,10 @@ sub applyEpisodeHeader(ep as Object)
     if summary = "" and m.showHeader <> invalid then summary = asString(m.showHeader.summary)
     m.summaryLabel.text = summary
 
-    if asString(ep.hdBackdropUrl) <> "" and m.backdrop <> invalid then
-        m.backdrop.uri = ep.hdBackdropUrl
+    ' Keep the show backdrop — episode art (and especially portrait show posters
+    ' used as missing-ep stand-ins) stretch badly in the wide hero.
+    if m.showHeader <> invalid and asString(m.showHeader.backdrop) <> "" and m.backdrop <> invalid then
+        m.backdrop.uri = m.showHeader.backdrop
     end if
     m.headerMode = "episode"
 end sub
