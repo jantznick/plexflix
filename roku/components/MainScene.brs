@@ -21,7 +21,6 @@ sub init()
     m.multiviewScreen = invalid
     m.castDetailScreen = invalid
     m.liveTvScreen = invalid
-    m.cableTvScreen = invalid
     m.searchScreen = invalid
     m.profilePicker = invalid
     m.bootSplashHost = m.top.findNode("bootSplash")
@@ -214,7 +213,6 @@ sub clearScreens()
     releaseMultiview()
     m.castDetailScreen = invalid
     m.liveTvScreen = invalid
-    m.cableTvScreen = invalid
     m.searchScreen = invalid
     ' Profile picker is managed by showProfilePicker / onProfileSelected
     updateNavRail()
