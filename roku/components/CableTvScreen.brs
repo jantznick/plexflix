@@ -47,12 +47,21 @@ sub init()
     m.guideLoaded = false
     m.feedLoading = false
     m.reloadTabTitle = ""
-    m.feedDialog = invalid
-    m.feedDialogActions = []
+    m.menuActions = []
+    m.menuReturnZone = "grid"
+
+    m.menu = m.top.findNode("menu")
+    m.menuPanel = m.top.findNode("menuPanel")
+    m.menuAccent = m.top.findNode("menuAccent")
+    m.menuTitle = m.top.findNode("menuTitle")
+    m.menuSub = m.top.findNode("menuSub")
+    m.menuList = m.top.findNode("menuList")
 
     buildTabs()
     buildSlotHeader()
     buildRows()
+
+    m.menuList.observeField("itemSelected", "onMenuSelected")
 
     m.clockTimer = createObject("roSGNode", "Timer")
     m.clockTimer.repeat = true
@@ -432,55 +441,75 @@ sub finishGuideLoad()
 end sub
 
 ' ---------------------------------------------------------------------------
-' * (options) — refresh channels + EPG sidecar
+' * (options) — refresh channels + EPG sidecar (custom panel, like Live TV)
 ' ---------------------------------------------------------------------------
 
 sub openFeedOptions()
-    scene = m.top.getScene()
-    if scene = invalid then return
-    if m.feedDialog <> invalid then return
+    if m.zone = "menu" then return
 
-    dialog = createObject("roSGNode", "Dialog")
-    dialog.title = "Cable TV"
+    actions = []
     if m.feedLoading = true then
-        dialog.message = "A refresh is already running."
-        dialog.buttons = ["OK"]
-        m.feedDialogActions = ["cancel"]
+        actions.push({ label: "Refresh already in progress", act: "none" })
     else
-        dialog.message = "Reload channel streams and guide listings from the CDN."
-        dialog.buttons = ["Refresh", "Cancel"]
-        m.feedDialogActions = ["refresh", "cancel"]
+        actions.push({ label: "Refresh", act: "refresh" })
     end if
-    dialog.observeField("buttonSelected", "onFeedDialogButton")
-    dialog.observeField("wasClosed", "onFeedDialogClosed")
-    m.feedDialog = dialog
-    scene.dialog = dialog
+    actions.push({ label: "Close", act: "close" })
+    openActionMenu("Cable TV", "Reload channel streams and guide listings from the CDN", actions)
 end sub
 
-sub onFeedDialogButton()
-    dialog = m.feedDialog
-    if dialog = invalid then return
-    idx = dialog.buttonSelected
-    act = "cancel"
-    if m.feedDialogActions <> invalid and idx <> invalid and idx >= 0 and idx < m.feedDialogActions.count() then
-        act = m.feedDialogActions[idx]
-    end if
-    closeFeedDialog()
-    if act = "refresh" then loadFeed()
+sub openActionMenu(title as String, subText as String, actions as Object)
+    m.menuReturnZone = m.zone
+    m.zone = "menu"
+    m.menuTitle.text = title
+    m.menuSub.text = subText
+    setMenuActions(actions)
+    m.menu.visible = true
+    m.menuList.jumpToItem = 0
+    m.menuList.setFocus(true)
 end sub
 
-sub onFeedDialogClosed()
-    closeFeedDialog()
+sub setMenuActions(actions as Object)
+    m.menuActions = actions
+    root = createObject("roSGNode", "ContentNode")
+    for each action in actions
+        item = root.createChild("ContentNode")
+        item.title = "   " + action.label
+    end for
+    m.menuList.content = root
+    rows = actions.count()
+    if rows > 9 then rows = 9
+    h = 176 + rows * 72
+    y = Int((1080 - h) / 2)
+    m.menuPanel.height = h
+    m.menuPanel.translation = [560, y]
+    m.menuAccent.translation = [560, y]
+    m.menuTitle.translation = [608, y + 36]
+    m.menuSub.translation = [608, y + 92]
+    m.menuList.translation = [592, y + 152]
 end sub
 
-sub closeFeedDialog()
-    dialog = m.feedDialog
-    m.feedDialog = invalid
-    m.feedDialogActions = []
-    if dialog <> invalid then dialog.close = true
-    scene = m.top.getScene()
-    if scene <> invalid and scene.dialog <> invalid then scene.dialog = invalid
+sub closeActionMenu()
+    m.menu.visible = false
+    m.zone = m.menuReturnZone
     m.top.setFocus(true)
+    paintTabs()
+    if m.guideLoaded then
+        renderGrid()
+        updateGridInfo()
+    end if
+end sub
+
+sub onMenuSelected()
+    idx = m.menuList.itemSelected
+    if idx = invalid or idx < 0 or idx >= m.menuActions.count() then return
+    action = m.menuActions[idx]
+    if action.act = "none" then return
+    if action.act = "close" then
+        closeActionMenu()
+    else if action.act = "refresh" then
+        closeActionMenu()
+        loadFeed()
+    end if
 end sub
 
 function prettyCategory(raw as String) as String
@@ -1054,6 +1083,10 @@ end sub
 
 sub onRefocus()
     if m.top.refocus <> true then return
+    if m.zone = "menu" then
+        m.menu.visible = false
+        m.zone = m.menuReturnZone
+    end if
     m.top.setFocus(true)
     paintTabs()
     renderGrid()
@@ -1183,6 +1216,11 @@ end function
 
 function onKeyEvent(key as String, press as Boolean) as Boolean
     if not press then return false
+
+    if m.zone = "menu" then
+        if key = "back" or key = "options" then closeActionMenu()
+        return true
+    end if
 
     if key = "options" then
         openFeedOptions()

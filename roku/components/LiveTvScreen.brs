@@ -91,8 +91,6 @@ sub init()
     m.plexChannels = []
     m.cableChannels = []
     m.cableLoading = false
-    m.feedDialog = invalid
-    m.feedDialogActions = []
     m.cableLineup = loadCableLineup()
     m.cableTitles = GetHardcodedCableTitleNumbers()
     m.cableFallbackNum = 67.1
