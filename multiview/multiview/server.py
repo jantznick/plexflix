@@ -5,8 +5,6 @@
     PUT    /sessions/<id>       {"layout"?, "order"?}  applied live
     DELETE /sessions/<id>
     GET    /sessions/<id>/master.m3u8 (and the playlists/segments under it)
-    GET    /sessions/<id>/feed/<n>/index.m3u8   single-stream play via relay
-           /sessions/<id>/feed/<n>/r/<token>...
     GET    /healthz             also whether the vendored in-container proxy is up
 """
 
@@ -20,11 +18,10 @@ import uuid
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-from .relay import Relay, RelayError, rewrite_to_local_proxy
+from .relay import Relay
 from .session import Session
 
 SESSION_PATH = re.compile(r"^/sessions/([0-9a-f-]{36})(?:/(.*))?$")
-FEED_PLAY_PATH = re.compile(r"^/sessions/([0-9a-f-]{36})/feed/(\d+)(?:/(.*))?$")
 FILE_NAME = re.compile(r"^(?:gen-\d+/)?[A-Za-z0-9_.-]+\.(?:m3u8|ts)$")
 # Outside the container (running from a checkout), the font is in the repo
 # and there is no /data volume
@@ -124,9 +121,7 @@ def make_handler(manager):
 
         def log_message(self, fmt, *args):
             # Segment and playlist polling would drown everything else
-            if self.command == "GET" and (
-                self.path.endswith((".ts", ".m3u8")) or "/feed/" in self.path
-            ):
+            if self.command == "GET" and self.path.endswith((".ts", ".m3u8")):
                 return
             print(f"[http] {self.address_string()} {fmt % args}", flush=True)
 
@@ -149,14 +144,10 @@ def make_handler(manager):
             self.end_headers()
 
         def do_GET(self):
-            path = self.path.split("?", 1)[0]
-            if path == "/healthz":
+            if self.path == "/healthz":
                 relay = manager.relay.snapshot() if manager.relay is not None else {}
                 return self._json(HTTPStatus.OK, {"ok": True, "relay": relay})
-            feed = FEED_PLAY_PATH.match(path)
-            if feed:
-                return self._feed_play(feed.group(1), int(feed.group(2)), feed.group(3) or "index.m3u8")
-            match = SESSION_PATH.match(path)
+            match = SESSION_PATH.match(self.path.split("?", 1)[0])
             if not match:
                 return self._json(HTTPStatus.NOT_FOUND, {"error": "not found"})
             session = manager.get(match.group(1))
@@ -241,51 +232,6 @@ def make_handler(manager):
                 self._json(HTTPStatus.BAD_REQUEST, {"error": "body must be a JSON object"})
                 return None
             return body
-
-        def _feed_play(self, session_id, feed_index, name):
-            """Single-stream HLS for the Roku through the same relay mosaic uses.
-
-            Fullscreen promote used to point the player at the LAN roku-feed
-            proxy (:8787). That path races the in-container proxy and often
-            fails with HTTP -1 while the mosaic is fine. Serve the feed off
-            :8095 instead.
-            """
-            session = manager.get(session_id)
-            if session is None:
-                return self._json(HTTPStatus.NOT_FOUND, {"error": "no such session"})
-            session.touch()
-            if feed_index < 0 or feed_index >= len(session.feeds):
-                return self._json(HTTPStatus.BAD_REQUEST, {"error": "bad feed index"})
-            relay = manager.relay
-            if relay is None:
-                return self._json(HTTPStatus.SERVICE_UNAVAILABLE, {"error": "relay unavailable"})
-
-            try:
-                if name in ("", "index.m3u8", "master.m3u8"):
-                    upstream = rewrite_to_local_proxy(session.feeds[feed_index].url)
-                    content_type, body = relay.fetch(upstream)
-                elif name.startswith("r/"):
-                    token = name[2:].rsplit(".", 1)[0]
-                    if not token:
-                        return self._json(HTTPStatus.NOT_FOUND, {"error": "not found"})
-                    content_type, body = relay.handle(token)
-                else:
-                    return self._json(HTTPStatus.NOT_FOUND, {"error": "not found"})
-            except RelayError as exc:
-                return self._json(exc.status, {"error": str(exc)})
-
-            if body.lstrip().startswith(b"#EXTM3U"):
-                body = relay.relative_playlist(body)
-                content_type = "application/vnd.apple.mpegurl"
-            self.send_response(HTTPStatus.OK)
-            self.send_header("Content-Type", content_type)
-            self.send_header("Content-Length", str(len(body)))
-            self.send_header("Cache-Control", "no-cache")
-            self.end_headers()
-            try:
-                self.wfile.write(body)
-            except (BrokenPipeError, ConnectionResetError):
-                pass
 
         def _file(self, session, name):
             if not FILE_NAME.match(name):

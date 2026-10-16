@@ -491,10 +491,9 @@ sub promoteFocused()
     index = Int(tile.stream)
     if index < 0 or index >= m.streams.count() then return
     stream = m.streams[index]
-    ' Same vendored proxy path the mosaic uses — not the LAN :8787 URL, which
-    ' races the in-container proxy and often dies with HTTP -1 on the Roku.
-    url = feedPlayoutUrl(index)
-    if url = "" then url = asString(stream.url)
+    ' Normal sports path: the LAN roku-feed proxy URL, same as SportsDetail.
+    ' Multiview's in-container proxy stays for the mosaic only.
+    url = asString(stream.url)
     if url = "" then return
 
     ' Flag first so a sync stop/finished callback cannot start a reconnect
@@ -522,19 +521,6 @@ sub promoteFocused()
         viewOffset: 0
     }
 end sub
-
-function feedPlayoutUrl(streamIndex as Integer) as String
-    if m.sessionId = "" then return ""
-    base = ""
-    cfg = m.top.config
-    if cfg <> invalid and cfg.multiviewUrl <> invalid then base = cfg.multiviewUrl.Trim()
-    while Right(base, 1) = "/"
-        base = Left(base, Len(base) - 1)
-    end while
-    if base = "" then return ""
-    if Instr(1, base, "://") = 0 then base = "http://" + base
-    return base + "/sessions/" + m.sessionId + "/feed/" + StrI(streamIndex).Trim() + "/index.m3u8"
-end function
 
 sub onResume()
     if m.top.resume <> true then return
