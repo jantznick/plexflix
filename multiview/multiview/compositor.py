@@ -28,8 +28,9 @@ ENCODER_ALIASES = {
 # shift between GStreamer releases.
 ENCODERS = {
     "x264": [
-        ("x264enc", "I420", {"tune": "zerolatency", "speed-preset": "veryfast", "bitrate": "{kbps}",
-                             "key-int-max": "{gop}", "bframes": "0"}),
+        # ultrafast: 1080p software encode otherwise starves the live pipeline
+        ("x264enc", "I420", {"tune": "zerolatency", "speed-preset": "ultrafast", "bitrate": "{kbps}",
+                             "key-int-max": "{gop}", "bframes": "0", "threads": "0"}),
     ],
     "va": [
         ("vah264enc", "NV12", {"bitrate": "{kbps}", "key-int-max": "{gop}", "b-frames": "0"}),
@@ -49,8 +50,9 @@ ENCODERS = {
     ],
 }
 AAC_ENCODERS = ("voaacenc", "avenc_aac", "fdkaacenc")
-# How late a pushed frame can be and still make it into the mosaic
-COMPOSITOR_LATENCY_NS = 500_000_000
+# How late a pushed frame can be and still make it into the mosaic. Too tight
+# and a slow x264 encode drops most frames, which looks like a slideshow.
+COMPOSITOR_LATENCY_NS = 1_500_000_000
 
 
 def gst():

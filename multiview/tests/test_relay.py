@@ -1,12 +1,11 @@
 import base64
-import json
 import unittest
 
 from multiview import feedurl, relay as relay_module
 from multiview.feedurl import Upstream, encode_proxy_payload, parse_feed_url, rewrite_manifest, unwrap_goat
 from multiview.hls import choose_variant, filter_master, parse_master
 from multiview.ingest import build_command
-from multiview.relay import Relay, decode_token, source_for
+from multiview.relay import Relay, source_for
 
 PROXY = "http://192.168.1.50:8787"
 MASTER = """#EXTM3U
@@ -179,7 +178,7 @@ class RelayTests(unittest.TestCase):
         _, body = relay.handle(self.token(source_for({"url": feed}, relay)))
         self.assertEqual([url for url, _ in fetch.calls], [feed])
         segment_url = [line for line in body.decode().splitlines() if line.startswith("http")][0]
-        upstream, kind = decode_token(self.token(segment_url))
+        upstream, kind = relay.resolve_token(self.token(segment_url))
         self.assertEqual((upstream.url, kind), ("https://cdn.example/live/seg7.ts", "s"))
 
     def test_failed_direct_manifest_falls_back_to_the_proxy(self):
@@ -188,10 +187,18 @@ class RelayTests(unittest.TestCase):
         relay.handle(self.token(source_for({"url": feed}, relay)))
         self.assertEqual(relay.snapshot(), {"manifest_proxy": 1})
 
-    def test_top_level_master_is_filtered(self):
-        relay, fetch = self.make({"https://tv.example/m.m3u8": (200, MASTER.encode())})
+    def test_top_level_master_is_resolved_to_its_media_playlist(self):
+        relay, fetch = self.make({
+            "https://tv.example/m.m3u8": (200, MASTER.encode()),
+            "https://tv.example/mid/index.m3u8": (200, MEDIA.encode()),
+        })
         _, body = relay.handle(self.token(source_for({"url": "https://tv.example/m.m3u8"}, relay)))
-        self.assertEqual(body.decode().count("#EXT-X-STREAM-INF"), 1)
+        text = body.decode()
+        self.assertNotIn("#EXT-X-STREAM-INF", text)
+        self.assertIn("#EXTINF", text)
+        self.assertEqual([url for url, _ in fetch.calls],
+                         ["https://tv.example/m.m3u8", "https://tv.example/mid/index.m3u8"])
+        self.assertEqual(relay.snapshot()["manifest_resolved"], 1)
 
     def test_segments_go_direct_first_and_unwrap(self):
         seg = Upstream(url="https://cdn.example/seg7.ts", referer="https://embed.example/",
@@ -221,15 +228,24 @@ class RelayTests(unittest.TestCase):
         with self.assertRaises(relay_module.RelayError):
             relay.segment(seg)
 
-    def test_tokens_round_trip(self):
+    def test_soft_block_direct_falls_back_to_proxy(self):
+        # Manifests often work direct while segment CDNs return 200 + junk
+        seg = Upstream(url="https://cdn.example/seg7.ts",
+                       proxy_url=proxy_url("https://cdn.example/seg7.ts"))
+        junk = b"Forbidden: enable cookies to continue watching"
+        relay, fetch = self.make({seg.url: (200, junk), seg.proxy_url: (200, b"\x47" + bytes(187))})
+        self.assertEqual(relay.segment(seg)[0], 0x47)
+        self.assertEqual(relay.snapshot(), {"segment_proxy": 1})
+
+    def test_tokens_are_short_and_round_trip(self):
         relay, _ = self.make({})
         up = Upstream(url="https://x/a.m3u8?b=1", referer="r", headers={"cookie": "c"}, proxy_url="p")
         url = relay.url_for(up, "feed")
         self.assertTrue(url.endswith(".m3u8"))
-        back, kind = decode_token(self.token(url))
+        self.assertLess(len(url), 80)
+        back, kind = relay.resolve_token(self.token(url))
         self.assertEqual((back, kind), (up, "feed"))
-        self.assertEqual(decode_token("not-a-token"), (None, None))
-        self.assertEqual(json.loads(base64.urlsafe_b64decode(self.token(url) + "==="))["k"], "feed")
+        self.assertEqual(relay.resolve_token("not-a-token"), (None, None))
 
 
 class IngestCommandTests(unittest.TestCase):
@@ -237,6 +253,7 @@ class IngestCommandTests(unittest.TestCase):
         cmd = build_command("ffmpeg", "http://127.0.0.1:1/r/x.m3u8", 7, 30)
         self.assertIn("pipe:7", cmd)
         self.assertIn("-rw_timeout", cmd)
+        self.assertNotIn("-re", cmd)
         self.assertEqual(cmd[cmd.index("-live_start_index") + 1], "-3")
         silent = build_command("ffmpeg", "/tmp/feed.m3u8", None, 30)
         self.assertNotIn("0:a:0", silent)
