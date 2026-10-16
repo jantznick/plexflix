@@ -299,19 +299,22 @@ end sub
 
 ' Moves the focused game into the first slot: the big tile in Spotlight and
 ' Picture in picture, top left in Grid.
-' Bound to OK (when not already main) — Video often swallows fastforward/rewind.
+' Bound to OK (when not already main). FF/RW stay wired but Roku Video often
+' eats those keys during HLS even with enableUI=false.
 sub makeMain()
-    if m.session = invalid or m.session.order = invalid then return
+    if m.switching or m.session = invalid or m.session.order = invalid then return
     if m.focus = 0 then
-        showNotice("Already the main tile")
+        showNotice("Already the main tile — press Play for fullscreen")
         return
     end if
     order = m.session.order
     if m.focus < 0 or m.focus >= order.count() then return
-    focused = order[m.focus]
+    ' ParseJson leaves stream indexes as floats; coerce so PUT matches server ints
+    focused = Int(order[m.focus])
     reordered = [focused]
     for each stream in order
-        if stream <> focused then reordered.push(stream)
+        idx = Int(stream)
+        if idx <> focused then reordered.push(idx)
     end for
     print "[plexflix:multiview] makeMain focus=" + StrI(m.focus).Trim() + " order -> " + FormatJson(reordered)
     m.focusAfterSwitch = 0
@@ -322,6 +325,10 @@ sub requestUpdate(payload as Object, message as String)
     if m.switching or m.sessionId = "" then return
     payload.id = m.sessionId
     m.switchMessage = message
+    ' Block further remotes until the PUT finishes (or fails)
+    m.switching = true
+    hideOverlay()
+    setStatus(message)
     m.updateTask = createObject("roSGNode", "MultiviewTask")
     m.updateTask.config = m.top.config
     m.updateTask.action = "update"
@@ -337,17 +344,16 @@ sub onUpdated()
         err = "Couldn't change the layout"
         if response <> invalid and response.error <> invalid then err = response.error
         m.focusAfterSwitch = invalid
+        m.switching = false
         showNotice(err)
         return
     end if
 
     m.session = response.session
-    m.switching = true
     hideOverlay()
     m.tileLayer.visible = false
     setStatus(m.switchMessage)
-    ' The server applies it on its next frame, but the new arrangement still
-    ' has to travel through the player's live buffer before it is on screen
+    ' ffmpeg restarts the mosaic; wait for the new arrangement through HLS
     m.settleTimer.control = "stop"
     m.settleTimer.duration = 7
     m.settleTimer.control = "start"
@@ -553,7 +559,10 @@ sub showOverlay()
     if m.switching or m.promoted then return
     m.overlayVisible = true
     m.hintBar.visible = true
-    if m.session <> invalid then m.layoutLabel.text = "Multiview  ·  " + layoutName(asString(m.session.layout))
+    layout = ""
+    if m.session <> invalid then layout = layoutName(asString(m.session.layout))
+    ' OK is make-main: FF/RW almost never reach us while Video is playing HLS
+    m.layoutLabel.text = "Multiview  ·  " + layout + "  ·  OK = main tile  ·  Play = fullscreen  ·  * = layout"
     paintFocus()
     m.hideTimer.control = "stop"
     m.hideTimer.control = "start"
@@ -649,11 +658,20 @@ function onKeyEvent(key as String, press as Boolean) as Boolean
     if key = "up" or key = "down" or key = "left" or key = "right" then
         moveFocus(key)
     else if key = "OK" then
-        promoteFocused()
+        ' Primary make-main control. FF/RW are unreliable on real hardware
+        ' because Video steals them for trickplay even with enableUI=false.
+        if m.focus = 0 then
+            promoteFocused()
+        else
+            makeMain()
+        end if
     else if key = "options" then
         cycleLayout()
     else if key = "fastforward" or key = "rewind" then
         makeMain()
+    else if key = "play" then
+        ' Fullscreen for the focused tile (works from any slot)
+        promoteFocused()
     else
         showOverlay()
     end if

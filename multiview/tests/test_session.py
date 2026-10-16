@@ -87,5 +87,43 @@ class SessionWarmTests(unittest.TestCase):
                     "grid", "/tmp", {}, relay=None)
 
 
+class _FakeRelay:
+    def warm(self, _urls):
+        return None
+
+
+class _FakeMosaic:
+    def __init__(self, *args, **kwargs):
+        pass
+
+    def stop(self):
+        return None
+
+
+class SessionReconfigureTests(unittest.TestCase):
+    def _session(self):
+        return Session(
+            "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+            [
+                {"url": "http://example/a.m3u8", "title": "A"},
+                {"url": "http://example/b.m3u8", "title": "B"},
+            ],
+            "grid",
+            "/tmp",
+            {},
+            relay=_FakeRelay(),
+            mosaic_factory=_FakeMosaic,
+        )
+
+    def test_reconfigure_accepts_float_order_from_roku_json(self):
+        session = self._session()
+        session._mosaic = _FakeMosaic()
+        session.reconfigure(order=[1.0, 0.0])
+        self.assertEqual(session.order, [1, 0])
+        snap = session.snapshot()
+        self.assertEqual(snap["tiles"][0]["stream"], 1)
+        self.assertEqual(snap["tiles"][0]["title"], "B")
+
+
 if __name__ == "__main__":
     unittest.main()
