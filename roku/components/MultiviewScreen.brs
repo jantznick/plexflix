@@ -456,7 +456,7 @@ sub onSettled()
     end if
     m.tileLayer.visible = true
     paintTiles()
-    if m.video.state = "playing" then clearStatus()
+    if m.video <> invalid and m.video.state = "playing" then clearStatus()
     applyAudio()
     ' More FF/RW landed during the restart — send the coalesced order next
     if m.pendingOrder <> invalid then
