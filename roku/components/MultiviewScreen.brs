@@ -298,15 +298,22 @@ sub cycleLayout()
 end sub
 
 ' Moves the focused game into the first slot: the big tile in Spotlight and
-' Picture in picture, top left in Grid
+' Picture in picture, top left in Grid.
+' Bound to OK (when not already main) — Video often swallows fastforward/rewind.
 sub makeMain()
-    if m.session = invalid or m.session.order = invalid or m.focus = 0 then return
+    if m.session = invalid or m.session.order = invalid then return
+    if m.focus = 0 then
+        showNotice("Already the main tile")
+        return
+    end if
     order = m.session.order
+    if m.focus < 0 or m.focus >= order.count() then return
     focused = order[m.focus]
     reordered = [focused]
     for each stream in order
         if stream <> focused then reordered.push(stream)
     end for
+    print "[plexflix:multiview] makeMain focus=" + StrI(m.focus).Trim() + " order -> " + FormatJson(reordered)
     m.focusAfterSwitch = 0
     requestUpdate({ order: reordered }, "Moving " + tileTitle(m.focus) + " to the main spot...")
 end sub

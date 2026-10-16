@@ -105,13 +105,18 @@ class Session:
         with self._lock:
             if layout is not None and layout not in LAYOUTS:
                 raise ValueError(f"layout must be one of {', '.join(LAYOUTS)}")
-            if order is not None and sorted(order) != list(range(len(self.feeds))):
-                raise ValueError("order must list every stream index exactly once")
+            if order is not None:
+                try:
+                    order = [int(x) for x in order]
+                except (TypeError, ValueError) as exc:
+                    raise ValueError("order must be a list of stream indexes") from exc
+                if sorted(order) != list(range(len(self.feeds))):
+                    raise ValueError("order must list every stream index exactly once")
             changed = False
             if layout is not None and layout != self.layout:
                 self.layout = layout
                 changed = True
-            if order is not None and list(order) != self.order:
+            if order is not None and order != self.order:
                 self.order = list(order)
                 changed = True
             if changed:
