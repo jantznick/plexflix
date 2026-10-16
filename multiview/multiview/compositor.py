@@ -50,7 +50,6 @@ ENCODERS = {
     ],
 }
 AAC_ENCODERS = ("voaacenc", "avenc_aac", "fdkaacenc")
-# How late a pushed frame can be and still make it into the mosaic
 # How late a pushed frame can be and still make it into the mosaic. Too tight
 # and a slow x264 encode drops most frames, which looks like a slideshow.
 COMPOSITOR_LATENCY_NS = 1_500_000_000
