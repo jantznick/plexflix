@@ -1,7 +1,7 @@
 import unittest
 
 from multiview import layouts
-
+from multiview.playlist import StitchedPlaylist, master_playlist
 
 class LayoutTests(unittest.TestCase):
     def test_every_layout_fits_the_canvas_with_even_sizes(self):
@@ -31,6 +31,45 @@ class LayoutTests(unittest.TestCase):
             layouts.tiles_for("grid", 5)
         with self.assertRaises(ValueError):
             layouts.tiles_for("mosaic", 2)
+
+
+class StitchTests(unittest.TestCase):
+    def test_restart_becomes_a_discontinuity_with_continuous_sequence(self):
+        playlist = StitchedPlaylist(window=4)
+        playlist.add(1, [(2.0, "v_00000.ts"), (2.0, "v_00001.ts")], "gen-1")
+        playlist.add(1, [(2.0, "v_00000.ts"), (2.0, "v_00001.ts"), (2.0, "v_00002.ts")], "gen-1")
+        playlist.add(2, [(2.0, "v_00000.ts")], "gen-2")
+        text = playlist.render()
+        self.assertIn("#EXT-X-MEDIA-SEQUENCE:0", text)
+        self.assertIn("#EXT-X-DISCONTINUITY-SEQUENCE:0", text)
+        self.assertEqual(text.count("#EXT-X-DISCONTINUITY\n"), 1)
+        self.assertLess(text.index("gen-1/v_00002.ts"), text.index("#EXT-X-DISCONTINUITY\n"))
+        self.assertLess(text.index("#EXT-X-DISCONTINUITY\n"), text.index("gen-2/v_00000.ts"))
+
+    def test_window_slides_and_counts_discontinuities_that_leave(self):
+        playlist = StitchedPlaylist(window=3)
+        playlist.add(1, [(2.0, "a.ts"), (2.0, "b.ts")], "gen-1")
+        playlist.add(2, [(2.0, "a.ts")], "gen-2")
+        playlist.add(2, [(2.0, "a.ts"), (2.0, "b.ts"), (2.0, "c.ts")], "gen-2")
+        text = playlist.render()
+        self.assertIn("#EXT-X-MEDIA-SEQUENCE:2", text)
+        self.assertIn("#EXT-X-DISCONTINUITY-SEQUENCE:1", text)
+        self.assertNotIn("#EXT-X-DISCONTINUITY\n", text)
+        self.assertEqual(playlist.generations(), {2})
+
+    def test_segments_still_listed_by_ffmpeg_are_not_re_added(self):
+        playlist = StitchedPlaylist(window=2)
+        segments = [(2.0, f"{i}.ts") for i in range(5)]
+        playlist.add(1, segments, "gen-1")
+        self.assertEqual(playlist.add(1, segments, "gen-1"), 0)
+        self.assertEqual([e["uri"] for e in playlist.entries], ["gen-1/3.ts", "gen-1/4.ts"])
+
+    def test_master_lists_one_audio_rendition_per_tile(self):
+        text = master_playlist(3, 6384000)
+        self.assertEqual(text.count("TYPE=AUDIO"), 3)
+        self.assertIn('URI="a2.m3u8"', text)
+        self.assertEqual(text.count("DEFAULT=YES"), 1)
+        self.assertTrue(text.rstrip().endswith("v.m3u8"))
 
 
 class FakeSession:

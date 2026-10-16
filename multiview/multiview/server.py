@@ -1,12 +1,11 @@
-"""HTTP API and HLS pass-through for multiview sessions.
+"""HTTP API and HLS file server for multiview sessions.
 
-    POST   /sessions            {"streams": [{"url", "title"}], "layout"?}
+    POST   /sessions            {"streams": [{"url", "title", "headers"?}], "layout"?}
     GET    /sessions/<id>       status, tile rectangles; doubles as a heartbeat
-    PUT    /sessions/<id>       {"layout"?, "order"?}
+    PUT    /sessions/<id>       {"layout"?, "order"?}  applied live
     DELETE /sessions/<id>
-    GET    /sessions/<id>/master.m3u8   proxied HLS for feed 1
-    GET    /sessions/<id>/r/<token>.ts  segments (relative from the playlist)
-    GET    /healthz
+    GET    /sessions/<id>/master.m3u8 (and the playlists/segments under it)
+    GET    /healthz             also whether the vendored in-container proxy is up
 """
 
 import json
@@ -19,11 +18,20 @@ import uuid
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-from .relay import Relay, RelayError
+from . import compositor
+from .relay import Relay
 from .session import Session
 
 SESSION_PATH = re.compile(r"^/sessions/([0-9a-f-]{36})(?:/(.*))?$")
-PASS_FILE = re.compile(r"^(?:master\.m3u8|r/[A-Za-z0-9_-]+\.(?:m3u8|ts))$")
+FILE_NAME = re.compile(r"^(?:gen-\d+/)?[A-Za-z0-9_.-]+\.(?:m3u8|ts)$")
+# Outside the container (running from a checkout), the font is in the repo
+# and there is no /data volume
+_REPO_FONT = os.path.join(os.path.dirname(__file__), "..", "..", "roku", "fonts", "Outfit-SemiBold.ttf")
+
+
+def _default_font():
+    container = "/app/fonts/Outfit-SemiBold.ttf"
+    return container if os.path.exists(container) else os.path.abspath(_REPO_FONT)
 
 
 def _default_data_dir():
@@ -34,6 +42,12 @@ def _default_data_dir():
 
 def settings_from_env(env=os.environ):
     return {
+        "ffmpeg": env.get("FFMPEG", "ffmpeg"),
+        "encoder": env.get("ENCODER", "libx264"),
+        # Defaults favour a CPU (x264) box; raise these when using va/qsv/nvenc
+        "fps": int(env.get("FPS", "20")),
+        "video_bitrate": env.get("VIDEO_BITRATE", "3M"),
+        "font_file": env.get("FONT_FILE") or _default_font(),
         "variant_height": int(env.get("VARIANT_HEIGHT", "480")),
         "data_dir": env.get("DATA_DIR") or _default_data_dir(),
         "idle_timeout": int(env.get("IDLE_TIMEOUT", "90")),
@@ -41,6 +55,9 @@ def settings_from_env(env=os.environ):
         "token": env.get("MULTIVIEW_TOKEN", ""),
         "port": int(env.get("PORT", "8095")),
         "allow_local_inputs": env.get("ALLOW_LOCAL_INPUTS", "") == "1",
+        # How many feeds actually decode; the rest show a placeholder slate.
+        # Set to 1 while proving a single stream, then raise.
+        "live_feeds": int(env.get("LIVE_FEEDS", "1")),
     }
 
 
@@ -60,6 +77,8 @@ class SessionManager:
         session = self._factory(session_id, streams, layout, self.settings["data_dir"], self.settings, **extra)
         evicted = []
         with self._lock:
+            # A Roku that crashed or lost power never says goodbye; making room
+            # by dropping the stalest session beats refusing the new one
             while len(self._sessions) >= self.settings["max_sessions"]:
                 oldest = min(self._sessions.values(), key=lambda s: s.last_seen)
                 evicted.append(self._sessions.pop(oldest.id))
@@ -105,17 +124,21 @@ def make_handler(manager):
         server_version = "PlexFlixMultiview/1.0"
 
         def log_message(self, fmt, *args):
-            if self.command == "GET" and (self.path.endswith(".ts") or self.path.endswith(".m3u8")):
+            # Segment and playlist polling would drown everything else
+            if self.command == "GET" and self.path.endswith((".ts", ".m3u8")):
                 return
             print(f"[http] {self.address_string()} {fmt % args}", flush=True)
 
         def handle(self):
+            # ffmpeg and the Roku both drop keep-alives; that is not an error
             try:
                 super().handle()
             except (ConnectionResetError, BrokenPipeError):
                 pass
 
         def do_OPTIONS(self):
+            # The Roku channel probes with OPTIONS before POST/GET; answer it
+            # so the log is not full of 501s. The real request follows either way.
             self.send_response(HTTPStatus.NO_CONTENT)
             self.send_header("Allow", "GET, POST, PUT, DELETE, OPTIONS")
             self.send_header("Access-Control-Allow-Origin", "*")
@@ -136,7 +159,7 @@ def make_handler(manager):
                 return self._json(HTTPStatus.NOT_FOUND, {"error": "no such session"})
             session.touch()
             if match.group(2):
-                return self._media(session, match.group(2))
+                return self._file(session, match.group(2))
             if not self._authorized():
                 return
             return self._json(HTTPStatus.OK, session.snapshot())
@@ -194,6 +217,8 @@ def make_handler(manager):
             return session
 
         def _authorized(self):
+            # Playlists and segments skip this: the Video node can't add the
+            # header, and the session id in their path is already unguessable
             if not settings["token"] or self.headers.get("X-Multiview-Token") == settings["token"]:
                 return True
             self._json(HTTPStatus.UNAUTHORIZED, {"error": "bad or missing X-Multiview-Token"})
@@ -212,32 +237,22 @@ def make_handler(manager):
                 return None
             return body
 
-        def _media(self, session, name):
-            if not PASS_FILE.match(name) or manager.relay is None:
+        def _file(self, session, name):
+            if not FILE_NAME.match(name):
                 return self._json(HTTPStatus.NOT_FOUND, {"error": "not found"})
+            path = os.path.join(session.dir, name)
             try:
-                if name == "master.m3u8":
-                    upstream = session.passthrough_url
-                    if not upstream:
-                        return self._json(HTTPStatus.NOT_FOUND, {"error": "not ready"})
-                    content_type, data = manager.relay.fetch(upstream)
-                else:
-                    token = name[2:].rsplit(".", 1)[0]
-                    content_type, data = manager.relay.handle(token)
-            except RelayError as exc:
-                return self._json(exc.status, {"error": str(exc)})
-            if content_type.startswith("application/vnd.apple.mpegurl") or data.lstrip()[:7] == b"#EXTM3U":
-                data = manager.relay.relative_playlist(data)
-                content_type = "application/vnd.apple.mpegurl"
+                with open(path, "rb") as handle:
+                    data = handle.read()
+            except FileNotFoundError:
+                return self._json(HTTPStatus.NOT_FOUND, {"error": "not ready"})
+            playlist = name.endswith(".m3u8")
             self.send_response(HTTPStatus.OK)
-            self.send_header("Content-Type", content_type)
+            self.send_header("Content-Type", "application/vnd.apple.mpegurl" if playlist else "video/mp2t")
             self.send_header("Content-Length", str(len(data)))
-            self.send_header("Cache-Control", "no-cache")
+            self.send_header("Cache-Control", "no-cache" if playlist else "max-age=60")
             self.end_headers()
-            try:
-                self.wfile.write(data)
-            except (BrokenPipeError, ConnectionResetError):
-                pass
+            self.wfile.write(data)
 
         def _json(self, status, payload):
             data = json.dumps(payload).encode("utf-8")
@@ -252,6 +267,7 @@ def make_handler(manager):
 
 def main():
     settings = settings_from_env()
+    _, encoder = compositor.encoder_description(settings)
     relay = Relay(variant_height=settings["variant_height"]).serve()
     manager = SessionManager(settings, relay=relay)
     server = ThreadingHTTPServer(("0.0.0.0", settings["port"]), make_handler(manager))
@@ -263,7 +279,7 @@ def main():
             manager.reap()
 
     threading.Thread(target=reaper, daemon=True).start()
-    print(f"[manager] multiview listening on :{settings['port']} (pass-through)", flush=True)
+    print(f"[manager] multiview listening on :{settings['port']} (encoder: {encoder})", flush=True)
     try:
         server.serve_forever()
     except KeyboardInterrupt:
