@@ -155,7 +155,8 @@ function readySuffix() as String
     if m.tiles.count() = 0 then return "..."
     ready = 0
     for each tile in m.tiles
-        if tile.status <> "starting" then ready = ready + 1
+        ' placeholder tiles are intentionally not decoding
+        if tile.status <> "starting" and tile.status <> "reconnecting" then ready = ready + 1
     end for
     return "...  " + StrI(ready).Trim() + " of " + StrI(m.tiles.count()).Trim() + " games ready"
 end function

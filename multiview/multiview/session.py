@@ -89,7 +89,6 @@ class Session:
                 ingest = PlaceholderIngest(name=f"{session_id[:8]}/{i}")
             self.feeds.append(Feed(i, spec, ingest, live=live))
         self.order = list(range(len(feeds)))
-        self._log_once = False
 
         self.state = "starting"  # starting | running | error | stopped
         self.error = ""
@@ -206,9 +205,10 @@ class Session:
                 self._relay.warm(targets)
             for feed in live:
                 feed.ingest.start()
+            # Slates off the supervisor thread so _stitch can mark us running
+            threading.Thread(target=self._render_slates, name="slates", daemon=True).start()
             self._start_compositor()
             self._pump_thread.start()
-            self._render_slates()
             while not self._stop.is_set():
                 self._tick()
                 self._stop.wait(TICK)
@@ -377,20 +377,26 @@ class Session:
         if gen == 0:
             return
         gen_dir = os.path.join(self.dir, f"gen-{gen}")
-        ready = True
+        counts = {}
         for name, playlist in self._playlists.items():
             segments = read_media_playlist(os.path.join(gen_dir, f"{name}.m3u8"))
             if playlist.add(gen, segments, f"gen-{gen}"):
                 write_atomic(os.path.join(self.dir, f"{name}.m3u8"), playlist.render())
                 if name == "v":
                     self._last_video_at = self._clock()
-            if len(playlist.entries) < 2:
-                ready = False
+            counts[name] = len(playlist.entries)
+        # Roku waits for state=running before GETting master.m3u8. Only the
+        # video playlist gates that — audio of silence/placeholder tiles can
+        # lag without blocking playback forever.
+        ready = counts.get("v", 0) >= 2 and self._last_video_at is not None \
+            and self._compositor is not None
         with self._lock:
-            if ready and self.state != "running" and self._last_video_at is not None \
-                    and self._compositor is not None:
+            if ready and self.state != "running":
                 self.state = "running"
                 self.error = ""
+                self._log(f"running — playlists {counts}")
+            elif self.state != "running" and self.generation and int(self._clock()) % 5 == 0:
+                self._log(f"waiting for video playlist — {counts}")
 
     def _cleanup_generations(self, now):
         referenced = set()
