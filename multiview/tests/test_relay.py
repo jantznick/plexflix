@@ -61,6 +61,14 @@ class FeedUrlTests(unittest.TestCase):
         wrapped = feedurl.PNG_SIGNATURE + b"\x00\x00\x00\x00IHDRxxxx" + b"\x00\x00\x00\x00IEND\xae\x42\x60\x82" + ts
         self.assertEqual(unwrap_goat(wrapped), ts)
 
+    def test_goat_webp_wrapper_is_stripped(self):
+        # Tiny VP8L chunk, then MPEG-TS — same shape as the TikTok CDN segments
+        ts = b"\x47" + bytes(187) + b"\x47" + bytes(187) + b"\x47" + bytes(187)
+        vp8l = b"VP8L" + (4).to_bytes(4, "little") + b"\x2f\x00\x00\x00"
+        riff_payload = b"WEBP" + vp8l + ts
+        wrapped = b"RIFF" + (len(riff_payload)).to_bytes(4, "little") + riff_payload
+        self.assertEqual(unwrap_goat(wrapped), ts)
+
     def test_rewrite_keeps_context_and_points_everything_local(self):
         context = parse_feed_url(proxy_url("https://cdn.example/live/index.m3u8", headers={"cookie": "a=b"},
                                            direct_ok=True))

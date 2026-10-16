@@ -155,14 +155,45 @@ def _origin(url):
     return ""
 
 
+_WEBP_CHUNKS = {
+    b"VP8 ", b"VP8L", b"VP8X", b"ALPH", b"ANIM", b"ANMF", b"ICCP", b"EXIF", b"XMP ",
+}
+
+
+def _mpegts_offset(body, start=0):
+    """First offset where three 188-byte MPEG-TS syncs line up, or -1."""
+    limit = min(len(body) - 376, start + 512 * 1024)
+    for i in range(start, max(start, limit)):
+        if body[i] == 0x47 and body[i + 188] == 0x47 and body[i + 376] == 0x47:
+            return i
+    return -1
+
+
 def unwrap_goat(body):
-    """GOAT hides MPEG-TS inside a PNG; the TS starts after the IEND chunk."""
-    if len(body) < 8 or body[:8] != PNG_SIGNATURE:
-        return body
-    end = body.find(b"IEND")
-    if end == -1:
-        return body
-    return body[end + 8:]
+    """GOAT hides MPEG-TS inside a PNG or WEBP; return the media payload."""
+    if len(body) >= 12 and body[:4] == b"RIFF" and body[8:12] == b"WEBP":
+        pos = 12
+        while pos + 8 <= len(body):
+            fourcc = body[pos:pos + 4]
+            size = int.from_bytes(body[pos + 4:pos + 8], "little")
+            data_start = pos + 8
+            data_end = data_start + size
+            if fourcc not in _WEBP_CHUNKS:
+                return body[pos:]
+            if data_end > len(body):
+                # Declared chunk past EOF — rest is usually the TS
+                return body[data_start:] if data_start < len(body) else body
+            pos = data_end + (size & 1)
+        if pos < len(body):
+            return body[pos:]
+        off = _mpegts_offset(body, 12)
+        return body[off:] if off >= 0 else body
+
+    if len(body) >= 8 and body[:8] == PNG_SIGNATURE:
+        end = body.find(b"IEND")
+        if end != -1:
+            return body[end + 8:]
+    return body
 
 
 def is_manifest_url(url):
