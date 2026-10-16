@@ -916,12 +916,74 @@ function prependLiveContinueWatching(cfg as Object, items as Object) as Object
     liveItem = LiveContinueToHomeItem(entry)
     if liveItem = invalid then return items
 
+    liveItem = ensureLiveContinuePoster(cfg, liveItem, entry)
+
     out = [liveItem]
     for each item in items
         if item <> invalid then out.push(item)
     end for
     return out
 end function
+
+' Continue Watching uses portrait posters. Live EPG usually only has landscape
+' art (fine for the hero, empty-looking on a poster tile), so pull a TMDB
+' poster when we can and persist it for the next Home refresh.
+function ensureLiveContinuePoster(cfg as Object, item as Object, entry as Object) as Object
+    if item = invalid then return item
+    poster = safeToStr(item.hdPosterUrl)
+    backdrop = safeToStr(item.hdBackdropUrl)
+    needsPoster = (poster = "" or poster = backdrop or isWideLiveArtUrl(poster))
+    if not needsPoster then return item
+
+    title = safeToStr(item.shortTitle)
+    if title = "" then title = safeToStr(item.title)
+    sep = Instr(1, title, "·")
+    if sep > 1 then title = Left(title, sep - 1).Trim()
+    title = title.Trim()
+    if title = "" then
+        if poster = "" and backdrop <> "" then item.hdPosterUrl = backdrop
+        return item
+    end if
+
+    tmdbKey = ""
+    if cfg <> invalid and cfg.tmdbApiKey <> invalid then tmdbKey = safeToStr(cfg.tmdbApiKey)
+    if tmdbKey <> "" and tmdbKey <> "REPLACE_WITH_TMDB_API_KEY" then
+        kind = "tv"
+        if LCase(safeToStr(item.programKind)) = "movie" then kind = "movie"
+        tmdb = fetchTmdbTitle(tmdbKey, title, safeToStr(item.year), kind)
+        if tmdb <> invalid and safeToStr(tmdb.hdPosterUrl) <> "" then
+            item.hdPosterUrl = safeToStr(tmdb.hdPosterUrl)
+            if safeToStr(item.hdBackdropUrl) = "" and safeToStr(tmdb.hdBackdropUrl) <> "" then
+                item.hdBackdropUrl = safeToStr(tmdb.hdBackdropUrl)
+            end if
+            persistLiveContinuePoster(entry, item)
+            return item
+        end if
+    end if
+
+    if safeToStr(item.hdPosterUrl) = "" and backdrop <> "" then item.hdPosterUrl = backdrop
+    return item
+end function
+
+function isWideLiveArtUrl(url as String) as Boolean
+    if url = "" then return false
+    ' EPG stills go through width-only Plex transcodes or TMDB backdrops
+    if Instr(1, url, "/photo/:/transcode?width=") > 0 and Instr(1, url, "height=") = 0 then return true
+    if Instr(1, url, "image.tmdb.org/t/p/w1280") > 0 then return true
+    if Instr(1, url, "image.tmdb.org/t/p/w780") > 0 then return true
+    return false
+end function
+
+sub persistLiveContinuePoster(entry as Object, item as Object)
+    if entry = invalid or item = invalid then return
+    poster = safeToStr(item.hdPosterUrl)
+    if poster = "" then return
+    entry.hdPosterUrl = poster
+    if safeToStr(item.hdBackdropUrl) <> "" then entry.hdBackdropUrl = safeToStr(item.hdBackdropUrl)
+    profileId = ""
+    if entry.profileId <> invalid then profileId = safeToStr(entry.profileId)
+    writeLiveContinueJson(liveContinueRegistryKey(profileId), FormatJson(entry))
+end sub
 
 function appendRow(root as Object, title as String, items as Object) as Boolean
     ' Home shelves: enforce 15–30 + loop duplicates

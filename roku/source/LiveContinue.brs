@@ -39,7 +39,8 @@ function SaveLiveContinueWatch(item as Object, profileId as String) as Boolean
         showGuid: liveContinueStr(item.showGuid),
         year: liveContinueStr(item.year),
         contentRating: liveContinueStr(item.contentRating),
-        rating: liveContinueStr(item.rating)
+        rating: liveContinueStr(item.rating),
+        programKind: liveContinueStr(item.programKind)
     }
     if entry.shortTitle = "" then entry.shortTitle = entry.channelName
     if entry.title = "" then entry.title = entry.shortTitle
@@ -93,6 +94,8 @@ function LiveContinueToHomeItem(entry as Object) as Dynamic
     art = liveContinueStr(entry.hdPosterUrl)
     backdrop = liveContinueStr(entry.hdBackdropUrl)
     if backdrop = "" then backdrop = art
+    ' Portrait CW tiles need a poster; fall back to backdrop so the tile isn't empty
+    if art = "" then art = backdrop
 
     return {
         title: title,

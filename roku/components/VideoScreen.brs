@@ -1168,9 +1168,9 @@ sub onLiveMetaEnriched()
     if valueOrEmpty(tmdb.contentRating) <> "" then m.item.contentRating = tmdb.contentRating
     if valueOrEmpty(tmdb.rating) <> "" then m.item.rating = tmdb.rating
     if valueOrEmpty(tmdb.hdBackdropUrl) <> "" then m.item.hdBackdropUrl = tmdb.hdBackdropUrl
-    if valueOrEmpty(m.item.hdPosterUrl) = "" and valueOrEmpty(tmdb.hdPosterUrl) <> "" then
-        m.item.hdPosterUrl = tmdb.hdPosterUrl
-    end if
+    ' Prefer TMDB's vertical poster over landscape EPG stills — Continue Watching
+    ' shelves are portrait tiles, and EPG art alone shows as an empty placeholder
+    if valueOrEmpty(tmdb.hdPosterUrl) <> "" then m.item.hdPosterUrl = tmdb.hdPosterUrl
     if tmdb.cast <> invalid and GetInterface(tmdb.cast, "ifArray") <> invalid then
         if tmdb.cast.count() > 0 then
             m.item.cast = tmdb.cast
