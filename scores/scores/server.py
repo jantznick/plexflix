@@ -29,6 +29,13 @@ LEAGUES_PATH = re.compile(r"^/v1/leagues/?$")
 HEALTH_PATH = re.compile(r"^/healthz/?$")
 
 
+def _json_default(value: Any) -> Any:
+    """Make accidental sets/frozensets serializable instead of 500ing the handler."""
+    if isinstance(value, (set, frozenset)):
+        return sorted(value)
+    raise TypeError(f"Object of type {type(value).__name__} is not JSON serializable")
+
+
 def settings_from_env(env=os.environ) -> dict[str, Any]:
     return {
         "host": env.get("HOST", "0.0.0.0"),
@@ -83,7 +90,7 @@ class ScoresHandler(BaseHTTPRequestHandler):
         return json.loads(raw.decode("utf-8"))
 
     def _json(self, status: int, payload: Any) -> None:
-        body = json.dumps(payload, separators=(",", ":")).encode("utf-8")
+        body = json.dumps(payload, separators=(",", ":"), default=_json_default).encode("utf-8")
         self.send_response(status)
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Content-Length", str(len(body)))
