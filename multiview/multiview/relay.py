@@ -148,6 +148,7 @@ class Relay:
             self._count("manifest_failed")
             raise
         context = upstream
+        resolved = False
         if top_level and "#EXT-X-STREAM-INF" in text:
             # Hand ffmpeg a media playlist, not a master: separate AUDIO groups
             # and multi-variant masters confuse a plain -map 0:v:0 ingest
@@ -162,6 +163,7 @@ class Relay:
                 self._count("manifest_failed")
                 raise
             context = media
+            resolved = True
             self._count("manifest_resolved")
         self._count(f"manifest_{route}")
         rewritten = rewrite_manifest(
@@ -172,8 +174,8 @@ class Relay:
         if segments == 0:
             self._count("manifest_failed")
             raise RelayError(HTTPStatus.BAD_GATEWAY, f"playlist from {route} has no segments after rewrite")
-        print(f"[relay] {upstream.url}: {segments} segments via {route}"
-              f"{' (resolved master)' if top_level else ''}", flush=True)
+        note = " (resolved master)" if resolved else ""
+        print(f"[relay] {upstream.url}: {segments} segments via {route}{note}", flush=True)
         return rewritten
 
     def segment(self, upstream):
