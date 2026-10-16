@@ -18,6 +18,10 @@ sub exec()
         m.top.response = fetchRandomEpisode(cfg, m.top.item)
     else if action = "children" then
         m.top.response = fetchChildren(cfg, m.top.item)
+    else if action = "seasonEpisodes" then
+        m.top.response = fetchSeasonEpisodes(cfg, m.top.item)
+    else if action = "findLocalEpisode" then
+        m.top.response = findLocalEpisode(cfg, m.top.item)
     else if action = "extras" then
         m.top.response = fetchExtras(cfg, m.top.item)
     else if action = "unavailableDetail" then
@@ -1731,6 +1735,232 @@ function fetchChildren(cfg as Object, item as Object) as Object
     return { ok: true, items: items }
 end function
 
+' Full season rail: Plex-owned episodes merged with a TMDB guide so missing
+' episodes still appear (greyed) and can be Grab Now targets.
+function fetchSeasonEpisodes(cfg as Object, item as Object) as Object
+    if item = invalid then return { ok: false, error: "No item" }
+    ratingKey = safeToStr(item.ratingKey)
+    if ratingKey = "" then return { ok: false, error: "Missing ratingKey" }
+
+    ownedResult = plexGet(cfg, "/library/metadata/" + ratingKey + "/children")
+    owned = []
+    if ownedResult.ok = true then owned = collectMetadata(cfg, ownedResult.json)
+
+    seasonNum = safeToStr(item.index)
+    if seasonNum = "" then seasonNum = safeToStr(item.parentIndex)
+    showKey = safeToStr(item.showRatingKey)
+    if showKey = "" then showKey = safeToStr(item.grandparentRatingKey)
+    showTitle = safeToStr(item.showTitle)
+    if showTitle = "" then showTitle = safeToStr(item.grandparentTitle)
+    showYear = safeToStr(item.showYear)
+
+    tmdbId = safeToStr(item.showTmdbId)
+    if tmdbId = "" and showKey <> "" then tmdbId = resolveShowTmdbId(cfg, showKey)
+    if tmdbId = "" and showTitle <> "" then tmdbId = searchTmdbShowId(cfg, showTitle, showYear)
+
+    guide = []
+    if tmdbId <> "" and seasonNum <> "" then
+        guide = fetchTmdbSeasonGuide(cfg, tmdbId, seasonNum)
+    end if
+
+    merged = mergeSeasonEpisodes(owned, guide, seasonNum, tmdbId, showKey, showTitle)
+    return { ok: true, items: merged, showTmdbId: tmdbId }
+end function
+
+function findLocalEpisode(cfg as Object, item as Object) as Object
+    if item = invalid then return { ok: false, error: "No item" }
+    showKey = safeToStr(item.showRatingKey)
+    seasonNum = safeToStr(item.season)
+    if seasonNum = "" then seasonNum = safeToStr(item.parentIndex)
+    episodeNum = safeToStr(item.episode)
+    if episodeNum = "" then episodeNum = safeToStr(item.index)
+    if showKey = "" or seasonNum = "" or episodeNum = "" then
+        return { ok: false, error: "Need showRatingKey, season, episode" }
+    end if
+
+    leaves = plexGet(cfg, "/library/metadata/" + showKey + "/allLeaves?sort=index")
+    if leaves.ok <> true then return { ok: false, error: "Could not scan show episodes" }
+    episodes = collectMetadata(cfg, leaves.json)
+    for each ep in episodes
+        if safeToStr(ep.parentIndex) = seasonNum and safeToStr(ep.index) = episodeNum then
+            ep.missing = false
+            return { ok: true, item: ep }
+        end if
+    end for
+    return { ok: false, error: "not_found" }
+end function
+
+function resolveShowTmdbId(cfg as Object, showRatingKey as String) as String
+    if showRatingKey = "" then return ""
+    details = plexGet(cfg, "/library/metadata/" + showRatingKey)
+    if details.ok <> true or details.json = invalid then return ""
+    container = details.json.MediaContainer
+    if container = invalid then return ""
+    meta = container.Metadata
+    if meta = invalid then return ""
+    if GetInterface(meta, "ifArray") <> invalid then
+        if meta.count() = 0 then return ""
+        meta = meta[0]
+    end if
+    ids = extractExternalIds(meta)
+    return safeToStr(ids.tmdbId)
+end function
+
+function extractExternalIds(meta as Object) as Object
+    out = { tmdbId: "", tvdbId: "", imdbId: "" }
+    if meta = invalid then return out
+
+    candidates = []
+    if meta.guid <> invalid then candidates.push(meta.guid)
+    if meta.Guid <> invalid then
+        glist = meta.Guid
+        if GetInterface(glist, "ifArray") = invalid then glist = [glist]
+        for each g in glist
+            candidates.push(g)
+        end for
+    end if
+
+    for each entry in candidates
+        id = guidEntryId(entry)
+        if id <> "" then
+            lower = LCase(id)
+            if Left(lower, 7) = "tmdb://" then
+                rest = Mid(id, 8)
+                q = Instr(1, rest, "?")
+                if q > 0 then rest = Left(rest, q - 1)
+                if out.tmdbId = "" then out.tmdbId = rest
+            else if Instr(1, lower, "themoviedb://") > 0 then
+                marker = Instr(1, lower, "themoviedb://")
+                rest = Mid(id, marker + 13)
+                q = Instr(1, rest, "?")
+                if q > 0 then rest = Left(rest, q - 1)
+                if out.tmdbId = "" then out.tmdbId = rest
+            else if Left(lower, 7) = "tvdb://" then
+                rest = Mid(id, 8)
+                q = Instr(1, rest, "?")
+                if q > 0 then rest = Left(rest, q - 1)
+                if out.tvdbId = "" then out.tvdbId = rest
+            else if Left(lower, 7) = "imdb://" then
+                rest = Mid(id, 8)
+                q = Instr(1, rest, "?")
+                if q > 0 then rest = Left(rest, q - 1)
+                if out.imdbId = "" then out.imdbId = rest
+            end if
+        end if
+    end for
+    return out
+end function
+
+function searchTmdbShowId(cfg as Object, title as String, year as String) as String
+    apiKey = ""
+    if cfg.tmdbApiKey <> invalid then apiKey = safeToStr(cfg.tmdbApiKey)
+    if apiKey = "" or apiKey = "REPLACE_WITH_TMDB_API_KEY" or title = "" then return ""
+    url = "https://api.themoviedb.org/3/search/tv?api_key=" + apiKey + "&query=" + requestEncode(title)
+    if year <> "" then url = url + "&first_air_date_year=" + year
+    search = httpGetJson(url)
+    if search = invalid or search.results = invalid or search.results.count() = 0 then
+        if year <> "" then
+            url = "https://api.themoviedb.org/3/search/tv?api_key=" + apiKey + "&query=" + requestEncode(title)
+            search = httpGetJson(url)
+        end if
+    end if
+    if search = invalid or search.results = invalid or search.results.count() = 0 then return ""
+    return safeToStr(search.results[0].id)
+end function
+
+function fetchTmdbSeasonGuide(cfg as Object, tmdbId as String, seasonNum as String) as Object
+    apiKey = ""
+    if cfg.tmdbApiKey <> invalid then apiKey = safeToStr(cfg.tmdbApiKey)
+    if apiKey = "" or apiKey = "REPLACE_WITH_TMDB_API_KEY" then return []
+    if tmdbId = "" or seasonNum = "" then return []
+
+    url = "https://api.themoviedb.org/3/tv/" + tmdbId + "/season/" + seasonNum + "?api_key=" + apiKey
+    data = httpGetJson(url)
+    if data = invalid or data.episodes = invalid then return []
+    return data.episodes
+end function
+
+function mergeSeasonEpisodes(owned as Object, guide as Object, seasonNum as String, tmdbId as String, showKey as String, showTitle as String) as Object
+    if owned = invalid then owned = []
+    if guide = invalid then guide = []
+
+    ownedMap = {}
+    for each ep in owned
+        key = safeToStr(ep.index)
+        if key <> "" then ownedMap[key] = ep
+    end for
+
+    merged = []
+    used = {}
+
+    if guide.count() > 0 then
+        for each g in guide
+            epNum = ""
+            if g.episode_number <> invalid then epNum = safeToStr(g.episode_number)
+            if epNum <> "" then
+                if ownedMap.DoesExist(epNum) then
+                    ep = ownedMap[epNum]
+                    ep.missing = false
+                    if tmdbId <> "" then ep.tmdbId = tmdbId
+                    if showKey <> "" then ep.showRatingKey = showKey
+                    merged.push(ep)
+                    used[epNum] = true
+                else
+                    name = safeToStr(g.name)
+                    if name = "" then name = "Episode " + epNum
+                    still = ""
+                    if g.still_path <> invalid and safeToStr(g.still_path) <> "" then
+                        still = "https://image.tmdb.org/t/p/w500" + safeToStr(g.still_path)
+                    end if
+                    merged.push({
+                        title: name,
+                        shortTitle: name,
+                        description: safeToStr(g.overview),
+                        mediaType: "episode",
+                        ratingKey: "",
+                        key: "",
+                        index: epNum,
+                        parentIndex: seasonNum,
+                        missing: true,
+                        watched: false,
+                        duration: 0,
+                        viewOffset: 0,
+                        hdPosterUrl: still,
+                        hdBackdropUrl: still,
+                        grandparentTitle: showTitle,
+                        tmdbId: tmdbId,
+                        showRatingKey: showKey,
+                        year: Left(safeToStr(g.air_date), 4)
+                    })
+                    used[epNum] = true
+                end if
+            end if
+        end for
+    end if
+
+    for each ep in owned
+        key = safeToStr(ep.index)
+        if key <> "" and used.DoesExist(key) <> true then
+            ep.missing = false
+            if tmdbId <> "" then ep.tmdbId = tmdbId
+            if showKey <> "" then ep.showRatingKey = showKey
+            merged.push(ep)
+        else if key = "" then
+            ep.missing = false
+            merged.push(ep)
+        end if
+    end for
+
+    if merged.count() = 0 then
+        for each ep in owned
+            ep.missing = false
+            merged.push(ep)
+        end for
+    end if
+
+    return merged
+end function
+
 function rolesToCast(cfg as Object, meta as Object) as Object
     castItems = []
     if meta = invalid then return castItems
@@ -1833,9 +2063,29 @@ function fetchExtras(cfg as Object, item as Object) as Object
     end if
 
     detail = invalid
+    tmdbId = ""
+    tvdbId = ""
+    imdbId = ""
     if details.ok = true then
         mapped = collectMetadata(cfg, details.json)
         if mapped.count() > 0 then detail = mapped[0]
+        if details.json <> invalid and details.json.MediaContainer <> invalid then
+            meta = details.json.MediaContainer.Metadata
+            if meta <> invalid then
+                if GetInterface(meta, "ifArray") <> invalid then
+                    if meta.count() > 0 then meta = meta[0]
+                end if
+                ids = extractExternalIds(meta)
+                tmdbId = safeToStr(ids.tmdbId)
+                tvdbId = safeToStr(ids.tvdbId)
+                imdbId = safeToStr(ids.imdbId)
+                if detail <> invalid then
+                    if tmdbId <> "" then detail.tmdbId = tmdbId
+                    if tvdbId <> "" then detail.tvdbId = tvdbId
+                    if imdbId <> "" then detail.imdbId = imdbId
+                end if
+            end if
+        end if
     end if
 
     return {
@@ -1844,7 +2094,10 @@ function fetchExtras(cfg as Object, item as Object) as Object
         similar: similarItems,
         detail: detail,
         onDeckKey: onDeckKey,
-        onDeckSeasonKey: onDeckSeasonKey
+        onDeckSeasonKey: onDeckSeasonKey,
+        tmdbId: tmdbId,
+        tvdbId: tvdbId,
+        imdbId: imdbId
     }
 end function
 

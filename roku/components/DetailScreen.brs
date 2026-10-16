@@ -50,7 +50,10 @@ sub init()
     m.grabPollFails = 0
     m.grabStatusBusy = false
     m.grabAwaitingPlex = false
+    m.grabAwaitingEpisode = false
     m.plexCheckBusy = false
+    m.showTmdbId = ""
+    m.grabPromote = invalid
     m.seasons = []
     m.seasonQueue = 0
     m.seasonContent = invalid
@@ -81,8 +84,12 @@ sub onContentSet()
     m.grabPollFails = 0
     m.grabStatusBusy = false
     m.grabAwaitingPlex = false
+    m.grabAwaitingEpisode = false
     m.plexCheckBusy = false
+    m.showTmdbId = ""
+    m.grabPromote = invalid
     if item.DoesExist("onWatchlist") and item.onWatchlist = true then m.onWatchlist = true
+    if item.DoesExist("tmdbId") and asString(item.tmdbId) <> "" then m.showTmdbId = asString(item.tmdbId)
     if item.DoesExist("isDiscover") and item.isDiscover = true then m.isUnavailable = true
     if item.DoesExist("unavailable") and item.unavailable = true then m.isUnavailable = true
 
@@ -239,6 +246,21 @@ sub onSeasonItemFocused()
     mediaType = asString(item.mediaType)
     if mediaType = "episode" then
         applyEpisodeHeader(item)
+        if item.DoesExist("missing") and item.missing = true then
+            if m.grabBusy <> true and m.softStatus <> invalid then
+                if grabIsConfigured() then
+                    m.softStatus.text = "Not in library — OK to Grab Now"
+                else
+                    m.softStatus.text = "Not in library"
+                end if
+            end if
+        else if m.grabBusy <> true and m.grabAwaitingEpisode <> true and m.softStatus <> invalid then
+            ' Clear the missing hint when moving onto an owned episode
+            cur = m.softStatus.text
+            if cur = "Not in library — OK to Grab Now" or cur = "Not in library" then
+                m.softStatus.text = ""
+            end if
+        end if
     else
         ' Cast / other rows under the same list — show synopsis again
         restoreShowHeader()
@@ -247,7 +269,8 @@ end sub
 
 sub showTvMode()
     m.isUnavailable = false
-    stopGrabPolling()
+    ' Don't kill an in-flight episode grab when (re)entering TV layout
+    if m.grabBusy <> true and m.grabAwaitingEpisode <> true then stopGrabPolling()
     m.movieActions.visible = true
     if m.unavailablePanel <> invalid then m.unavailablePanel.visible = false
     if m.grabBtn <> invalid then m.grabBtn.visible = false
@@ -497,8 +520,32 @@ sub loadChildren(item as Object, mode as String)
     m.pendingSeason = item
     m.task = createObject("roSGNode", "PlexTask")
     m.task.config = m.top.config
-    m.task.action = "children"
-    m.task.item = item
+    if mode = "episodes" then
+        show = m.top.content
+        payload = {
+            ratingKey: asString(item.ratingKey),
+            index: asString(item.index),
+            showRatingKey: "",
+            showTitle: "",
+            showYear: "",
+            showTmdbId: m.showTmdbId,
+            grandparentTitle: ""
+        }
+        if show <> invalid then
+            payload.showRatingKey = asString(show.ratingKey)
+            payload.showTitle = asString(show.title)
+            payload.showYear = asString(show.year)
+            payload.grandparentTitle = asString(show.title)
+            if m.showTmdbId = "" and show.DoesExist("tmdbId") then
+                payload.showTmdbId = asString(show.tmdbId)
+            end if
+        end if
+        m.task.action = "seasonEpisodes"
+        m.task.item = payload
+    else
+        m.task.action = "children"
+        m.task.item = item
+    end if
     m.task.observeField("response", "onChildrenLoaded")
     m.task.control = "RUN"
 end sub
@@ -540,6 +587,11 @@ sub onChildrenLoaded()
         if m.focusEpisodeKey <> "" then m.seasonRows.setFocus(true)
         loadSeasonEpisodes()
     else if m.loadMode = "episodes" then
+        if response.DoesExist("showTmdbId") and asString(response.showTmdbId) <> "" then
+            m.showTmdbId = asString(response.showTmdbId)
+            content = m.top.content
+            if content <> invalid then content.tmdbId = m.showTmdbId
+        end if
         fillSeasonRow(m.seasonQueue, m.pendingSeason, items)
         m.seasonQueue = m.seasonQueue + 1
         loadSeasonEpisodes()
@@ -608,6 +660,8 @@ sub fillSeasonRow(index as Integer, season as Object, episodes as Object)
         child.title = formatEpisodeTitle(ep)
         child.hdPosterUrl = ep.hdPosterUrl
         child.description = ep.description
+        isMissing = false
+        if ep.DoesExist("missing") and ep.missing = true then isMissing = true
         child.addFields({
             ratingKey: ep.ratingKey,
             key: ep.key,
@@ -621,7 +675,10 @@ sub fillSeasonRow(index as Integer, season as Object, episodes as Object)
             shortTitle: ep.shortTitle,
             grandparentTitle: ep.grandparentTitle,
             index: ep.index,
-            parentIndex: ep.parentIndex
+            parentIndex: ep.parentIndex,
+            missing: isMissing,
+            tmdbId: ep.tmdbId,
+            showRatingKey: ep.showRatingKey
         })
     end for
 
@@ -676,6 +733,8 @@ sub appendSeasonRow(season as Object, episodes as Object)
         child.title = formatEpisodeTitle(ep)
         child.hdPosterUrl = ep.hdPosterUrl
         child.description = ep.description
+        isMissing = false
+        if ep.DoesExist("missing") and ep.missing = true then isMissing = true
         child.addFields({
             ratingKey: ep.ratingKey,
             key: ep.key,
@@ -689,7 +748,10 @@ sub appendSeasonRow(season as Object, episodes as Object)
             shortTitle: ep.shortTitle,
             grandparentTitle: ep.grandparentTitle,
             index: ep.index,
-            parentIndex: ep.parentIndex
+            parentIndex: ep.parentIndex,
+            missing: isMissing,
+            tmdbId: ep.tmdbId,
+            showRatingKey: ep.showRatingKey
         })
     end for
 
@@ -698,8 +760,14 @@ end sub
 
 sub onExtrasLoaded()
     response = m.extrasTask.response
-    if m.softStatus <> invalid then m.softStatus.text = ""
+    if m.softStatus <> invalid and m.grabBusy <> true and m.grabAwaitingEpisode <> true then m.softStatus.text = ""
     if response = invalid or response.ok <> true then return
+
+    if response.DoesExist("tmdbId") and asString(response.tmdbId) <> "" then
+        m.showTmdbId = asString(response.tmdbId)
+        content = m.top.content
+        if content <> invalid then content.tmdbId = m.showTmdbId
+    end if
 
     ' Enrich header from full metadata (important when opened from Continue Watching episode)
     detail = response.detail
@@ -858,6 +926,10 @@ sub onEpisodeSelected()
         return
     end if
     if mediaType = "episode" then
+        if item.DoesExist("missing") and item.missing = true then
+            requestGrabEpisode(item, info[0], info[1])
+            return
+        end if
         m.top.playRequested = nodeToItem(item)
     else if mediaType = "movie" or mediaType = "show" then
         m.top.openDetails = nodeToItem(item)
@@ -877,6 +949,8 @@ end sub
 function nodeToItem(item as Object) as Object
     isDiscover = false
     if item.DoesExist("isDiscover") and item.isDiscover = true then isDiscover = true
+    isMissing = false
+    if item.DoesExist("missing") and item.missing = true then isMissing = true
     return {
         title: item.title,
         description: item.description,
@@ -899,7 +973,10 @@ function nodeToItem(item as Object) as Object
         grandparentTitle: item.grandparentTitle,
         index: item.index,
         parentIndex: item.parentIndex,
-        isDiscover: isDiscover
+        isDiscover: isDiscover,
+        missing: isMissing,
+        tmdbId: item.tmdbId,
+        showRatingKey: item.showRatingKey
     }
 end function
 
@@ -1058,7 +1135,7 @@ sub requestGrabNow()
     mt = LCase(payload.mediaType)
     if mt = "show" or mt = "series" or mt = "tv" or mt = "season" or mt = "episode" then
         payload.mediaType = "episode"
-        ' v1: Grab Now on a show starts at S01E01; custom episode picker comes later
+        ' Unavailable show detail: start at S01E01
         payload.season = 1
         payload.episode = 1
         if item.DoesExist("season") and item.season <> invalid then payload.season = item.season
@@ -1067,6 +1144,58 @@ sub requestGrabNow()
         payload.mediaType = "movie"
     end if
 
+    m.grabPromote = invalid
+    m.grabAwaitingEpisode = false
+    startGrabJob(payload)
+end sub
+
+sub requestGrabEpisode(epNode as Object, seasonRowIndex as Integer, episodeColIndex as Integer)
+    if epNode = invalid then return
+    if grabIsConfigured() <> true then
+        if m.softStatus <> invalid then m.softStatus.text = "Grab server not configured"
+        return
+    end if
+    if m.grabBusy = true then
+        if m.softStatus <> invalid then m.softStatus.text = "Already grabbing…"
+        return
+    end if
+
+    show = m.top.content
+    showTitle = asString(epNode.grandparentTitle)
+    if showTitle = "" and show <> invalid then showTitle = asString(show.title)
+    tmdbId = asString(epNode.tmdbId)
+    if tmdbId = "" then tmdbId = m.showTmdbId
+    if tmdbId = "" and show <> invalid then tmdbId = asString(show.tmdbId)
+    showKey = asString(epNode.showRatingKey)
+    if showKey = "" and show <> invalid then showKey = asString(show.ratingKey)
+
+    payload = {
+        title: showTitle,
+        year: "",
+        mediaType: "episode",
+        tmdbId: tmdbId,
+        imdbId: "",
+        tvdbId: "",
+        guid: "",
+        season: asInteger(epNode.parentIndex),
+        episode: asInteger(epNode.index)
+    }
+    if payload.season = 0 then payload.season = 1
+    if payload.episode = 0 then payload.episode = 1
+    if show <> invalid then payload.year = asString(show.year)
+
+    m.grabPromote = {
+        seasonRow: seasonRowIndex,
+        episodeCol: episodeColIndex,
+        season: asString(epNode.parentIndex),
+        episode: asString(epNode.index),
+        showRatingKey: showKey
+    }
+    m.grabAwaitingEpisode = false
+    startGrabJob(payload)
+end sub
+
+sub startGrabJob(payload as Object)
     m.grabBusy = true
     m.grabPollFails = 0
     paintGrabLabel()
@@ -1088,8 +1217,9 @@ sub onGrabCreated()
     if response = invalid or response.ok <> true then
         m.grabBusy = false
         m.grabJobId = ""
+        m.grabPromote = invalid
         paintGrabLabel()
-        err = "Grab unavailable — try Watchlist or try again later"
+        err = "Grab unavailable — try again later"
         if response <> invalid and asString(response.error) <> "" then err = asString(response.error)
         if m.softStatus <> invalid then m.softStatus.text = err
         return
@@ -1098,6 +1228,7 @@ sub onGrabCreated()
     job = response.job
     if job = invalid then
         m.grabBusy = false
+        m.grabPromote = invalid
         paintGrabLabel()
         if m.softStatus <> invalid then m.softStatus.text = "Grab unavailable — try again later"
         return
@@ -1106,6 +1237,7 @@ sub onGrabCreated()
     m.grabJobId = asString(job.id)
     if m.grabJobId = "" then
         m.grabBusy = false
+        m.grabPromote = invalid
         paintGrabLabel()
         if m.softStatus <> invalid then m.softStatus.text = "Grab unavailable — try again later"
         return
@@ -1118,7 +1250,7 @@ end sub
 
 sub startGrabPolling()
     if m.grabPollTimer = invalid then return
-    if m.grabJobId = "" and m.grabAwaitingPlex <> true then return
+    if m.grabJobId = "" and m.grabAwaitingPlex <> true and m.grabAwaitingEpisode <> true then return
     m.grabPollTimer.control = "start"
 end sub
 
@@ -1128,18 +1260,40 @@ sub stopGrabPolling()
     m.grabJobId = ""
     m.grabPollFails = 0
     m.grabAwaitingPlex = false
+    m.grabAwaitingEpisode = false
     m.plexCheckBusy = false
+    m.grabPromote = invalid
     paintGrabLabel()
 end sub
 
 sub onGrabPollFire()
-    if m.isUnavailable <> true then
-        stopGrabPolling()
+    ' Episode-tile promote path (library show with a missing ep)
+    if m.grabAwaitingEpisode = true then
+        if m.plexCheckBusy = true then return
+        if m.grabPromote = invalid then
+            stopGrabPolling()
+            return
+        end if
+        m.plexCheckBusy = true
+        m.findEpTask = createObject("roSGNode", "PlexTask")
+        m.findEpTask.config = m.top.config
+        m.findEpTask.action = "findLocalEpisode"
+        m.findEpTask.item = {
+            showRatingKey: asString(m.grabPromote.showRatingKey),
+            season: asString(m.grabPromote.season),
+            episode: asString(m.grabPromote.episode)
+        }
+        m.findEpTask.observeField("response", "onFindLocalEpisode")
+        m.findEpTask.control = "RUN"
         return
     end if
 
-    ' After grab reports ready, re-check Plex every 2s until this page flips to Play
+    ' Unavailable Discover title → flip whole page to Play
     if m.grabAwaitingPlex = true then
+        if m.isUnavailable <> true then
+            stopGrabPolling()
+            return
+        end if
         if m.plexCheckBusy = true then return
         item = m.top.content
         if item = invalid then
@@ -1202,10 +1356,29 @@ sub applyGrabJobStatus(job as Object)
 
     if status = "ready" then
         m.grabBusy = false
-        m.grabAwaitingPlex = true
         paintGrabLabel()
+        if m.grabPromote <> invalid then
+            m.grabAwaitingEpisode = true
+            m.grabAwaitingPlex = false
+            if m.softStatus <> invalid then m.softStatus.text = "Ready — waiting for Plex to index…"
+            startGrabPolling()
+            ' Immediate first check
+            m.plexCheckBusy = true
+            m.findEpTask = createObject("roSGNode", "PlexTask")
+            m.findEpTask.config = m.top.config
+            m.findEpTask.action = "findLocalEpisode"
+            m.findEpTask.item = {
+                showRatingKey: asString(m.grabPromote.showRatingKey),
+                season: asString(m.grabPromote.season),
+                episode: asString(m.grabPromote.episode)
+            }
+            m.findEpTask.observeField("response", "onFindLocalEpisode")
+            m.findEpTask.control = "RUN"
+            return
+        end if
+
+        m.grabAwaitingPlex = true
         if m.softStatus <> invalid then m.softStatus.text = "Ready — waiting for Plex to index…"
-        ' Keep the 2s timer running; it now re-checks local library until Play appears
         startGrabPolling()
         item = m.top.content
         if item <> invalid then
@@ -1220,6 +1393,8 @@ sub applyGrabJobStatus(job as Object)
         m.grabBusy = false
         m.grabJobId = ""
         m.grabAwaitingPlex = false
+        m.grabAwaitingEpisode = false
+        m.grabPromote = invalid
         paintGrabLabel()
         err = message
         if err = "" then err = "Grab failed — try again or use Watchlist"
@@ -1232,6 +1407,80 @@ sub applyGrabJobStatus(job as Object)
     if percent > 0 then line = line + " " + StrI(percent).Trim() + "%"
     if message <> "" and message <> status then line = line + " — " + message
     if m.softStatus <> invalid then m.softStatus.text = line
+end sub
+
+sub onFindLocalEpisode()
+    m.plexCheckBusy = false
+    response = invalid
+    if m.findEpTask <> invalid then response = m.findEpTask.response
+    if response = invalid or response.ok <> true or response.item = invalid then
+        if m.softStatus <> invalid then m.softStatus.text = "Ready — waiting for Plex to index…"
+        return
+    end if
+
+    promoteMissingEpisodeTile(response.item)
+    stopGrabPolling()
+    if m.softStatus <> invalid then m.softStatus.text = "Ready — press OK to Play"
+end sub
+
+sub promoteMissingEpisodeTile(localEp as Object)
+    if localEp = invalid or m.seasonContent = invalid then return
+    seasonNo = asString(localEp.parentIndex)
+    epNo = asString(localEp.index)
+    preferRow = -1
+    preferCol = -1
+    if m.grabPromote <> invalid then
+        preferRow = m.grabPromote.seasonRow
+        preferCol = m.grabPromote.episodeCol
+    end if
+
+    rowCount = m.seasonContent.getChildCount()
+    for r = 0 to rowCount - 1
+        row = m.seasonContent.getChild(r)
+        if row <> invalid then
+            colCount = row.getChildCount()
+            for c = 0 to colCount - 1
+                child = row.getChild(c)
+                if child <> invalid and asString(child.mediaType) = "episode" then
+                    isMissing = false
+                    if child.DoesExist("missing") and child.missing = true then isMissing = true
+                    match = (asString(child.parentIndex) = seasonNo and asString(child.index) = epNo)
+                    if preferRow >= 0 and r = preferRow and preferCol >= 0 and c = preferCol and isMissing = true then
+                        match = true
+                    end if
+                    if match = true and isMissing = true then
+                        replacement = createObject("roSGNode", "ContentNode")
+                        replacement.title = formatEpisodeTitle(localEp)
+                        replacement.hdPosterUrl = localEp.hdPosterUrl
+                        replacement.description = localEp.description
+                        replacement.addFields({
+                            ratingKey: localEp.ratingKey,
+                            key: localEp.key,
+                            mediaType: "episode",
+                            duration: localEp.duration,
+                            viewOffset: localEp.viewOffset,
+                            watched: localEp.watched,
+                            unwatchedCount: localEp.unwatchedCount,
+                            year: localEp.year,
+                            hdBackdropUrl: localEp.hdBackdropUrl,
+                            shortTitle: localEp.shortTitle,
+                            grandparentTitle: localEp.grandparentTitle,
+                            index: localEp.index,
+                            parentIndex: localEp.parentIndex,
+                            missing: false,
+                            tmdbId: localEp.tmdbId,
+                            showRatingKey: localEp.showRatingKey
+                        })
+                        row.replaceChild(replacement, c)
+                        m.seasonRows.content = m.seasonContent
+                        m.seasonRows.jumpToRowItem = [r, c]
+                        applyEpisodeHeader(replacement)
+                        return
+                    end if
+                end if
+            end for
+        end if
+    end for
 end sub
 
 sub focusActionButtons()
