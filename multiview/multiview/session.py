@@ -305,6 +305,12 @@ class Session:
                 else:
                     if compositor is not current:
                         current, n, started = compositor, 0, self._clock()
+                    # If encode/push is slower than realtime, jump the frame
+                    # index forward. Bursting late pts just makes the live
+                    # compositor drop them, which looks like a slideshow.
+                    due = int((self._clock() - started) * fps)
+                    if due > n:
+                        n = due
                     try:
                         self._push_tick(compositor, fps, n)
                     except Exception as exc:
@@ -313,8 +319,6 @@ class Session:
                 self._stop.wait(0.05)
                 continue
             n += 1
-            # Falling behind means pushing frames back to back until caught
-            # up; skipping would leave holes in the timeline
             delay = started + n / fps - self._clock()
             if delay > 0:
                 self._stop.wait(delay)

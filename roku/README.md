@@ -288,11 +288,14 @@ curl http://localhost:8095/healthz
 Then set `multiviewUrl` in `PlexConfig.brs` to `http://<server-ip>:8095` and
 republish. Leaving it empty hides multiview entirely.
 
-`x264` works anywhere but costs about a core at 1080p30; with an Intel or AMD
-GPU (`va`, or `qsv` on Intel, with `/dev/dri` passed through) or NVIDIA
-(`nvenc`) encoding is nearly free. A hardware encoder that isn't usable falls
+`x264` works anywhere but is heavy: the compose defaults (20fps, 3Mbit, 480p
+decode) are aimed at a CPU box. If the mosaic looks like a slideshow or tiles
+flicker "Reconnecting…", check `docker stats plexflix-multiview` — a pegged
+CPU means you need a GPU encoder or lower `FPS` / `VIDEO_BITRATE`. With an
+Intel or AMD GPU use `va` (or `qsv` on Intel) and uncomment the `/dev/dri`
+block; with NVIDIA use `nvenc`. A hardware encoder that isn't usable falls
 back to x264, and the log says so at startup. Each feed pulls the rendition
-closest to 720p from its master playlist (`VARIANT_HEIGHT`), and nothing else.
+closest to `VARIANT_HEIGHT` from its master playlist, and nothing else.
 
 To try it on a Mac first, without Docker:
 

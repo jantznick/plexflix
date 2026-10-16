@@ -12,18 +12,20 @@ import subprocess
 import threading
 import time
 
-FRAME_W = 1280
-FRAME_H = 720
+# Decode size: 480p keeps CPU ingest cheap; the compositor still outputs 1080p
+FRAME_W = 854
+FRAME_H = 480
 FRAME_BYTES = FRAME_W * FRAME_H * 3 // 2
 AUDIO_RATE = 48000
 AUDIO_BYTES_PER_SECOND = AUDIO_RATE * 4
 
 TICK = 0.25
-# Last frame stays up this long before the tile says it's reconnecting
-FREEZE_SECONDS = 3
+# Brief segment stalls are normal through the proxy; only call it reconnecting
+# after the picture has been frozen for a while
+FREEZE_SECONDS = 10
 # No frames for this long and the ffmpeg is replaced
-RESTART_AFTER = 6
-STARTUP_TIMEOUT = 20
+RESTART_AFTER = 25
+STARTUP_TIMEOUT = 30
 MAX_BACKOFF = 15
 # A run that lasted this long resets the backoff
 STABLE_SECONDS = 20
