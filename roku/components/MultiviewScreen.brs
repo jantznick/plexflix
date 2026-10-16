@@ -111,7 +111,9 @@ sub onPolled()
             if response.code = 404 and not m.recreated then
                 m.recreated = true
                 stopVideo()
+                m.session = invalid
                 m.sessionId = ""
+                m.top.sessionId = ""
                 createSession()
             end if
         end if
@@ -166,7 +168,9 @@ end function
 '--------------------------------------------------------------------
 
 sub startPlayback()
-    if m.session = invalid then return
+    if m.session = invalid or m.sessionId = "" then return
+    if asString(m.session.id) <> m.sessionId then return
+    if asString(m.session.state) <> "running" then return
     base = ""
     cfg = m.top.config
     if cfg <> invalid and cfg.multiviewUrl <> invalid then base = cfg.multiviewUrl.Trim()
@@ -401,11 +405,20 @@ end sub
 sub onResume()
     if m.top.resume <> true then return
     m.promoted = false
+    m.playing = false
     ensureFocus()
-    if m.session <> invalid and m.session.state = "running" then
-        startPlayback()
-    else
+    ' While the fullscreen player was up the mosaic session can be reaped
+    ' (idle) or still only "starting". Don't point Video at a stale playlistUrl.
+    if m.sessionId = "" or m.session = invalid then
         setStatus("Starting multiview" + readySuffix())
+        if m.sessionId = "" and not m.recreated then createSession()
+        return
+    end if
+    setStatus("Loading games...")
+    ' Immediate heartbeat: adoptSession starts playback once state=running
+    onPollTimer()
+    if m.session <> invalid and asString(m.session.id) = m.sessionId and asString(m.session.state) = "running" then
+        startPlayback()
     end if
 end sub
 
