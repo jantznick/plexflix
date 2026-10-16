@@ -172,9 +172,12 @@ end function
 '--------------------------------------------------------------------
 
 sub startPlayback()
+    if m.promoted or m.closing then return
     if m.session = invalid or m.sessionId = "" then return
     if asString(m.session.id) <> m.sessionId then return
     if asString(m.session.state) <> "running" then return
+    ensureVideoNode()
+    if m.video = invalid then return
     base = ""
     cfg = m.top.config
     if cfg <> invalid and cfg.multiviewUrl <> invalid then base = cfg.multiviewUrl.Trim()
@@ -196,14 +199,59 @@ sub startPlayback()
     ensureFocus()
 end sub
 
+' Soft stop — keeps the Video node. Prefer releaseVideo() before handing the
+' decoder to VideoScreen (control=stop alone is not enough for sports HLS).
 sub stopVideo()
     m.stallTimer.control = "stop"
     m.retryTimer.control = "stop"
-    m.video.control = "stop"
+    if m.video <> invalid then m.video.control = "stop"
     m.playing = false
 end sub
 
+' Tear the Video node out so the decoder actually releases for fullscreen.
+sub releaseVideo()
+    m.stallTimer.control = "stop"
+    m.retryTimer.control = "stop"
+    m.playing = false
+    if m.video = invalid then return
+    vid = m.video
+    m.video = invalid
+    vid.unobserveField("state")
+    vid.unobserveField("availableAudioTracks")
+    vid.control = "stop"
+    vid.content = invalid
+    parent = vid.getParent()
+    if parent <> invalid then parent.removeChild(vid)
+end sub
+
+sub ensureVideoNode()
+    if m.video <> invalid then return
+    vid = createObject("roSGNode", "Video")
+    vid.id = "video"
+    vid.width = 1920
+    vid.height = 1080
+    vid.enableUI = false
+    vid.focusable = false
+    vid.notificationInterval = 1
+    ' Keep overlays above the picture: insert under tileLayer
+    insertAt = m.top.getChildCount()
+    tileLayer = m.top.findNode("tileLayer")
+    if tileLayer <> invalid then
+        for i = 0 to m.top.getChildCount() - 1
+            if m.top.getChild(i).isSameNode(tileLayer) then
+                insertAt = i
+                exit for
+            end if
+        end for
+    end if
+    m.top.insertChild(vid, insertAt)
+    m.video = vid
+    m.video.observeField("state", "onVideoState")
+    m.video.observeField("availableAudioTracks", "onAudioTracks")
+end sub
+
 sub onVideoState()
+    if m.video = invalid or m.promoted or m.closing then return
     state = m.video.state
     print "[plexflix:multiview] state=" + state
     if state = "playing" or state = "paused" or state = "buffering" then ensureFocus()
@@ -220,9 +268,7 @@ sub onVideoState()
         if not m.switching and m.notice = "" then setStatus("Buffering...")
         restartStallTimer()
     else if state = "error" or state = "finished" then
-        ' A live mosaic never legitimately ends, and the server keeps it going
-        ' through feed trouble, so a stop here is worth retrying quietly
-        if m.promoted or m.closing then return
+        ' A live mosaic never legitimately ends; retry quietly
         print "[plexflix:multiview] " + state + " " + asString(m.video.errorMsg)
         m.playing = false
         m.stallTimer.control = "stop"
@@ -245,7 +291,8 @@ sub restartStallTimer()
 end sub
 
 sub onStall()
-    if m.video.state = "playing" or m.promoted or m.closing then return
+    if m.promoted or m.closing then return
+    if m.video <> invalid and m.video.state = "playing" then return
     stopVideo()
     setStatus("Multiview stalled, reconnecting...")
     m.retryTimer.control = "start"
@@ -258,6 +305,7 @@ end sub
 ' The server names its audio renditions "Tile 1".."Tile N" by slot. Matched
 ' by name first, since nothing promises the firmware keeps playlist order
 sub applyAudio()
+    if m.video = invalid then return
     tracks = m.video.availableAudioTracks
     if tracks = invalid or tracks.count() = 0 or m.tiles.count() = 0 then return
 
@@ -432,23 +480,30 @@ end function
 sub promoteFocused()
     if m.focus >= m.tiles.count() then return
     tile = m.tiles[m.focus]
-    index = tile.stream
-    if index = invalid or index < 0 or index >= m.streams.count() then return
+    if tile = invalid or tile.stream = invalid then return
+    index = Int(tile.stream)
+    if index < 0 or index >= m.streams.count() then return
     stream = m.streams[index]
+    url = asString(stream.url)
+    if url = "" then return
 
-    ' Only one decoder: this has to be stopped before the player starts
-    stopVideo()
+    ' Flag first so a sync stop/finished callback cannot start a reconnect
     m.promoted = true
+    m.pollTimer.control = "stop"
     hideOverlay()
     clearStatus()
-    url = asString(stream.url)
+    ' Free the decoder — stop alone leaves sports HLS holding it
+    releaseVideo()
+
+    format = asString(stream.streamFormat)
+    if format = "" then format = "hls"
     m.top.playRequested = {
         title: asString(stream.title),
         description: asString(stream.league),
         mediaType: "sport",
         key: url,
         streamUrl: url,
-        streamFormat: asString(stream.streamFormat),
+        streamFormat: format,
         hdPosterUrl: asString(stream.hdPosterUrl),
         ratingKey: "",
         duration: 0,
@@ -460,6 +515,7 @@ sub onResume()
     if m.top.resume <> true then return
     m.promoted = false
     m.playing = false
+    ensureVideoNode()
     ensureFocus()
     ' While the fullscreen player was up the mosaic session can be reaped
     ' (idle) or still only "starting". Don't point Video at a stale playlistUrl.
@@ -469,6 +525,8 @@ sub onResume()
         return
     end if
     setStatus("Loading games...")
+    m.pollTimer.duration = 2
+    m.pollTimer.control = "start"
     ' Immediate heartbeat: adoptSession starts playback once state=running
     onPollTimer()
     if m.session <> invalid and asString(m.session.id) = m.sessionId and asString(m.session.state) = "running" then
@@ -754,7 +812,7 @@ sub closeScreen()
     m.settleTimer.control = "stop"
     m.rotateTimer.control = "stop"
     m.pendingOrder = invalid
-    stopVideo()
+    releaseVideo()
     m.top.closed = true
 end sub
 
