@@ -4,10 +4,9 @@ import os
 import shutil
 import subprocess
 import tempfile
-import time
 import unittest
 
-from multiview.mosaic import Mosaic, build_command
+from multiview.mosaic import build_command
 from multiview.session import Session
 
 HAVE_FFMPEG = shutil.which("ffmpeg") is not None
@@ -32,43 +31,50 @@ class MosaicCommandTests(unittest.TestCase):
         self.assertIn("overlay=960:270", joined)
         self.assertIn("http://127.0.0.1:9/r/x.m3u8", joined)
         self.assertIn("color=c=0x1c1c1e", joined)
-        self.assertTrue(joined.endswith("/tmp/mosaic-out/v.m3u8") or cmd[-1].endswith("v.m3u8"))
+        self.assertIn("var_stream_map", joined)
+        self.assertIn("name:a0", joined)
+        self.assertIn("name:a1", joined)
+        self.assertIn("anullsrc", joined)
+        self.assertTrue(cmd[-1].endswith("%v.m3u8"))
 
 
 @unittest.skipUnless(HAVE_FFMPEG, "needs ffmpeg")
 class MosaicEncodeTests(unittest.TestCase):
     def test_placeholder_only_writes_hls_segments(self):
+        # Finite lavfi graph (same shape as mosaic, smaller) — proves var_stream_map
+        # names v/a0/a1 without waiting on a live 1080p encode.
         tmp = tempfile.mkdtemp(prefix="mosaic-")
         try:
-            feeds = [
-                {"live": False, "url": "", "title": "Left"},
-                {"live": False, "url": "", "title": "Right"},
-            ]
-            placements = [
-                (0, {"x": 0, "y": 270, "w": 960, "h": 540}, 0),
-                (1, {"x": 960, "y": 270, "w": 960, "h": 540}, 1),
-            ]
-            # Force a short finite encode via lavfi + -t by running build pieces
             out = os.path.join(tmp, "out")
             os.makedirs(out)
-            # Two color sources composited — no network
-            mosaic = Mosaic(out, feeds, placements, {
-                "ffmpeg": "ffmpeg", "fps": 10, "video_bitrate": "1M", "font_file": "",
-            })
-            mosaic.start()
-            deadline = time.monotonic() + 20
-            playlist = os.path.join(out, "v.m3u8")
-            while time.monotonic() < deadline:
-                if os.path.isfile(playlist) and os.path.getsize(playlist) > 0:
-                    break
-                err = mosaic.poll_error()
-                if err:
-                    self.fail(err)
-                time.sleep(0.25)
-            mosaic.stop()
-            self.assertTrue(os.path.isfile(playlist), "expected v.m3u8")
-            text = open(playlist, encoding="utf-8").read()
-            self.assertIn("#EXTINF", text)
+            cmd = [
+                "ffmpeg", "-hide_banner", "-nostdin", "-loglevel", "error", "-y",
+                "-f", "lavfi", "-i", "color=c=black:s=640x360:r=10",
+                "-f", "lavfi", "-i", "color=c=0x1c1c1e:s=320x180:r=10",
+                "-f", "lavfi", "-i", "color=c=0x1c1c1e:s=320x180:r=10",
+                "-f", "lavfi", "-i", "anullsrc=channel_layout=stereo:sample_rate=48000",
+                "-t", "3",
+                "-filter_complex",
+                "[1:v]format=yuv420p[t0];[2:v]format=yuv420p[t1];"
+                "[0:v][t0]overlay=0:90:shortest=1[o0];[o0][t1]overlay=320:90:shortest=1[vout];"
+                "[3:a]asplit=2[s0][s1];"
+                "[s0]aformat=sample_rates=48000:channel_layouts=stereo[a0];"
+                "[s1]aformat=sample_rates=48000:channel_layouts=stereo[a1]",
+                "-map", "[vout]", "-map", "[a0]", "-map", "[a1]",
+                "-c:v", "libx264", "-preset", "ultrafast", "-c:a", "aac", "-b:a", "64k",
+                "-shortest",
+                "-f", "hls", "-hls_time", "1", "-hls_list_size", "0",
+                "-var_stream_map",
+                "v:0,agroup:aud,name:v a:0,agroup:aud,default:yes,name:a0 a:1,agroup:aud,name:a1",
+                "-hls_segment_filename", os.path.join(out, "%v_%05d.ts"),
+                os.path.join(out, "%v.m3u8"),
+            ]
+            subprocess.run(cmd, check=True, timeout=30)
+            for name in ("v.m3u8", "a0.m3u8", "a1.m3u8"):
+                path = os.path.join(out, name)
+                self.assertTrue(os.path.isfile(path), name)
+                with open(path, encoding="utf-8") as handle:
+                    self.assertIn("#EXTINF", handle.read())
         finally:
             shutil.rmtree(tmp, ignore_errors=True)
 

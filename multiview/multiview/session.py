@@ -83,9 +83,10 @@ class Session:
 
     def start(self):
         os.makedirs(self.dir, exist_ok=True)
-        self._playlists = {"v": StitchedPlaylist(window=STITCH_WINDOW)}
-        bandwidth = bitrate_bps(self.settings.get("video_bitrate", "3M")) + 128000
-        write_atomic(os.path.join(self.dir, "master.m3u8"), master_playlist(bandwidth))
+        names = ["v"] + [f"a{i}" for i in range(len(self.feeds))]
+        self._playlists = {name: StitchedPlaylist(window=STITCH_WINDOW) for name in names}
+        bandwidth = bitrate_bps(self.settings.get("video_bitrate", "3M")) + 128000 * len(self.feeds)
+        write_atomic(os.path.join(self.dir, "master.m3u8"), master_playlist(len(self.feeds), bandwidth))
         self._thread.start()
 
     def stop(self):
@@ -146,7 +147,7 @@ class Session:
                     status=status,
                     error="",
                     reconnects=0,
-                    audioTrack=0,
+                    audioTrack=slot,
                 ))
             return {
                 "id": self.id,
@@ -280,26 +281,31 @@ class Session:
         if gen == 0:
             return
         gen_dir = os.path.join(self.dir, f"gen-{gen}")
-        playlist = self._playlists["v"]
-        segments = read_media_playlist(os.path.join(gen_dir, "v.m3u8"))
-        if playlist.add(gen, segments, f"gen-{gen}"):
-            write_atomic(os.path.join(self.dir, "v.m3u8"), playlist.render())
-            self._last_video_at = self._clock()
-        count = len(playlist.entries)
-        ready = count >= 2 and self._last_video_at is not None and self._mosaic is not None
+        counts = {}
+        for name, playlist in self._playlists.items():
+            segments = read_media_playlist(os.path.join(gen_dir, f"{name}.m3u8"))
+            if playlist.add(gen, segments, f"gen-{gen}"):
+                write_atomic(os.path.join(self.dir, f"{name}.m3u8"), playlist.render())
+                if name == "v":
+                    self._last_video_at = self._clock()
+            counts[name] = len(playlist.entries)
+        # Video gates playback; audio of silence tiles can lag without blocking.
+        ready = counts.get("v", 0) >= 2 and self._last_video_at is not None and self._mosaic is not None
         with self._lock:
             if ready and self.state != "running":
                 self.state = "running"
                 self.error = ""
-                self._log(f"running — mosaic playlist segments={count}")
+                self._log(f"running — mosaic playlists {counts}")
             elif self.state != "running" and self.generation:
                 now = self._clock()
                 if now - self._last_wait_log >= 5:
                     self._last_wait_log = now
-                    self._log(f"waiting for mosaic playlist — segments={count}")
+                    self._log(f"waiting for mosaic playlist — {counts}")
 
     def _cleanup_generations(self, now):
-        referenced = self._playlists["v"].generations()
+        referenced = set()
+        for playlist in self._playlists.values():
+            referenced |= playlist.generations()
         for entry in os.listdir(self.dir) if os.path.isdir(self.dir) else []:
             if not entry.startswith("gen-"):
                 continue

@@ -102,15 +102,25 @@ class StitchedPlaylist:
         return "\n".join(lines) + "\n"
 
 
-def master_playlist(bandwidth):
-    """Single muxed A/V variant (mosaic video + audio from the live feed)."""
-    return (
-        "#EXTM3U\n"
-        "#EXT-X-VERSION:3\n"
+def master_playlist(audio_count, bandwidth):
+    """Mosaic video plus one alternate audio rendition per tile slot.
+
+    Names are "Tile 1".."Tile N" so the Roku can switch sound with focus
+    without restarting the video stream.
+    """
+    lines = ["#EXTM3U", "#EXT-X-VERSION:3", "#EXT-X-INDEPENDENT-SEGMENTS"]
+    for i in range(audio_count):
+        default = "YES" if i == 0 else "NO"
+        lines.append(
+            f'#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="aud",NAME="Tile {i + 1}",'
+            f'DEFAULT={default},AUTOSELECT={default},URI="a{i}.m3u8"'
+        )
+    lines.append(
         f'#EXT-X-STREAM-INF:BANDWIDTH={bandwidth},RESOLUTION=1920x1080,'
-        f'CODECS="avc1.640028,mp4a.40.2"\n'
-        "v.m3u8\n"
+        f'CODECS="avc1.640028,mp4a.40.2",AUDIO="aud"'
     )
+    lines.append("v.m3u8")
+    return "\n".join(lines) + "\n"
 
 
 def write_atomic(path, text):

@@ -1,8 +1,9 @@
 """One ffmpeg process: proxied live feeds + placeholder tiles → 1080p HLS.
 
 Reads the same relay/proxy HLS the Roku can play, scales each live feed into
-its layout rectangle, draws placeholder tiles for the rest, and encodes a
-single muxed HLS the Roku plays fullscreen.
+its layout rectangle, draws placeholder slates for the rest, and writes a
+video playlist plus one audio playlist per tile slot (live audio or silence)
+so the Roku can switch sound with focus without touching the video.
 """
 
 import os
@@ -30,7 +31,7 @@ def _drawtext_escape(text):
 
 
 def build_command(ffmpeg, feeds, placements, out_dir, settings):
-    """feeds: [{live, url, title}], placements: [(feed_index, rect, z), ...]"""
+    """feeds: [{live, url, title}], placements: slot-ordered [(feed_index, rect, z), ...]"""
     fps = int(settings.get("fps", 20))
     bitrate = settings.get("video_bitrate", "3M")
     font = settings.get("font_file") or ""
@@ -40,15 +41,13 @@ def build_command(ffmpeg, feeds, placements, out_dir, settings):
     filter_parts = []
     input_index = 0
     live_audio_input = None
-    tile_labels = {}  # feed_index -> [tN]
+    tile_labels = {}
 
-    # Stable black canvas
     cmd += ["-f", "lavfi", "-i", f"color=c=black:s=1920x1080:r={fps}"]
     base_idx = input_index
     input_index += 1
 
     by_feed = {i: f for i, f in enumerate(feeds)}
-    # Build inputs in feed-index order so map indices stay obvious
     for feed_index, feed in by_feed.items():
         rect = None
         for fi, r, _z in placements:
@@ -93,14 +92,11 @@ def build_command(ffmpeg, feeds, placements, out_dir, settings):
             filter_parts.append(draw)
         tile_labels[feed_index] = label
 
-    # Silence must be an input (before -filter_complex), not an option after -map.
-    silence_idx = None
-    if live_audio_input is None:
-        cmd += ["-f", "lavfi", "-i", "anullsrc=channel_layout=stereo:sample_rate=48000"]
-        silence_idx = input_index
-        input_index += 1
+    # Silence as a real input (filter-source anullsrc never finishes HLS segments).
+    cmd += ["-f", "lavfi", "-i", "anullsrc=channel_layout=stereo:sample_rate=48000"]
+    silence_idx = input_index
+    input_index += 1
 
-    # Overlay in z-order (pip insets on top)
     ordered = sorted(placements, key=lambda p: p[2])
     current = f"[{base_idx}:v]"
     for i, (feed_index, rect, _z) in enumerate(ordered):
@@ -111,34 +107,56 @@ def build_command(ffmpeg, feeds, placements, out_dir, settings):
         )
         current = f"[{out}]"
 
+    # Audio per slot: live feed's audio follows that feed's slot; else silence.
+    slot_count = len(placements)
+    silence_slots = []
+    for slot, (feed_index, _rect, _z) in enumerate(placements):
+        feed = by_feed[feed_index]
+        if feed["live"] and live_audio_input is not None:
+            filter_parts.append(
+                f"[{live_audio_input}:a]aresample=async=1000,"
+                f"aformat=sample_rates=48000:channel_layouts=stereo[a{slot}]"
+            )
+        else:
+            silence_slots.append(slot)
+
+    if silence_slots:
+        if len(silence_slots) == 1:
+            slot = silence_slots[0]
+            filter_parts.append(
+                f"[{silence_idx}:a]aformat=sample_rates=48000:channel_layouts=stereo[a{slot}]"
+            )
+        else:
+            outs = "".join(f"[s{i}]" for i in range(len(silence_slots)))
+            filter_parts.append(f"[{silence_idx}:a]asplit={len(silence_slots)}{outs}")
+            for i, slot in enumerate(silence_slots):
+                filter_parts.append(
+                    f"[s{i}]aformat=sample_rates=48000:channel_layouts=stereo[a{slot}]"
+                )
+
     filter_complex = ";".join(filter_parts)
     cmd += ["-filter_complex", filter_complex, "-map", "[vout]"]
-
-    if live_audio_input is not None:
-        # Optional audio: some embeds are video-only; ffmpeg drops the map if missing.
-        cmd += [
-            "-map", f"{live_audio_input}:a:0?",
-            "-af", "aresample=async=1000",
-            "-ac", "2", "-ar", "48000",
-            "-c:a", "aac", "-b:a", "128k",
-        ]
-    else:
-        cmd += [
-            "-map", f"{silence_idx}:a:0",
-            "-c:a", "aac", "-b:a", "128k",
-        ]
+    for slot in range(slot_count):
+        cmd += ["-map", f"[a{slot}]"]
 
     gop = max(2, fps * 2)
+    var_parts = ["v:0,agroup:aud,name:v"]
+    for slot in range(slot_count):
+        default = ",default:yes" if slot == 0 else ""
+        var_parts.append(f"a:{slot},agroup:aud,name:a{slot}{default}")
+
     cmd += [
         "-c:v", "libx264", "-preset", "ultrafast", "-tune", "zerolatency",
         "-b:v", str(bitrate), "-maxrate", str(bitrate), "-bufsize", str(bitrate),
         "-g", str(gop), "-keyint_min", str(gop), "-bf", "0", "-pix_fmt", "yuv420p",
+        "-c:a", "aac", "-b:a", "128k", "-ac", "2", "-ar", "48000",
         "-f", "hls",
         "-hls_time", "2",
         "-hls_list_size", "10",
         "-hls_flags", "delete_segments+append_list+program_date_time",
-        "-hls_segment_filename", os.path.join(out_dir, "v_%05d.ts"),
-        os.path.join(out_dir, "v.m3u8"),
+        "-var_stream_map", " ".join(var_parts),
+        "-hls_segment_filename", os.path.join(out_dir, "%v_%05d.ts"),
+        os.path.join(out_dir, "%v.m3u8"),
     ]
     return cmd
 
@@ -164,7 +182,6 @@ class Mosaic:
         threading.Thread(target=self._drain_stderr, daemon=True).start()
 
     def apply_layout(self, placements):
-        # ffmpeg filtergraph can't move tiles live — caller restarts
         self.placements = placements
 
     def poll_error(self):
@@ -184,6 +201,11 @@ class Mosaic:
         self._proc = None
         if proc is None:
             return
+        if proc.stderr is not None:
+            try:
+                proc.stderr.close()
+            except Exception:
+                pass
         try:
             os.killpg(proc.pid, signal.SIGTERM)
         except (ProcessLookupError, PermissionError, OSError):
@@ -203,11 +225,14 @@ class Mosaic:
         proc = self._proc
         if proc is None or proc.stderr is None:
             return
-        for raw in proc.stderr:
-            line = raw.decode("utf-8", "replace").rstrip()
-            if not line:
-                continue
-            with self._lock:
-                self._stderr.append(line)
-                if len(self._stderr) > 40:
-                    self._stderr = self._stderr[-40:]
+        try:
+            for raw in proc.stderr:
+                line = raw.decode("utf-8", "replace").rstrip()
+                if not line:
+                    continue
+                with self._lock:
+                    self._stderr.append(line)
+                    if len(self._stderr) > 40:
+                        self._stderr = self._stderr[-40:]
+        except ValueError:
+            pass
