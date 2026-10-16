@@ -677,7 +677,7 @@ sub onHideTimer()
     hideOverlay()
     if m.notice <> "" then
         m.notice = ""
-        if m.video.state = "playing" and not m.switching then clearStatus()
+        if m.video <> invalid and m.video.state = "playing" and not m.switching then clearStatus()
     end if
 end sub
 
