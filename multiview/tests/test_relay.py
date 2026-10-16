@@ -228,6 +228,15 @@ class RelayTests(unittest.TestCase):
         with self.assertRaises(relay_module.RelayError):
             relay.segment(seg)
 
+    def test_soft_block_direct_falls_back_to_proxy(self):
+        # Manifests often work direct while segment CDNs return 200 + junk
+        seg = Upstream(url="https://cdn.example/seg7.ts",
+                       proxy_url=proxy_url("https://cdn.example/seg7.ts"))
+        junk = b"Forbidden: enable cookies to continue watching"
+        relay, fetch = self.make({seg.url: (200, junk), seg.proxy_url: (200, b"\x47" + bytes(187))})
+        self.assertEqual(relay.segment(seg)[0], 0x47)
+        self.assertEqual(relay.snapshot(), {"segment_proxy": 1})
+
     def test_tokens_are_short_and_round_trip(self):
         relay, _ = self.make({})
         up = Upstream(url="https://x/a.m3u8?b=1", referer="r", headers={"cookie": "c"}, proxy_url="p")

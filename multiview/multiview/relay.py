@@ -189,8 +189,19 @@ class Relay:
         for route, url, headers in attempts:
             try:
                 status, body, _ = self._fetch(url, headers, SEGMENT_TIMEOUT)
-                ok = 200 <= status < 300 and body and not _looks_like_html(body)
-                reason = "" if ok else (f"HTTP {status}" if status >= 300 else "not media")
+                if not 200 <= status < 300:
+                    ok, reason = False, f"HTTP {status}"
+                elif not body:
+                    ok, reason = False, "empty body"
+                elif not _looks_like_media(body):
+                    # Soft blocks often return 200 with HTML/JSON that is not a
+                    # segment; fall through to the proxy instead of handing
+                    # garbage to ffmpeg (that shows up as demux Invalid argument)
+                    ok, reason = False, f"not media ({len(body)} bytes, head={body[:24]!r})"
+                    if route == "direct":
+                        print(f"[relay] segment direct rejected for {host}: {reason}", flush=True)
+                else:
+                    ok, reason = True, ""
             except Exception as exc:
                 ok, reason = False, str(exc) or exc.__class__.__name__
             if route == "direct":
@@ -253,6 +264,23 @@ class Relay:
 def _looks_like_html(body):
     head = body[:64].lstrip().lower()
     return head.startswith((b"<!doctype", b"<html"))
+
+
+def _looks_like_media(body):
+    """True for MPEG-TS, fMP4, GOAT-wrapped TS, or a 16-byte AES key."""
+    if not body or _looks_like_html(body):
+        return False
+    head = body.lstrip()
+    if head[:1] in (b"{", b"[") or head.lower().startswith((b"<", b"error", b"forbidden", b"denied")):
+        return False
+    payload = unwrap_goat(body)
+    if len(payload) == 16:
+        return True  # AES-128 key
+    if payload and payload[0] == 0x47:
+        return True  # MPEG-TS sync (full packets are 188 bytes; short is still TS)
+    if b"ftyp" in payload[:64]:
+        return True  # fMP4 / CMAF
+    return False
 
 
 def _make_handler(relay):
