@@ -57,7 +57,7 @@ def test_resolve_endpoint_batch():
             "score": "1",
             "homeAway": "away",
         },
-        "teamIds": {by_abbr["SEA"]["id"], by_abbr["DET"]["id"]},
+        "teamIds": [by_abbr["SEA"]["id"], by_abbr["DET"]["id"]],
         "broadcasts": [],
         "startTime": "2026-10-10T00:00Z",
     }
@@ -106,6 +106,13 @@ def test_resolve_endpoint_batch():
             health = json.load(resp)
         assert health["ok"] is True
         assert health["leagues"]["nhl"]["events"] == 1
+
+        # Scoreboard used to 500 because teamIds was a set
+        with urllib.request.urlopen(f"http://127.0.0.1:{port}/v1/scoreboard?league=nhl", timeout=5) as resp:
+            board = json.load(resp)
+        assert "nhl" in board["leagues"]
+        assert len(board["leagues"]["nhl"]["events"]) == 1
+        assert isinstance(board["leagues"]["nhl"]["events"][0]["teamIds"], list)
     finally:
         server.shutdown()
         service.stop()
