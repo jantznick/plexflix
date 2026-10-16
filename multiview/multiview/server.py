@@ -125,6 +125,24 @@ def make_handler(manager):
                 return
             print(f"[http] {self.address_string()} {fmt % args}", flush=True)
 
+        def handle(self):
+            # ffmpeg and the Roku both drop keep-alives; that is not an error
+            try:
+                super().handle()
+            except (ConnectionResetError, BrokenPipeError):
+                pass
+
+        def do_OPTIONS(self):
+            # The Roku channel probes with OPTIONS before POST/GET; answer it
+            # so the log is not full of 501s. The real request follows either way.
+            self.send_response(HTTPStatus.NO_CONTENT)
+            self.send_header("Allow", "GET, POST, PUT, DELETE, OPTIONS")
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.send_header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+            self.send_header("Access-Control-Allow-Headers", "Content-Type, X-Multiview-Token")
+            self.send_header("Content-Length", "0")
+            self.end_headers()
+
         def do_GET(self):
             if self.path == "/healthz":
                 relay = manager.relay.snapshot() if manager.relay is not None else {}

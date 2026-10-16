@@ -199,20 +199,31 @@ def _looks_like_html(body):
 
 def _make_handler(relay):
     class Handler(BaseHTTPRequestHandler):
-        protocol_version = "HTTP/1.1"
+        # HTTP/1.0: ffmpeg opens many short-lived playlist/segment connections and
+        # aborts them on a bad feed; keep-alive just turns those into ConnectionReset
+        # noise on the next readline
+        protocol_version = "HTTP/1.0"
 
         def log_message(self, fmt, *args):
             pass
+
+        def handle(self):
+            try:
+                super().handle()
+            except (ConnectionResetError, BrokenPipeError):
+                pass
 
         def do_GET(self):
             path = self.path.split("?", 1)[0]
             if not path.startswith("/r/"):
                 return self._send(HTTPStatus.NOT_FOUND, "text/plain", b"not found")
             token = path[3:].rsplit(".", 1)[0]
+            upstream, kind = decode_token(token)
+            label = upstream.url if upstream is not None else token[:24]
             try:
                 content_type, body = relay.handle(token)
             except RelayError as exc:
-                print(f"[relay] {exc}", flush=True)
+                print(f"[relay] {kind or '?'} {label}: {exc}", flush=True)
                 return self._send(exc.status, "text/plain", str(exc).encode("utf-8"))
             return self._send(HTTPStatus.OK, content_type, body)
 
@@ -221,6 +232,7 @@ def _make_handler(relay):
             self.send_header("Content-Type", content_type)
             self.send_header("Content-Length", str(len(body)))
             self.send_header("Cache-Control", "no-cache")
+            self.send_header("Connection", "close")
             self.end_headers()
             try:
                 self.wfile.write(body)
