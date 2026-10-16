@@ -79,11 +79,17 @@ class Session:
         self._clock = clock
         self._compositor_factory = compositor_factory
         self._relay = relay
+        # First N feeds are "live"; the rest are placeholder tiles in the UI.
+        # With a relay and only one live feed, skip ffmpeg/compositor and serve
+        # that feed's proxied HLS on the session playlist URL (same bytes as
+        # the normal proxy path — Roku can actually play it).
         live_limit = max(0, int(settings.get("live_feeds", 1)))
+        self.passthrough = relay is not None and live_limit == 1 and len(feeds) >= 1
+        self.passthrough_url = ""
         self.feeds = []
         for i, spec in enumerate(feeds):
             live = i < live_limit
-            if live:
+            if live and not self.passthrough:
                 ingest = ingest_factory(source_for(spec, relay), settings, f"{session_id[:8]}/{i}")
             else:
                 ingest = PlaceholderIngest(name=f"{session_id[:8]}/{i}")
@@ -110,6 +116,7 @@ class Session:
         self._next_start = 0.0
         self._retired = {}
         self._playlists = {}
+        self._last_wait_log = 0.0
         self._thread = threading.Thread(target=self._run, name=f"session-{session_id[:8]}", daemon=True)
         self._pump_thread = threading.Thread(target=self._pump, name=f"pump-{session_id[:8]}", daemon=True)
 
@@ -119,10 +126,11 @@ class Session:
 
     def start(self):
         os.makedirs(self.dir, exist_ok=True)
-        names = ["v"] + [f"a{i}" for i in range(len(self.feeds))]
-        self._playlists = {name: StitchedPlaylist(window=STITCH_WINDOW) for name in names}
-        bandwidth = bitrate_bps(self.settings.get("video_bitrate", "6M")) + 128000 * len(self.feeds)
-        write_atomic(os.path.join(self.dir, "master.m3u8"), master_playlist(len(self.feeds), bandwidth))
+        if not self.passthrough:
+            names = ["v"] + [f"a{i}" for i in range(len(self.feeds))]
+            self._playlists = {name: StitchedPlaylist(window=STITCH_WINDOW) for name in names}
+            bandwidth = bitrate_bps(self.settings.get("video_bitrate", "6M")) + 128000 * len(self.feeds)
+            write_atomic(os.path.join(self.dir, "master.m3u8"), master_playlist(len(self.feeds), bandwidth))
         self._thread.start()
 
     def stop(self):
@@ -160,11 +168,14 @@ class Session:
             tiles = []
             for slot, feed_index in enumerate(self.order):
                 feed = self.feeds[feed_index]
-                status = feed.ingest.status
                 if not feed.live:
                     status = "placeholder"
-                elif status == "live" and self.state != "running":
-                    status = "starting"
+                elif self.passthrough:
+                    status = "live" if self.state == "running" else "starting"
+                else:
+                    status = feed.ingest.status
+                    if status == "live" and self.state != "running":
+                        status = "starting"
                 tiles.append(dict(
                     rects[slot],
                     slot=slot,
@@ -194,6 +205,9 @@ class Session:
 
     def _run(self):
         try:
+            if self.passthrough:
+                self._run_passthrough()
+                return
             live = [f for f in self.feeds if f.live]
             held = [f for f in self.feeds if not f.live]
             if held:
@@ -219,6 +233,29 @@ class Session:
             self._log(self.error)
         finally:
             self._shutdown()
+
+    def _run_passthrough(self):
+        """Serve feed 0 through the vendored proxy on this session's playlist URL."""
+        held = [f for f in self.feeds if not f.live]
+        if held:
+            self._log(f"pass-through feed 1; placeholder on {len(held)} tile(s)")
+        self.passthrough_url = rewrite_to_local_proxy(self.feeds[0].url)
+        self._log("warming feed 1 through vendored proxy (no compositor)")
+        try:
+            self._relay.warm([self.passthrough_url])
+            self._relay.fetch(self.passthrough_url)
+        except Exception as exc:
+            with self._lock:
+                self.state = "error"
+                self.error = f"pass-through failed: {exc}"
+            self._log(self.error)
+            self._stop.wait()
+            return
+        with self._lock:
+            self.state = "running"
+            self.error = ""
+        self._log("running — pass-through proxy HLS on master.m3u8")
+        self._stop.wait()
 
     def _render_slates(self):
         ffmpeg = self.settings.get("ffmpeg", "ffmpeg")
@@ -395,8 +432,11 @@ class Session:
                 self.state = "running"
                 self.error = ""
                 self._log(f"running — playlists {counts}")
-            elif self.state != "running" and self.generation and int(self._clock()) % 5 == 0:
-                self._log(f"waiting for video playlist — {counts}")
+            elif self.state != "running" and self.generation:
+                now = self._clock()
+                if now - self._last_wait_log >= 5:
+                    self._last_wait_log = now
+                    self._log(f"waiting for video playlist — {counts}")
 
     def _cleanup_generations(self, now):
         referenced = set()

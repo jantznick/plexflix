@@ -50,8 +50,9 @@ class VendoredProxyRoutingTests(unittest.TestCase):
         self.assertIn("http://127.0.0.1:9999/r/", text)
         self.assertNotIn("127.0.0.1:18787", text)
         relay.handle(token)
-        self.assertEqual(len(fetch.calls), 1)
-        self.assertEqual(relay.snapshot().get("manifest_cache"), 1)
+        # Prefetch may hit the segment URL; the manifest URL only once.
+        self.assertEqual(fetch.calls.count(feed), 1)
+        self.assertGreaterEqual(relay.snapshot().get("manifest_cache", 0), 1)
 
     def test_payload_still_decodes(self):
         url = proxy_url("https://cdn.example/live/index.m3u8?t=1", headers={"cookie": "a=b"},
@@ -60,6 +61,57 @@ class VendoredProxyRoutingTests(unittest.TestCase):
         self.assertEqual(upstream.url, "https://cdn.example/live/index.m3u8?t=1")
         legacy = f"{PROXY}/proxy/" + base64.b64encode(b"https://cdn.example/x.m3u8").decode()
         self.assertEqual(parse_feed_url(legacy).url, "https://cdn.example/x.m3u8")
+
+    def test_relative_playlist_rewrites_loopback_for_roku(self):
+        relay = Relay(fetch=FakeFetch({}))
+        relay.port = 9999
+        body = b"#EXTM3U\n#EXTINF:4,\nhttp://127.0.0.1:9999/r/abc123.ts\n"
+        text = relay.relative_playlist(body).decode()
+        self.assertIn("r/abc123.ts", text)
+        self.assertNotIn("127.0.0.1", text)
+
+
+class PassThroughSessionTests(unittest.TestCase):
+    def test_one_live_feed_skips_compositor_and_goes_running(self):
+        import tempfile
+        import time
+        from multiview.session import Session
+
+        os.environ["MULTIVIEW_PROXY_URL"] = "http://127.0.0.1:18787"
+        feed = rewrite_to_local_proxy(proxy_url("https://cdn.example/live/index.m3u8"))
+        playlist = b"#EXTM3U\n#EXTINF:4,\nhttp://127.0.0.1:18787/proxy/seg\n"
+        fetch = FakeFetch({feed: (200, playlist)})
+        relay = Relay(fetch=fetch)
+        relay.port = 9999
+        root = tempfile.mkdtemp(prefix="mv-pass-")
+        try:
+            session = Session(
+                "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+                [{"url": proxy_url("https://cdn.example/live/index.m3u8"), "title": "A"},
+                 {"url": proxy_url("https://cdn.example/other.m3u8"), "title": "B"}],
+                "grid",
+                root,
+                {"live_feeds": 1, "allow_local_inputs": True, "video_bitrate": "2M"},
+                relay=relay,
+            )
+            self.assertTrue(session.passthrough)
+            session.start()
+            deadline = time.monotonic() + 5
+            while time.monotonic() < deadline and session.state == "starting":
+                time.sleep(0.05)
+            self.assertEqual(session.state, "running")
+            snap = session.snapshot()
+            self.assertEqual(snap["tiles"][0]["status"], "live")
+            self.assertEqual(snap["tiles"][1]["status"], "placeholder")
+            ctype, body = relay.fetch(session.passthrough_url)
+            self.assertTrue(ctype.startswith("application/vnd.apple.mpegurl"))
+            relative = relay.relative_playlist(body).decode()
+            self.assertIn("r/", relative)
+            self.assertNotIn("127.0.0.1:18787", relative)
+            session.stop()
+        finally:
+            import shutil
+            shutil.rmtree(root, ignore_errors=True)
 
 
 if __name__ == "__main__":

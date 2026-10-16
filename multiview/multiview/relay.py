@@ -156,6 +156,18 @@ class Relay:
             return "application/vnd.apple.mpegurl", body
         return "video/mp2t", body
 
+    def fetch(self, upstream_url):
+        """Fetch by absolute vendored-proxy URL (same cache as /r/<token>)."""
+        return self.handle(self.url_for(upstream_url).split("/r/", 1)[1].rsplit(".", 1)[0])
+
+    def relative_playlist(self, body):
+        """Rewrite loopback relay URLs so a Roku on the LAN can follow them."""
+        if not body.lstrip().startswith(b"#EXTM3U"):
+            return body
+        text = body.decode("utf-8", "replace")
+        text = text.replace(f"http://127.0.0.1:{self.port}/r/", "r/")
+        return text.encode("utf-8")
+
     def _fetch_cached(self, upstream_url):
         """Manifest or segment, with the right cache, based on response body."""
         now = self._clock()
@@ -190,12 +202,20 @@ class Relay:
             raise
 
     def _revalidate_later(self, upstream_url):
+        with self._lock:
+            if upstream_url in self._revalidating:
+                return
+            self._revalidating.add(upstream_url)
+
         def run():
             try:
                 self._flight.do(("u", upstream_url), lambda: self._load_upstream(upstream_url))
                 self._count("manifest_revalidate")
             except Exception:
                 self._count("manifest_revalidate_failed")
+            finally:
+                with self._lock:
+                    self._revalidating.discard(upstream_url)
 
         threading.Thread(target=run, name="relay-revalidate", daemon=True).start()
 

@@ -19,11 +19,12 @@ from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 from . import compositor
-from .relay import Relay
+from .relay import Relay, RelayError
 from .session import Session
 
 SESSION_PATH = re.compile(r"^/sessions/([0-9a-f-]{36})(?:/(.*))?$")
 FILE_NAME = re.compile(r"^(?:gen-\d+/)?[A-Za-z0-9_.-]+\.(?:m3u8|ts)$")
+PASS_FILE = re.compile(r"^(?:master\.m3u8|r/[A-Za-z0-9_-]+\.(?:m3u8|ts))$")
 # Outside the container (running from a checkout), the font is in the repo
 # and there is no /data volume
 _REPO_FONT = os.path.join(os.path.dirname(__file__), "..", "..", "roku", "fonts", "Outfit-SemiBold.ttf")
@@ -238,6 +239,8 @@ def make_handler(manager):
             return body
 
         def _file(self, session, name):
+            if getattr(session, "passthrough", False):
+                return self._passthrough_file(session, name)
             if not FILE_NAME.match(name):
                 return self._json(HTTPStatus.NOT_FOUND, {"error": "not found"})
             path = os.path.join(session.dir, name)
@@ -253,6 +256,35 @@ def make_handler(manager):
             self.send_header("Cache-Control", "no-cache" if playlist else "max-age=60")
             self.end_headers()
             self.wfile.write(data)
+
+        def _passthrough_file(self, session, name):
+            # Same proxied HLS the roku-feed proxy would return, exposed on
+            # :8095 so the Roku can follow segment URLs (relay is loopback-only).
+            if not PASS_FILE.match(name) or manager.relay is None:
+                return self._json(HTTPStatus.NOT_FOUND, {"error": "not found"})
+            try:
+                if name == "master.m3u8":
+                    upstream = session.passthrough_url
+                    if not upstream:
+                        return self._json(HTTPStatus.NOT_FOUND, {"error": "not ready"})
+                    content_type, data = manager.relay.fetch(upstream)
+                else:
+                    token = name[2:].rsplit(".", 1)[0]
+                    content_type, data = manager.relay.handle(token)
+            except RelayError as exc:
+                return self._json(exc.status, {"error": str(exc)})
+            if content_type.startswith("application/vnd.apple.mpegurl") or data.lstrip()[:7] == b"#EXTM3U":
+                data = manager.relay.relative_playlist(data)
+                content_type = "application/vnd.apple.mpegurl"
+            self.send_response(HTTPStatus.OK)
+            self.send_header("Content-Type", content_type)
+            self.send_header("Content-Length", str(len(data)))
+            self.send_header("Cache-Control", "no-cache")
+            self.end_headers()
+            try:
+                self.wfile.write(data)
+            except (BrokenPipeError, ConnectionResetError):
+                pass
 
         def _json(self, status, payload):
             data = json.dumps(payload).encode("utf-8")
