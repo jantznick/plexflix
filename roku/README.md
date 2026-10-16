@@ -246,10 +246,13 @@ much still lands on the proxy.
 ```bash
 cd multiview
 # pick ENCODER (x264 / va / qsv / nvenc) and uncomment the matching GPU block
-# in docker-compose.yml first
+# in docker-compose.yml first. Compose uses network_mode: host so the container
+# can reach the roku-feed proxy on this machine's LAN IP (e.g. :8787).
 docker compose up -d --build
 docker compose logs -f
 curl http://localhost:8095/healthz
+# After a failed session, relay.manifest_failed / segment_failed here means the
+# container could not fetch the sports feeds (direct CDN or the local proxy).
 ```
 
 Then set `multiviewUrl` in `PlexConfig.brs` to `http://<server-ip>:8095` and
