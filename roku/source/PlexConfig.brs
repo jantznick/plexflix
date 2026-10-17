@@ -35,7 +35,7 @@ function GetPlexConfig() as Object
 
         ' Grab sidecar (grab/ in this repo): NZBFinder → NZBGet Force → Plex.
         ' Leave empty to hide Grab Now — channel stays fully usable without it.
-        ' e.g. "http://192.168.1.50:8096"
+        ' e.g. "http://192.168.1.50:18096"
         grabUrl: "",
         ' Must match GRAB_TOKEN in grab's docker-compose when that is set
         grabToken: "",

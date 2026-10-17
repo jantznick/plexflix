@@ -15,7 +15,7 @@ def _int(env: dict, key: str, default: int) -> int:
 def settings_from_env(env: dict | None = None) -> dict:
     env = env if env is not None else os.environ
     return {
-        "port": _int(env, "PORT", 8096),
+        "port": _int(env, "PORT", 18096),
         "token": env.get("GRAB_TOKEN", "") or "",
         "nzbfinder_url": (env.get("NZBFINDER_URL") or "https://nzbfinder.ws").rstrip("/"),
         "nzbfinder_api_key": env.get("NZBFINDER_API_KEY", "") or "",
