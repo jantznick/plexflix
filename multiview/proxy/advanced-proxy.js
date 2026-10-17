@@ -17,6 +17,7 @@ import {
 import {
     ensureRemuxSession,
     getRemuxRoot,
+    shutdownAudioRemux,
     touchRemuxSession,
 } from './audio-remux.js';
 
@@ -25,7 +26,20 @@ const port = process.env.PORT || 8787;
 const proxyHost = process.env.PROXY_HOST || '192.168.1.50:8787';
 const debug = process.env.PROXY_DEBUG === 'true';
 
-const PROXY_VERSION = 'embed-first-v24-aac-remux';
+const PROXY_VERSION = 'embed-first-v25-remux-loopback';
+
+function isLoopbackClient(req) {
+    const ip = String(req.ip || req.socket?.remoteAddress || '');
+    return ip === '127.0.0.1' || ip === '::1' || ip.endsWith('127.0.0.1');
+}
+
+/** Roku uses PROXY_HOST; ffmpeg remux inside the container must use 127.0.0.1. */
+function rewriteProxyHost(req) {
+    if (isLoopbackClient(req)) {
+        return `127.0.0.1:${port}`;
+    }
+    return proxyHost;
+}
 
 /** Path after the quality root (/1/high/mono.m3u8 → high/mono.m3u8). */
 function qualityPathSuffix(pathname) {
@@ -521,7 +535,16 @@ app.get('/proxy/*b64Payload', async (req, res) => {
                 return;
             }
 
-            console.log('  - Rewriting manifest segment URLs through /proxy...');
+            const segmentHost = rewriteProxyHost(req);
+            const loopback = isLoopbackClient(req);
+            // ffmpeg remux: loopback host + omit bulky feed headers so segment
+            // URLs stay under HLS demuxer limits (LAN PROXY_HOST is unreachable
+            // from inside the container anyway).
+            const rewriteHeaders = loopback ? {} : ctx.extraHeaders;
+            console.log(
+                `  - Rewriting manifest segment URLs through /proxy (${segmentHost}`
+                + `${loopback ? ', remux-loopback' : ''})...`
+            );
 
             // Master playlists must rewrite relative to the live master URL, not
             // the feed's mono.m3u8 path (that produced /high/high/ nesting).
@@ -542,10 +565,10 @@ app.get('/proxy/*b64Payload', async (req, res) => {
                     const uriMatch = line.match(/URI="([^"]+)"/);
                     if (uriMatch?.[1]) {
                         const fullKeyUrl = new URL(uriMatch[1], rewriteBase).href;
-                        const proxiedKeyUrl = `http://${proxyHost}/proxy/${buildRewrittenPayload(
+                        const proxiedKeyUrl = `http://${segmentHost}/proxy/${buildRewrittenPayload(
                             fullKeyUrl,
                             ctx.referer,
-                            ctx.extraHeaders,
+                            rewriteHeaders,
                             embedUrl,
                             ctx.directOk
                         )}`;
@@ -561,10 +584,10 @@ app.get('/proxy/*b64Payload', async (req, res) => {
                         continue;
                     }
                     const segmentUrl = new URL(trimmed, rewriteBase).href;
-                    rewrittenLines.push(`http://${proxyHost}/proxy/${buildRewrittenPayload(
+                    rewrittenLines.push(`http://${segmentHost}/proxy/${buildRewrittenPayload(
                         segmentUrl,
                         ctx.referer,
-                        ctx.extraHeaders,
+                        rewriteHeaders,
                         embedUrl,
                         ctx.directOk
                     )}`);

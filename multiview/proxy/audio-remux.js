@@ -129,12 +129,14 @@ export async function ensureRemuxSession(b64Payload) {
 
     const args = [
         '-hide_banner',
-        '-loglevel', 'error',
+        '-loglevel', 'warning',
         '-nostdin',
+        '-protocol_whitelist', 'file,http,https,tcp,tls,crypto',
         '-fflags', '+genpts+discardcorrupt',
         '-reconnect', '1',
         '-reconnect_streamed', '1',
         '-reconnect_delay_max', '5',
+        '-rw_timeout', '15000000',
         '-i', inputUrl,
         '-map', '0:v:0',
         '-map', '0:a:0?',
@@ -162,7 +164,7 @@ export async function ensureRemuxSession(b64Payload) {
     proc.stderr?.on('data', (chunk) => {
         const line = chunk.toString('utf8').trim();
         if (line) {
-            log(`ffmpeg[${id}]: ${line.slice(0, 300)}`);
+            log(`ffmpeg[${id}]: ${line.slice(0, 500)}`);
         }
     });
 

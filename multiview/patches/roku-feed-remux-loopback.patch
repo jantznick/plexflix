@@ -1,0 +1,99 @@
+diff --git a/proxy/advanced-proxy.js b/proxy/advanced-proxy.js
+index 33acfde..8cfaff0 100644
+--- a/proxy/advanced-proxy.js
++++ b/proxy/advanced-proxy.js
+@@ -26,7 +26,20 @@ const port = process.env.PORT || 8787;
+ const proxyHost = process.env.PROXY_HOST || '192.168.1.50:8787';
+ const debug = process.env.PROXY_DEBUG === 'true';
+ 
+-const PROXY_VERSION = 'embed-first-v24-aac-remux';
++const PROXY_VERSION = 'embed-first-v25-remux-loopback';
++
++function isLoopbackClient(req) {
++    const ip = String(req.ip || req.socket?.remoteAddress || '');
++    return ip === '127.0.0.1' || ip === '::1' || ip.endsWith('127.0.0.1');
++}
++
++/** Roku uses PROXY_HOST; ffmpeg remux inside the container must use 127.0.0.1. */
++function rewriteProxyHost(req) {
++    if (isLoopbackClient(req)) {
++        return `127.0.0.1:${port}`;
++    }
++    return proxyHost;
++}
+ 
+ /** Path after the quality root (/1/high/mono.m3u8 → high/mono.m3u8). */
+ function qualityPathSuffix(pathname) {
+@@ -522,7 +535,16 @@ app.get('/proxy/*b64Payload', async (req, res) => {
+                 return;
+             }
+ 
+-            console.log('  - Rewriting manifest segment URLs through /proxy...');
++            const segmentHost = rewriteProxyHost(req);
++            const loopback = isLoopbackClient(req);
++            // ffmpeg remux: loopback host + omit bulky feed headers so segment
++            // URLs stay under HLS demuxer limits (LAN PROXY_HOST is unreachable
++            // from inside the container anyway).
++            const rewriteHeaders = loopback ? {} : ctx.extraHeaders;
++            console.log(
++                `  - Rewriting manifest segment URLs through /proxy (${segmentHost}`
++                + `${loopback ? ', remux-loopback' : ''})...`
++            );
+ 
+             // Master playlists must rewrite relative to the live master URL, not
+             // the feed's mono.m3u8 path (that produced /high/high/ nesting).
+@@ -543,10 +565,10 @@ app.get('/proxy/*b64Payload', async (req, res) => {
+                     const uriMatch = line.match(/URI="([^"]+)"/);
+                     if (uriMatch?.[1]) {
+                         const fullKeyUrl = new URL(uriMatch[1], rewriteBase).href;
+-                        const proxiedKeyUrl = `http://${proxyHost}/proxy/${buildRewrittenPayload(
++                        const proxiedKeyUrl = `http://${segmentHost}/proxy/${buildRewrittenPayload(
+                             fullKeyUrl,
+                             ctx.referer,
+-                            ctx.extraHeaders,
++                            rewriteHeaders,
+                             embedUrl,
+                             ctx.directOk
+                         )}`;
+@@ -562,10 +584,10 @@ app.get('/proxy/*b64Payload', async (req, res) => {
+                         continue;
+                     }
+                     const segmentUrl = new URL(trimmed, rewriteBase).href;
+-                    rewrittenLines.push(`http://${proxyHost}/proxy/${buildRewrittenPayload(
++                    rewrittenLines.push(`http://${segmentHost}/proxy/${buildRewrittenPayload(
+                         segmentUrl,
+                         ctx.referer,
+-                        ctx.extraHeaders,
++                        rewriteHeaders,
+                         embedUrl,
+                         ctx.directOk
+                     )}`);
+diff --git a/proxy/audio-remux.js b/proxy/audio-remux.js
+index 9e9b4c4..c9ce589 100644
+--- a/proxy/audio-remux.js
++++ b/proxy/audio-remux.js
+@@ -129,12 +129,14 @@ export async function ensureRemuxSession(b64Payload) {
+ 
+     const args = [
+         '-hide_banner',
+-        '-loglevel', 'error',
++        '-loglevel', 'warning',
+         '-nostdin',
++        '-protocol_whitelist', 'file,http,https,tcp,tls,crypto',
+         '-fflags', '+genpts+discardcorrupt',
+         '-reconnect', '1',
+         '-reconnect_streamed', '1',
+         '-reconnect_delay_max', '5',
++        '-rw_timeout', '15000000',
+         '-i', inputUrl,
+         '-map', '0:v:0',
+         '-map', '0:a:0?',
+@@ -162,7 +164,7 @@ export async function ensureRemuxSession(b64Payload) {
+     proc.stderr?.on('data', (chunk) => {
+         const line = chunk.toString('utf8').trim();
+         if (line) {
+-            log(`ffmpeg[${id}]: ${line.slice(0, 300)}`);
++            log(`ffmpeg[${id}]: ${line.slice(0, 500)}`);
+         }
+     });
+ 
