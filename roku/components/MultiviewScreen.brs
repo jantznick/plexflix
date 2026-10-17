@@ -71,7 +71,7 @@ sub createSession()
     for each stream in m.streams
         streams.push({ url: asString(stream.url), title: asString(stream.title) })
     end for
-    setStatus("Starting multiview with " + StrI(streams.count()).Trim() + " games...")
+    setStatus("Starting multiview with " + StrI(streams.count()).Trim() + " streams...")
 
     m.createTask = createObject("roSGNode", "MultiviewTask")
     m.createTask.config = m.top.config
@@ -168,7 +168,7 @@ sub adoptSession(session as Object)
     end if
 end sub
 
-' "· 2 of 3 games ready" while the server is still bringing feeds up
+' "· 2 of 3 streams ready" while the server is still bringing feeds up
 function readySuffix() as String
     if m.tiles.count() = 0 then return "..."
     ready = 0
@@ -176,7 +176,7 @@ function readySuffix() as String
         ' placeholder tiles are intentionally not decoding
         if tile.status <> "starting" and tile.status <> "reconnecting" then ready = ready + 1
     end for
-    return "...  " + StrI(ready).Trim() + " of " + StrI(m.tiles.count()).Trim() + " games ready"
+    return "...  " + StrI(ready).Trim() + " of " + StrI(m.tiles.count()).Trim() + " streams ready"
 end function
 
 '--------------------------------------------------------------------
@@ -207,7 +207,7 @@ sub startPlayback()
     m.video.content = node
     m.video.control = "play"
     m.playing = true
-    if not m.switching then setStatus("Loading games...")
+    if not m.switching then setStatus("Loading streams...")
     restartStallTimer()
     ensureFocus()
 end sub
@@ -416,7 +416,7 @@ sub onRotateDebounced()
         end if
     end for
     if unchanged then return
-    requestUpdate({ order: order }, "Switching games...")
+    requestUpdate({ order: order }, "Switching streams...")
 end sub
 
 sub requestUpdate(payload as Object, message as String)
@@ -503,7 +503,7 @@ sub finishSwitch(session as Object, err as String)
         showNotice(err)
     else if not m.promoted then
         startPlayback()
-        setStatus("Loading games...")
+        setStatus("Loading streams...")
     end if
     applyAudio()
     if m.pendingOrder <> invalid then
@@ -522,7 +522,7 @@ sub onSettled()
     else
         m.switching = false
         m.switchGen = -1
-        setStatus("Loading games...")
+        setStatus("Loading streams...")
     end if
 end sub
 
@@ -611,12 +611,12 @@ sub onResume()
         if m.sessionId = "" and not m.recreated then createSession()
         return
     end if
-    setStatus("Loading games...")
+    setStatus("Loading streams...")
     m.pollTimer.duration = 2
     m.pollTimer.control = "start"
     ' Restart the mosaic after fullscreen; playback resumes when state=running
     if not m.switching then
-        requestUpdate({ paused: false }, "Loading games...")
+        requestUpdate({ paused: false }, "Loading streams...")
     else
         onPollTimer()
     end if
