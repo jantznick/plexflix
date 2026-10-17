@@ -66,9 +66,12 @@ curl -s -X POST http://192.168.1.50:8096/jobs \
 
 - Roku is its own IP; **Plex + all Docker containers share one host LAN IP**.
 - Configure grab with that LAN IP for NZBGet / Plex / (later) Sonarr — **not**
-  `localhost`, **not** docker service DNS names.
+  docker service DNS names. With `network_mode: host`, `127.0.0.1` also works
+  for NZBGet/Plex on the same machine; Roku still needs the LAN IP.
 - Roku will call `http://<host-lan-ip>:8096` (same idea as `multiviewUrl`).
 - Port **8096** is intentional so it stays off the busy 7878/8989/8080/3000 range.
+- Host networking avoids Docker creating a new bridge network (fixes
+  `all predefined address pools have been fully subnetted` on busy hosts).
 
 ## Configure
 
