@@ -21,10 +21,14 @@ LEAGUE_GROUPS: dict[str, list[str]] = {
     "soccer": ["mls", "epl"],
 }
 
-# When a feed buckets college (etc.) under a pro category, try these next
+# When a feed buckets college (etc.) under a pro category, try these next.
+# NCAAF/NCAAH share ESPN school ids, so football-labeled hockey (and vice versa)
+# must be able to cross over after a teams_not_playing miss.
 LEAGUE_FALLBACKS: dict[str, list[str]] = {
     "nhl": ["ncaah"],
-    "nfl": ["ncaaf"],
+    "nfl": ["ncaaf", "ncaah"],
+    "ncaaf": ["ncaah"],
+    "ncaah": ["ncaaf"],
     "nba": ["wnba"],
     "soccer": ["mls", "epl"],
 }

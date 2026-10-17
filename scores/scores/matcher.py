@@ -101,6 +101,7 @@ def resolve_title(
     teams_by_id = teams_by_id or default_teams_by_id()
 
     last_miss: dict[str, Any] | None = None
+    near_miss_pairs: list[list[str]] = []
     for index, league_id in enumerate(leagues):
         result = _resolve_in_league(
             title,
@@ -114,9 +115,33 @@ def resolve_title(
             if index > 0:
                 result = {**result, "confidence": "medium"}
             return result
+        ids = result.get("matchedTeamIds") or []
+        if result.get("reason") == "teams_not_playing" and len(ids) == 2:
+            near_miss_pairs.append([str(ids[0]), str(ids[1])])
         last_miss = result
 
+    # Same school ids appear in NCAAF and NCAAH. If we found both schools on the
+    # wrong college board, look for that pair on any cached scoreboard.
+    for pair in near_miss_pairs:
+        event = _find_pair_across_leagues(pair, events_by_league)
+        if event is not None:
+            return format_match(event, confidence="medium", matched_teams=pair)
+
     return last_miss or unmatched("no_scoreboard", league=canon, title=title)
+
+
+def _find_pair_across_leagues(
+    team_ids: list[str],
+    events_by_league: dict[str, list[dict[str, Any]]],
+) -> dict[str, Any] | None:
+    if len(team_ids) != 2:
+        return None
+    pair = _pair_key(team_ids[0], team_ids[1])
+    candidates: list[dict[str, Any]] = []
+    for events in events_by_league.values():
+        by_pair = index_events_by_teams(events or [])
+        candidates.extend(by_pair.get(pair) or [])
+    return pick_best_event(candidates)
 
 
 def _resolve_in_league(
