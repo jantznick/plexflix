@@ -18,7 +18,63 @@ const port = process.env.PORT || 8787;
 const proxyHost = process.env.PROXY_HOST || '192.168.1.50:8787';
 const debug = process.env.PROXY_DEBUG === 'true';
 
-const PROXY_VERSION = 'embed-first-v22-chrome-shell';
+const PROXY_VERSION = 'embed-first-v23-master-rebase';
+
+/** Path after the quality root (/1/high/mono.m3u8 → high/mono.m3u8). */
+function qualityPathSuffix(pathname) {
+    const match = String(pathname || '').match(/\/\d+\/(.+)$/);
+    return match ? match[1] : '';
+}
+
+/**
+ * Map a stale feed/CDN URL onto the live token/host from embed resolve.
+ * fresh master: .../TOKEN/1/playlist.m3u8
+ * request:      .../OLD/1/high/mono.m3u8
+ * result:       .../TOKEN/1/high/mono.m3u8
+ */
+function rebaseOntoFreshMaster(requestUrl, freshMasterUrl) {
+    try {
+        const req = new URL(requestUrl);
+        const fresh = new URL(freshMasterUrl);
+        const suffix = qualityPathSuffix(req.pathname);
+        const freshRoot = fresh.pathname.match(/^(.*\/\d+)\//);
+        if (!suffix || !freshRoot) {
+            return null;
+        }
+        // Entry / master itself → keep the resolved master URL.
+        if (suffix === 'playlist.m3u8' || suffix.endsWith('/playlist.m3u8')) {
+            return fresh.href;
+        }
+        fresh.pathname = `${freshRoot[1]}/${suffix}`;
+        fresh.search = '';
+        return fresh.href;
+    } catch {
+        return null;
+    }
+}
+
+function masterVariantSuffixes(masterBody) {
+    const suffixes = new Set();
+    for (const line of String(masterBody || '').split('\n')) {
+        const trimmed = line.trim();
+        if (!trimmed || trimmed.startsWith('#')) {
+            continue;
+        }
+        if (/^https?:\/\//i.test(trimmed)) {
+            try {
+                const suffix = qualityPathSuffix(new URL(trimmed).pathname);
+                if (suffix) {
+                    suffixes.add(suffix);
+                }
+            } catch {
+                // Ignore bad absolute URIs.
+            }
+            continue;
+        }
+        suffixes.add(trimmed.replace(/^\.\//, ''));
+    }
+    return suffixes;
+}
 
 // GOAT disguises each MPEG-TS segment as a tiny PNG so it can live on TikTok's
 // image CDN. The real TS payload starts right after the PNG's IEND chunk. Strip
@@ -239,7 +295,9 @@ async function resolvePlaybackContext(
     }
 
     // Streamed embeds: keep the player open/resolved (referer + headers and live
-    // manifest capture). Always honor the exact URL the client asked for.
+    // manifest capture). Rebase feed URLs onto the live CDN token from resolve —
+    // otherwise we either serve the captured master for every mono.m3u8 (nested
+    // /high/high/ rewrite) or 403 on the stale feed path.
     let stream = getCachedStream(embedUrl);
     if (!stream) {
         try {
@@ -259,13 +317,53 @@ async function resolvePlaybackContext(
         }
     }
 
+    let upstreamUrl = streamUrl;
+    let manifestBaseUrl = streamUrl;
+    let resolvedFromEmbed = false;
+
+    if (isManifest && stream.streamUrl) {
+        const masterBody = stream.manifestBody || '';
+        const isMaster = masterBody.includes('#EXT-X-STREAM-INF');
+        if (isMaster) {
+            let reqSuffix = '';
+            try {
+                reqSuffix = qualityPathSuffix(new URL(streamUrl).pathname);
+            } catch {
+                reqSuffix = '';
+            }
+            const variants = masterVariantSuffixes(masterBody);
+            if (!reqSuffix || reqSuffix === 'playlist.m3u8' || !variants.has(reqSuffix)) {
+                upstreamUrl = stream.streamUrl;
+                manifestBaseUrl = stream.streamUrl;
+                resolvedFromEmbed = stream.streamUrl !== streamUrl;
+                if (resolvedFromEmbed) {
+                    console.log(`  - Streamed: serving live master (${stream.streamUrl.slice(0, 80)}...)`);
+                }
+            } else {
+                const rebased = rebaseOntoFreshMaster(streamUrl, stream.streamUrl);
+                if (rebased) {
+                    upstreamUrl = rebased;
+                    manifestBaseUrl = rebased;
+                    resolvedFromEmbed = rebased !== streamUrl;
+                    if (resolvedFromEmbed) {
+                        console.log(`  - Streamed: rebased variant → ${rebased.slice(0, 100)}...`);
+                    }
+                }
+            }
+        } else if (stream.streamUrl !== streamUrl) {
+            upstreamUrl = stream.streamUrl;
+            manifestBaseUrl = stream.streamUrl;
+            resolvedFromEmbed = true;
+        }
+    }
+
     return {
-        upstreamUrl: streamUrl,
+        upstreamUrl,
         referer: stream.referer,
         extraHeaders: stream.requestHeaders,
         directOk: stream.directFetchOk,
-        manifestBaseUrl: streamUrl,
-        resolvedFromEmbed: false,
+        manifestBaseUrl,
+        resolvedFromEmbed,
     };
 }
 
@@ -383,6 +481,17 @@ app.get('/proxy/*b64Payload', async (req, res) => {
 
             console.log('  - Rewriting manifest segment URLs through /proxy...');
 
+            // Master playlists must rewrite relative to the live master URL, not
+            // the feed's mono.m3u8 path (that produced /high/high/ nesting).
+            let rewriteBase = ctx.manifestBaseUrl || streamUrl;
+            if (playlist.includes('#EXT-X-STREAM-INF') && embedUrl) {
+                const cached = getCachedStream(embedUrl);
+                if (cached?.streamUrl) {
+                    rewriteBase = cached.streamUrl;
+                    console.log(`  - Master rewrite base: ${rewriteBase.slice(0, 100)}...`);
+                }
+            }
+
             const KEY_TAG = '#EXT-X-KEY:';
             const rewrittenLines = [];
             let segmentCount = 0;
@@ -390,7 +499,7 @@ app.get('/proxy/*b64Payload', async (req, res) => {
                 if (line.startsWith(KEY_TAG)) {
                     const uriMatch = line.match(/URI="([^"]+)"/);
                     if (uriMatch?.[1]) {
-                        const fullKeyUrl = new URL(uriMatch[1], ctx.manifestBaseUrl).href;
+                        const fullKeyUrl = new URL(uriMatch[1], rewriteBase).href;
                         const proxiedKeyUrl = `http://${proxyHost}/proxy/${buildRewrittenPayload(
                             fullKeyUrl,
                             ctx.referer,
@@ -409,7 +518,7 @@ app.get('/proxy/*b64Payload', async (req, res) => {
                         console.log(`  - Skipping unrecognized line: ${trimmed.slice(0, 80)}`);
                         continue;
                     }
-                    const segmentUrl = new URL(trimmed, ctx.manifestBaseUrl).href;
+                    const segmentUrl = new URL(trimmed, rewriteBase).href;
                     rewrittenLines.push(`http://${proxyHost}/proxy/${buildRewrittenPayload(
                         segmentUrl,
                         ctx.referer,
