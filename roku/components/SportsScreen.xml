@@ -13,6 +13,8 @@
         <field id="launchMultiview" type="boolean" alwaysNotify="true" onChange="onLaunchMultiview" />
         <field id="multiviewMessage" type="string" alwaysNotify="true" />
         <field id="multiviewRequested" type="assocarray" alwaysNotify="true" />
+        <!-- MainScene sets false while an overlay owns the remote -->
+        <field id="inputActive" type="boolean" value="true" onChange="onInputActive" />
     </interface>
 
     <script type="text/brightscript" uri="SportsScreen.brs" />

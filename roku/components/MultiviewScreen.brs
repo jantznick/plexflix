@@ -889,11 +889,13 @@ sub onFocusedChild()
     if child.isSameNode(m.video) then ensureFocus()
 end sub
 
+' Video nodes try to own the remote even when focusable=false. Keep keys on
+' this Group so arrows/OK reach onKeyEvent. The Sports guide is parked by
+' MainScene while we are up — do not fight it from here.
 sub ensureFocus()
     if m.video = invalid then return
+    if m.closing or m.promoted then return
     m.video.focusable = false
-    ' Always re-assert: hasFocus() is false while Video holds focus, and that
-    ' is exactly when FF/RW never reach onKeyEvent
     m.top.setFocus(true)
 end sub
 

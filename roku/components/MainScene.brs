@@ -48,6 +48,15 @@ sub updateNavRail()
     overlay = (m.videoScreen <> invalid or m.detailScreen <> invalid or m.castDetailScreen <> invalid or m.sportsDetailScreen <> invalid or m.multiviewScreen <> invalid)
     m.sideNav.railVisible = not overlay
     m.sideNav.suppressed = splashShowing()
+    syncSportsInput()
+end sub
+
+' One owner: while detail / multiview / video is up, park the guide so it
+' cannot take focus, rebuild rows, or emit selectedItem under the overlay.
+sub syncSportsInput()
+    if m.sportsScreen = invalid then return
+    blocked = (m.multiviewScreen <> invalid or m.sportsDetailScreen <> invalid or m.videoScreen <> invalid)
+    m.sportsScreen.inputActive = not blocked
 end sub
 
 ' Nothing draws over the splash mosaic, open menu or rail
@@ -478,6 +487,11 @@ function isLiveContinueItem(item as Object) as Boolean
 end function
 
 sub onSportsItemSelected()
+    ' Buried guide can steal OK from multiview / the game page and fire
+    ' selectedItem for whatever row currentIndex happens to sit on.
+    if m.multiviewScreen <> invalid then return
+    if m.videoScreen <> invalid then return
+    if m.sportsDetailScreen <> invalid then return
     item = m.sportsScreen.selectedItem
     if item = invalid then return
     streams = sportsStreamList(item)
@@ -547,12 +561,20 @@ sub showSportsDetail(item as Object)
 end sub
 
 sub onSportsDetailClosed()
-    if m.sportsDetailScreen <> invalid then
-        m.screens.removeChild(m.sportsDetailScreen)
-        m.sportsDetailScreen = invalid
-    end if
+    dismissSportsDetail()
     updateNavRail()
-    if m.sportsScreen <> invalid then m.sportsScreen.setFocus(true)
+    if m.sportsScreen <> invalid then
+        m.sportsScreen.setFocus(true)
+        m.sportsScreen.refocus = true
+    end if
+end sub
+
+' Drop the game page without firing closed→refocus (used before multiview).
+sub dismissSportsDetail()
+    if m.sportsDetailScreen = invalid then return
+    m.sportsDetailScreen.unobserveField("closed")
+    m.screens.removeChild(m.sportsDetailScreen)
+    m.sportsDetailScreen = invalid
 end sub
 
 sub onSportsPlayRequested()
@@ -594,6 +616,9 @@ sub onMultiviewRequested(event as Object)
 end sub
 
 sub showMultiview(payload as Object)
+    ' Don't keep a game page parked under the mosaic — Play / Watch Multiview
+    ' from the guide was returning to the last detail after the session ended.
+    dismissSportsDetail()
     releaseMultiview()
     m.multiviewScreen = createObject("roSGNode", "MultiviewScreen")
     m.multiviewScreen.config = m.config
@@ -615,12 +640,7 @@ end sub
 sub onMultiviewClosed()
     releaseMultiview()
     updateNavRail()
-    if m.sportsDetailScreen <> invalid then
-        m.sportsDetailScreen.setFocus(true)
-        m.sportsDetailScreen.refocus = true
-    else
-        restoreSectionFocus()
-    end if
+    restoreSectionFocus()
 end sub
 
 ' The DELETE runs from here for the same reason playback reports do: a Task

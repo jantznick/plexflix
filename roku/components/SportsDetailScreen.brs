@@ -73,10 +73,7 @@ sub onContentSet()
         setStreamCols(child, StrI(i + 1).Trim(), label, quality, "")
     end for
     m.streamList.content = root
-    if m.streams.count() > 0 then
-        m.streamList.jumpToItem = 0
-        m.streamList.setFocus(true)
-    end if
+    focusStreamList(0)
 end sub
 
 sub setStreamCols(node as Object, c0 as String, c1 as String, c2 as String, c3 as String)
@@ -139,13 +136,7 @@ end sub
 
 sub onRefocus()
     if m.top.refocus <> true then return
-    if m.streams.count() = 0 then
-        m.top.setFocus(true)
-        return
-    end if
-    ' The list kept its own place, so the stream just tried stays highlighted
-    m.streamList.focusable = true
-    m.streamList.setFocus(true)
+    focusStreamList(-1)
 end sub
 
 sub onStreamError()
@@ -172,7 +163,7 @@ end sub
 sub showHint()
     m.summaryLabel.color = "0xC8C8D0"
     if m.top.multiviewEnabled = true then
-        m.summaryLabel.text = "Add streams to multiview, or play one fullscreen."
+        m.summaryLabel.text = "* adds to multiview · OK plays this stream · Play starts multiview"
     else
         m.summaryLabel.text = ""
     end if
@@ -187,11 +178,26 @@ sub onMultiviewNote()
     if note = "" then return
     m.summaryLabel.color = "0xC8C8D0"
     m.summaryLabel.text = note
+    focusStreamList(-1)
+end sub
+
+' jumpTo = 0 on first paint, -1 to keep the current row
+sub focusStreamList(jumpTo as Integer)
+    if m.streams.count() = 0 then
+        m.top.setFocus(true)
+        return
+    end if
+    m.streamList.focusable = true
+    if jumpTo >= 0 then m.streamList.jumpToItem = jumpTo
+    m.streamList.setFocus(true)
 end sub
 
 sub toggleFocusedStream()
     idx = m.streamList.itemFocused
-    if idx = invalid or idx < 0 or idx >= m.streams.count() then return
+    if idx = invalid or idx < 0 or idx >= m.streams.count() then
+        focusStreamList(0)
+        return
+    end if
     stream = m.streams[idx]
     title = m.titleLabel.text
     ' Alternates of one game are told apart by their stream label
@@ -205,6 +211,7 @@ sub toggleFocusedStream()
         streamFormat: format,
         hdPosterUrl: asString(m.eventItem.hdPosterUrl)
     }
+    focusStreamList(-1)
 end sub
 
 function onKeyEvent(key as String, press as Boolean) as Boolean
@@ -213,7 +220,6 @@ function onKeyEvent(key as String, press as Boolean) as Boolean
         m.top.closed = true
         return true
     end if
-    ' OK always plays the focused stream (list may have lost focus after redraw).
     if key = "OK" then
         idx = 0
         if m.streamList <> invalid and m.streamList.itemFocused <> invalid then
