@@ -436,6 +436,11 @@ end sub
 
 sub onUpdated()
     if m.closing then return
+    ' OK→fullscreen owns the screen; ignore late layout/order PUT responses
+    if m.promoted or m.pendingPromote <> invalid then
+        m.switching = false
+        return
+    end if
     response = m.updateTask.response
     if response = invalid or response.ok <> true then
         err = "Couldn't change the layout"
@@ -443,25 +448,11 @@ sub onUpdated()
         m.focusAfterSwitch = invalid
         m.switching = false
         m.switchGen = -1
-        if m.pendingPromote <> invalid then
-            m.pendingPromote = invalid
-            m.promoted = false
-        end if
         showNotice(err)
         return
     end if
 
     m.session = response.session
-
-    ' Pause-for-promote: mosaic is down; open the normal sports player next
-    if m.pendingPromote <> invalid and response.session <> invalid then
-        if asString(response.session.state) = "paused" then
-            m.switching = false
-            m.promoteTimer.control = "stop"
-            m.promoteTimer.control = "start"
-            return
-        end if
-    end if
 
     hideOverlay()
     m.tileLayer.visible = false
@@ -547,7 +538,7 @@ end function
 '--------------------------------------------------------------------
 
 sub promoteFocused()
-    if m.promoted or m.switching or m.pendingPromote <> invalid then return
+    if m.promoted or m.pendingPromote <> invalid then return
     if m.focus >= m.tiles.count() then return
     tile = m.tiles[m.focus]
     if tile = invalid or tile.stream = invalid then return
@@ -574,12 +565,28 @@ sub promoteFocused()
     }
     print "[plexflix:multiview] promote stream=" + StrI(index).Trim() + " " + url
 
-    ' Pause mosaic first so ffmpeg/proxy are not fighting the LAN player
+    ' Don't block on the pause PUT — that left us stuck on "Opening game..."
+    ' when the response shape didn't match. Free the decoder, ask the server
+    ' to drop the mosaic in the background, then open the player.
     m.promoted = true
+    m.switching = false
+    m.settleTimer.control = "stop"
+    m.pendingOrder = invalid
     hideOverlay()
     releaseVideo()
     setStatus("Opening game...")
-    requestUpdate({ paused: true }, "")
+    firePause(true)
+    m.promoteTimer.control = "stop"
+    m.promoteTimer.control = "start"
+end sub
+
+sub firePause(paused as Boolean)
+    if m.sessionId = "" then return
+    task = createObject("roSGNode", "MultiviewTask")
+    task.config = m.top.config
+    task.action = "update"
+    task.item = { id: m.sessionId, paused: paused }
+    task.control = "RUN"
 end sub
 
 sub onPromoteReady()
