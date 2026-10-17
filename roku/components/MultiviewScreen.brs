@@ -546,7 +546,9 @@ sub promoteFocused()
     if index < 0 or index >= m.streams.count() then return
     stream = m.streams[index]
     ' Normal sports path: LAN roku-feed proxy, same as SportsDetail.
+    ' Picks use .url; tolerate .streamUrl if a caller shaped it that way.
     url = asString(stream.url)
+    if url = "" then url = asString(stream.streamUrl)
     if url = "" then return
 
     format = asString(stream.streamFormat)

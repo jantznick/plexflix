@@ -6,8 +6,11 @@ set -euo pipefail
 
 PROXY_PORT="${MULTIVIEW_PROXY_PORT:-18787}"
 export PROXY_HEADLESS="${PROXY_HEADLESS:-true}"
+export PROXY_HEADLESS_MODE="${PROXY_HEADLESS_MODE:-shell}"
 export PROXY_HOST="${PROXY_HOST:-127.0.0.1:${PROXY_PORT}}"
 export MULTIVIEW_PROXY_PORT="${PROXY_PORT}"
+# Quieter Chrome; dbus socket is often missing in containers
+export DBUS_SESSION_BUS_ADDRESS=/dev/null
 
 cd /app/proxy
 PORT="${PROXY_PORT}" node advanced-proxy.js &

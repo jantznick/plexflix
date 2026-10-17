@@ -1,0 +1,286 @@
+From 94c0159033d36d41eacb513bf07fc919d7440a9e Mon Sep 17 00:00:00 2001
+From: Cursor Agent <cursoragent@cursor.com>
+Date: Sat, 17 Oct 2026 01:31:08 +0000
+Subject: [PATCH] fix(proxy): stop Chrome SIGSEGV killing single-stream play
+
+Full Chrome headless was crashing on launch (signal 11 SI_KERNEL) inside
+Docker, so every Roku sports play 500'd while opening the embed. Prefer
+chrome-headless-shell, harden launch args, clear stuck launch promises,
+fall back to the feed URL over HTTP when embed resolve fails, and bump
+shm to 2gb.
+---
+ proxy/advanced-proxy.js  | 36 +++++++++++++--
+ proxy/browser-fetch.js   | 22 +++++++--
+ proxy/docker-compose.yml |  6 ++-
+ src/puppeteer-config.js  | 96 ++++++++++++++++++++++++++++++++--------
+ 4 files changed, 133 insertions(+), 27 deletions(-)
+
+diff --git a/proxy/advanced-proxy.js b/proxy/advanced-proxy.js
+index 14d48f1..870d3da 100644
+--- a/proxy/advanced-proxy.js
++++ b/proxy/advanced-proxy.js
+@@ -18,7 +18,7 @@ const port = process.env.PORT || 8787;
+ const proxyHost = process.env.PROXY_HOST || '192.168.1.50:8787';
+ const debug = process.env.PROXY_DEBUG === 'true';
+ 
+-const PROXY_VERSION = 'embed-first-v21-timst-unwrap';
++const PROXY_VERSION = 'embed-first-v22-chrome-shell';
+ 
+ // GOAT disguises each MPEG-TS segment as a tiny PNG so it can live on TikTok's
+ // image CDN. The real TS payload starts right after the PNG's IEND chunk. Strip
+@@ -208,7 +208,23 @@ async function resolvePlaybackContext(
+         let stream = getCachedStream(embedUrl);
+         if (!stream) {
+             console.log('  - TimStreams: opening embed for signed m3u8 + segment cookies');
+-            stream = await getResolvedStream(embedUrl);
++            try {
++                stream = await getResolvedStream(embedUrl);
++            } catch (err) {
++                // Chrome SIGSEGV / launch failures used to 500 every Roku play.
++                // Fall back to the feed's signed URL over plain HTTP.
++                console.error(
++                    `  - Embed resolve failed (${err.message}); using feed URL via HTTP`
++                );
++                return {
++                    upstreamUrl: streamUrl,
++                    referer: feedReferer,
++                    extraHeaders: feedHeaders,
++                    directOk: true,
++                    manifestBaseUrl: streamUrl,
++                    resolvedFromEmbed: false,
++                };
++            }
+         }
+         const freshUrl = stream.streamUrl || streamUrl;
+         const useFresh = isManifest && Boolean(stream.streamUrl);
+@@ -226,7 +242,21 @@ async function resolvePlaybackContext(
+     // manifest capture). Always honor the exact URL the client asked for.
+     let stream = getCachedStream(embedUrl);
+     if (!stream) {
+-        stream = await getResolvedStream(embedUrl);
++        try {
++            stream = await getResolvedStream(embedUrl);
++        } catch (err) {
++            console.error(
++                `  - Embed resolve failed (${err.message}); using feed URL via HTTP`
++            );
++            return {
++                upstreamUrl: streamUrl,
++                referer: feedReferer,
++                extraHeaders: feedHeaders,
++                directOk: true,
++                manifestBaseUrl: streamUrl,
++                resolvedFromEmbed: false,
++            };
++        }
+     }
+ 
+     return {
+diff --git a/proxy/browser-fetch.js b/proxy/browser-fetch.js
+index a79182e..c42585d 100644
+--- a/proxy/browser-fetch.js
++++ b/proxy/browser-fetch.js
+@@ -316,9 +316,16 @@ class BrowserSession {
+ async function launchBrowser() {
+     const mode = describePuppeteerMode();
+     logStep(`Launching Chromium (${mode})...`);
+-    browserLaunchPromise = launchStealthBrowser();
++    try {
++        browser = await launchStealthBrowser();
++    } catch (err) {
++        // A rejected launch promise used to stick forever and 500 every stream
++        browser = null;
++        browserLaunchPromise = null;
++        logStep(`Chromium launch failed: ${err.message}`);
++        throw err;
++    }
+ 
+-    browser = await browserLaunchPromise;
+     browser.on('disconnected', () => {
+         browser = null;
+         browserLaunchPromise = null;
+@@ -336,10 +343,17 @@ async function getBrowser() {
+         return browser;
+     }
+ 
+-    if (!browserLaunchPromise) {
+-        return launchBrowser();
++    if (browserLaunchPromise) {
++        return browserLaunchPromise;
+     }
+ 
++    browserLaunchPromise = launchBrowser().finally(() => {
++        // Only clear when this attempt finished without leaving a live browser;
++        // success keeps the handle on `browser`, failure must allow retry.
++        if (!isBrowserConnected(browser)) {
++            browserLaunchPromise = null;
++        }
++    });
+     return browserLaunchPromise;
+ }
+ 
+diff --git a/proxy/docker-compose.yml b/proxy/docker-compose.yml
+index a73032c..ad5218f 100644
+--- a/proxy/docker-compose.yml
++++ b/proxy/docker-compose.yml
+@@ -20,6 +20,8 @@ services:
+       - "${PROXY_PORT:-8787}:8787"
+     environment:
+       PROXY_HEADLESS: "true"
++      # chrome-headless-shell — full Chrome headless has been SIGSEGV'ing (signal 11)
++      PROXY_HEADLESS_MODE: "shell"
+       PORT: "8787"
+       # Must match what Roku/phones use and what the scraper writes (PROXY_SERVER without http://)
+       PROXY_HOST: "${PROXY_HOST:-192.168.1.50:8787}"
+@@ -28,6 +30,8 @@ services:
+       # Host .env may set this for the scraper; that binary is not in the image.
+       # Empty → Puppeteer uses its bundled Chromium inside the container.
+       PUPPETEER_EXECUTABLE_PATH: ""
++      DBUS_SESSION_BUS_ADDRESS: "/dev/null"
+     # Chromium needs more than Docker's default 64MB /dev/shm
+-    shm_size: "1gb"
++    shm_size: "2gb"
++    init: true
+     restart: unless-stopped
+diff --git a/src/puppeteer-config.js b/src/puppeteer-config.js
+index f7f90c5..bcc3c51 100644
+--- a/src/puppeteer-config.js
++++ b/src/puppeteer-config.js
+@@ -33,6 +33,33 @@ function resolveChromeExecutable() {
+     return undefined;
+ }
+ 
++function dockerChromeArgs() {
++    // Chrome 148+ has been segfaulting (signal 11 SI_KERNEL) in slim Docker
++    // hosts — usually GPU/SwiftShader, dbus, or zygote. Keep the surface tiny.
++    return [
++        '--no-sandbox',
++        '--disable-setuid-sandbox',
++        '--disable-dev-shm-usage',
++        '--disable-gpu',
++        '--disable-software-rasterizer',
++        '--disable-extensions',
++        '--disable-background-networking',
++        '--disable-default-apps',
++        '--disable-sync',
++        '--disable-translate',
++        '--hide-scrollbars',
++        '--metrics-recording-only',
++        '--mute-audio',
++        '--no-first-run',
++        '--no-zygote',
++        '--disable-dbus',
++        '--disable-features=TranslateUI,BlinkGenPropertyTrees,AudioServiceOutOfProcess,IsolateOrigins,site-per-process',
++        '--disable-blink-features=AutomationControlled',
++        '--window-size=1366,768',
++        '--lang=en-US,en',
++    ];
++}
++
+ /** Shared Puppeteer launch options for scraper and proxy. */
+ export function getPuppeteerLaunchOptions() {
+     // Visible by default for local debugging. Headless when:
+@@ -41,37 +68,62 @@ export function getPuppeteerLaunchOptions() {
+     const inDocker = fs.existsSync('/.dockerenv');
+     const headless = process.env.PROXY_HEADLESS === 'true' || inDocker;
+     const executablePath = resolveChromeExecutable();
++    // New headless (full Chrome) has been SIGSEGV'ing in our containers.
++    // chrome-headless-shell is the stable Docker path; override with PROXY_HEADLESS_MODE.
++    const mode = (process.env.PROXY_HEADLESS_MODE || (inDocker || headless ? 'shell' : 'true')).trim();
++    const headlessOpt = headless
++        ? (mode === 'true' || mode === 'new' ? true : mode === 'old' ? 'old' : 'shell')
++        : false;
+ 
+     return {
+-        // New headless is less bot-like than the old headless shell.
+-        headless: headless ? true : false,
++        headless: headlessOpt,
+         ...(executablePath ? { executablePath } : {}),
+-        args: [
+-            '--no-sandbox',
+-            '--disable-setuid-sandbox',
+-            '--disable-dev-shm-usage',
+-            '--disable-gpu',
+-            '--disable-blink-features=AutomationControlled',
+-            '--window-size=1366,768',
+-            '--lang=en-US,en',
+-            ...(headless ? [] : ['--start-maximized']),
+-        ],
++        args: headless || inDocker
++            ? dockerChromeArgs()
++            : [
++                '--no-sandbox',
++                '--disable-setuid-sandbox',
++                '--disable-dev-shm-usage',
++                '--disable-gpu',
++                '--disable-blink-features=AutomationControlled',
++                '--window-size=1366,768',
++                '--lang=en-US,en',
++                '--start-maximized',
++            ],
+         defaultViewport: headless
+             ? { width: 1366, height: 768, deviceScaleFactor: 1 }
+             : null,
+         ignoreHTTPSErrors: true,
++        // Avoid pipe transport flakes on some Docker kernels
++        dumpio: process.env.PROXY_DEBUG === 'true',
+     };
+ }
+ 
+ /**
+  * Launch Chromium/Chrome with stealth patches applied.
+- * Prefer this over raw `puppeteer.launch` for Cloudflare-fronted sites.
++ * Prefer this over raw `puppeteer.launch` for callers that need the base module.
++ * Tries headless shell first in Docker; on SIGSEGV-style launch failure, retries
++ * once with full headless Chrome.
+  */
+ export async function launchBrowser(extraOptions = {}) {
+     applyStealth();
+-    const options = { ...getPuppeteerLaunchOptions(), ...extraOptions };
+-    const browser = await puppeteerExtra.launch(options);
+-    return browser;
++    const base = getPuppeteerLaunchOptions();
++    const options = { ...base, ...extraOptions };
++    if (extraOptions.args && base.args) {
++        // Callers usually want to append, not wipe Docker hardening args
++        options.args = [...base.args, ...extraOptions.args];
++    }
++
++    try {
++        return await puppeteerExtra.launch(options);
++    } catch (firstErr) {
++        const triedShell = options.headless === 'shell';
++        if (!triedShell) throw firstErr;
++        console.warn(
++            `[puppeteer] headless shell launch failed (${firstErr.message}); retrying full Chrome headless`
++        );
++        return puppeteerExtra.launch({ ...options, headless: true });
++    }
+ }
+ 
+ export function describePuppeteerMode() {
+@@ -80,12 +132,18 @@ export function describePuppeteerMode() {
+     const browserLabel = executablePath
+         ? `chrome (${path.basename(executablePath)})`
+         : 'bundled-chromium';
++    const opts = getPuppeteerLaunchOptions();
++    const headlessLabel = opts.headless === false
++        ? 'visible'
++        : opts.headless === 'shell'
++            ? 'headless-shell'
++            : 'headless';
+     if (process.env.PROXY_HEADLESS === 'true' || inDocker) {
+         return inDocker
+-            ? `headless+stealth (docker, ${browserLabel})`
+-            : `headless+stealth (${browserLabel})`;
++            ? `${headlessLabel}+stealth (docker, ${browserLabel})`
++            : `${headlessLabel}+stealth (${browserLabel})`;
+     }
+-    return `visible+stealth (${browserLabel})`;
++    return `${headlessLabel}+stealth (${browserLabel})`;
+ }
+ 
+ /** Raw puppeteer export for callers that need the base module. */
+-- 
+2.43.0
+

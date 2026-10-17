@@ -6,6 +6,9 @@ services:
     container_name: plexflix-multiview
     restart: unless-stopped
     network_mode: host
+    # Chrome needs a real /dev/shm; the 64MB Docker default SIGSEGVs on launch
+    shm_size: "2gb"
+    init: true
     environment:
       # Software x264 mosaic encode (ultrafast / zerolatency in mosaic.py)
       VIDEO_BITRATE: 3M
@@ -15,6 +18,8 @@ services:
       IDLE_TIMEOUT: "90"
       MULTIVIEW_TOKEN: ""
       PROXY_HEADLESS: "true"
+      # chrome-headless-shell — full Chrome headless has been SIGSEGV'ing here
+      PROXY_HEADLESS_MODE: "shell"
       MULTIVIEW_PROXY_PORT: "18787"
       PROXY_HOST: "127.0.0.1:18787"
     tmpfs:

@@ -965,10 +965,10 @@ function onKeyEvent(key as String, press as Boolean) as Boolean
             onOpenMenu()
             return true
         end if
-    else if key = "left" and not m.navExpanded and m.videoScreen = invalid and m.detailScreen = invalid and m.castDetailScreen = invalid and m.multiviewScreen = invalid then
+    else if key = "left" and not m.navExpanded and m.videoScreen = invalid and m.detailScreen = invalid and m.castDetailScreen = invalid and m.sportsDetailScreen = invalid and m.multiviewScreen = invalid then
         ' Sports owns Left (pills move / list opens menu via openMenu)
         if m.section = "sports" and m.sportsScreen <> invalid then return false
-        ' Allow Left → menu from home / libraries / sports detail
+        ' Allow Left → menu from home / libraries
         setNavExpanded(true)
         if m.navExpanded then m.sideNav.setFocus(true)
         return true

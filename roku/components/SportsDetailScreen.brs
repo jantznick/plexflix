@@ -9,9 +9,11 @@ sub init()
 
     m.streams = []
     m.eventItem = invalid
+    m.lastPlayAt = 0
 
     m.streamList.observeField("itemSelected", "onStreamSelected")
     m.streamList.observeField("escapeBack", "onListEscapeBack")
+    m.streamList.observeField("escapeOptions", "onListEscapeOptions")
 end sub
 
 sub onContentSet()
@@ -90,6 +92,9 @@ sub setStreamCols(node as Object, c0 as String, c1 as String, c2 as String, c3 a
 end sub
 
 sub playStreamAt(idx as Integer)
+    ' itemSelected and parent OK can both fire for one press — only play once
+    now = CreateObject("roDateTime").AsSeconds()
+    if m.lastPlayAt <> 0 and now - m.lastPlayAt < 1 then return
     if idx < 0 or idx >= m.streams.count() then return
     stream = m.streams[idx]
     if stream = invalid then return
@@ -98,6 +103,7 @@ sub playStreamAt(idx as Integer)
     format = asString(stream.streamFormat)
     if format = "" and idx = 0 then format = asString(m.eventItem.streamFormat)
 
+    m.lastPlayAt = now
     m.top.streamError = ""
     m.top.playRequested = {
         title: m.titleLabel.text,
@@ -123,6 +129,10 @@ sub onListEscapeBack()
     m.top.closed = true
 end sub
 
+sub onListEscapeOptions()
+    if m.top.multiviewEnabled = true then toggleFocusedStream()
+end sub
+
 sub onCloseRequested()
     if m.top.close = true then m.top.closed = true
 end sub
@@ -134,6 +144,7 @@ sub onRefocus()
         return
     end if
     ' The list kept its own place, so the stream just tried stays highlighted
+    m.streamList.focusable = true
     m.streamList.setFocus(true)
 end sub
 
@@ -200,6 +211,15 @@ function onKeyEvent(key as String, press as Boolean) as Boolean
     if not press then return false
     if key = "back" or key = "left" then
         m.top.closed = true
+        return true
+    end if
+    ' OK always plays the focused stream (list may have lost focus after redraw).
+    if key = "OK" then
+        idx = 0
+        if m.streamList <> invalid and m.streamList.itemFocused <> invalid then
+            idx = m.streamList.itemFocused
+        end if
+        playStreamAt(idx)
         return true
     end if
     if m.top.multiviewEnabled = true then

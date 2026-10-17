@@ -59,6 +59,7 @@ sub init()
     m.multiCount = m.top.findNode("multiCount")
     m.multiList = m.top.findNode("multiList")
     m.multiHint = m.top.findNode("multiHint")
+    m.lastOpenAt = 0
 
     m.guideList.observeField("itemFocused", "onGuideFocused")
     m.guideList.observeField("itemSelected", "onGuideSelected")
@@ -553,6 +554,14 @@ sub refreshScoreRows()
             root.replaceChild(fresh, i)
         end if
     end for
+    ' replaceChild can drop list focus; put it back so OK keeps working
+    if m.zone = "list" and m.events.count() > 0 then
+        m.guideList.focusable = true
+        m.guideList.setFocus(true)
+        if m.currentIndex >= 0 and m.currentIndex < m.events.count() then
+            m.guideList.jumpToItem = m.currentIndex
+        end if
+    end if
 end sub
 
 '--------------------------------------------------------------------
@@ -636,14 +645,25 @@ end sub
 sub refreshMultiviewRows()
     root = m.guideList.content
     if root = invalid then return
+    changed = false
     for i = 0 to m.events.count() - 1
         if i < root.getChildCount() then
             old = root.getChild(i)
             fresh = createObject("roSGNode", "ContentNode")
             applySportsLine(fresh, m.events[i], asString(m.events[i].league))
-            if fresh.col3 <> old.col3 then root.replaceChild(fresh, i)
+            if fresh.col3 <> old.col3 then
+                root.replaceChild(fresh, i)
+                changed = true
+            end if
         end if
     end for
+    if changed and m.zone = "list" and m.events.count() > 0 then
+        m.guideList.focusable = true
+        m.guideList.setFocus(true)
+        if m.currentIndex >= 0 and m.currentIndex < m.events.count() then
+            m.guideList.jumpToItem = m.currentIndex
+        end if
+    end if
 end sub
 
 sub paintMultiTray()
@@ -850,8 +870,16 @@ end sub
 
 sub requestOpen()
     if m.events.count() = 0 then return
+    now = CreateObject("roDateTime").AsSeconds()
+    if m.lastOpenAt <> 0 and now - m.lastOpenAt < 1 then return
+    ' Prefer the list's focused row when it still has focus
+    if m.guideList <> invalid and m.guideList.itemFocused <> invalid then
+        focused = m.guideList.itemFocused
+        if focused >= 0 and focused < m.events.count() then m.currentIndex = focused
+    end if
     item = m.events[m.currentIndex]
     if item = invalid then return
+    m.lastOpenAt = now
     m.top.selectedItem = item
 end sub
 
@@ -908,8 +936,16 @@ function onKeyEvent(key as String, press as Boolean) as Boolean
         openFeedOptions()
         return true
     end if
-    if m.multiEnabled and m.zone = "list" then
-        if key = "play" then
+    if m.zone = "list" then
+        ' Backup when the guide list lost focus after a score/multiview redraw:
+        ' OK must still open the focused event. Skip when the list itself has
+        ' focus — itemSelected already handles that path.
+        if key = "OK" then
+            if m.guideList <> invalid and m.guideList.isInFocusChain() then return false
+            requestOpen()
+            return true
+        end if
+        if m.multiEnabled and key = "play" then
             message = requestMultiview()
             if message <> "" then m.statusLabel.text = message
             return true
