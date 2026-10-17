@@ -108,6 +108,7 @@ sub init()
 
     ' HE-AAC → AAC-LC remux retry via :8787 /remux/ (Matchora etc.)
     m.remuxRetried = false
+    m.remuxInFlight = false
     m.directPlayUrl = ""
 
     m.clock24 = (CreateObject("roDeviceInfo").GetClockFormat() = "24h")
@@ -143,6 +144,7 @@ sub onContentSet()
     m.isLive = (mediaType = "livetv" or (directUrl <> "" and Left(directUrl, 4) = "http"))
     m.isSport = (mediaType = "sport")
     m.remuxRetried = false
+    m.remuxInFlight = false
     m.directPlayUrl = ""
 
     paintMeta()
@@ -317,6 +319,7 @@ sub onVideoState()
     if state = "playing" or state = "paused" then m.stallTimer.control = "stop"
 
     if state = "playing" then
+        m.remuxInFlight = false
         m.started = true
         m.paused = false
         clearStatus()
@@ -334,6 +337,8 @@ sub onVideoState()
         ' came from opening the cast modal, which owns the screen already
         if m.zone <> "castModal" then showControls(activeZone())
     else if state = "buffering" then
+        ' Remux play got far enough to buffer — keep going.
+        m.remuxInFlight = false
         m.lastBufferPct = -1
         showBuffering(bufferPercent())
         restartStallTimer()
@@ -343,10 +348,17 @@ sub onVideoState()
         ' Matchora / some IPTV feeds ship HE-AAC; Roku rejects it while browsers
         ' play fine. Retry once through the proxy's AAC-LC remux path.
         if tryRemuxAfterAacError() then return
+        m.remuxInFlight = false
         sendPlaybackActions([releaseAction()])
         failStream("Playback failed")
     else if state = "finished" then
         m.reportTimer.control = "stop"
+        ' control="stop" / content swap while kicking remux often emits finished
+        ' with the stale AAC error — ignore that so /remux can actually start.
+        if m.remuxInFlight = true then
+            logPlayback("ignoring finished during remux retry")
+            return
+        end if
         if playedToEnd() then
             rememberLiveContinueWatch()
             sendPlaybackActions([scrobbleAction(), releaseAction()])
@@ -526,9 +538,11 @@ function tryRemuxAfterAacError() as Boolean
     if remuxUrl = "" then return false
 
     m.remuxRetried = true
+    m.remuxInFlight = true
     logPlayback("AAC unsupported — retrying via remux")
     setStatus("Re-encoding audio for Roku...")
-    if m.video <> invalid then m.video.control = "stop"
+    ' Do not video.control="stop" first — that emits finished with the stale AAC
+    ' error and abort the remux before :8787 ever sees /remux/.
     playDirect(remuxUrl, m.top.content)
     return true
 end function
