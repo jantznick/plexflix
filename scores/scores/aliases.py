@@ -12,7 +12,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
-from .leagues import LEAGUES
+from .leagues import COLLEGE_LEAGUES, LEAGUES
 
 DATA_DIR = Path(__file__).resolve().parent.parent / "data"
 TEAMS_PATH = DATA_DIR / "teams.json"
@@ -192,6 +192,179 @@ EXTRA_ALIASES: dict[str, dict[str, str]] = {
         "cards": "STL",
         "cardinals": "STL",
     },
+    "wnba": {
+        "aces": "LV",
+        "las vegas": "LV",
+        "liberty": "NY",
+        "new york liberty": "NY",
+        "sky": "CHI",
+        "dream": "ATL",
+        "sun": "CON",
+        "connecticut": "CON",
+        "mystics": "WSH",
+        "sparks": "LA",
+        "mercury": "PHX",
+        "phoenix": "PHX",
+        "storm": "SEA",
+        "wings": "DAL",
+        "fever": "IND",
+        "lynx": "MIN",
+    },
+    "mls": {
+        "atlanta united": "ATL",
+        "austin": "ATX",
+        "austin fc": "ATX",
+        "inter miami": "MIA",
+        "miami": "MIA",
+        "lafc": "LAFC",
+        "la galaxy": "LA",
+        "galaxy": "LA",
+        "nycfc": "NYC",
+        "new york city": "NYC",
+        "red bulls": "RBNY",
+        "ny red bulls": "RBNY",
+        "seattle sounders": "SEA",
+        "sounders": "SEA",
+        "portland": "POR",
+        "timbers": "POR",
+        "whitecaps": "VAN",
+        "vancouver": "VAN",
+        "cf montreal": "MTL",
+        "montreal": "MTL",
+        "toronto fc": "TOR",
+        "crew": "CLB",
+        "columbus": "CLB",
+        "fc cincinnati": "CIN",
+        "cincinnati": "CIN",
+        "st louis city": "STL",
+        "nashville sc": "NSH",
+        "nashville": "NSH",
+        "orlando city": "ORL",
+        "charlotte fc": "CLT",
+        "charlotte": "CLT",
+        "real salt lake": "RSL",
+        "rsl": "RSL",
+        "sporting kc": "SKC",
+        "skc": "SKC",
+        "minnesota united": "MIN",
+        "loons": "MIN",
+        "fc dallas": "DAL",
+        "houston dynamo": "HOU",
+        "dynamo": "HOU",
+        "san jose": "SJ",
+        "earthquakes": "SJ",
+        "quakes": "SJ",
+        "colorado rapids": "COL",
+        "rapids": "COL",
+        "chicago fire": "CHI",
+        "dc united": "DC",
+        "d c united": "DC",
+        "new england": "NE",
+        "revolution": "NE",
+        "philadelphia union": "PHI",
+        "union": "PHI",
+    },
+    "epl": {
+        "man city": "MNC",
+        "manchester city": "MNC",
+        "man united": "MAN",
+        "man utd": "MAN",
+        "manchester united": "MAN",
+        "spurs": "TOT",
+        "tottenham": "TOT",
+        "gunners": "ARS",
+        "arsenal": "ARS",
+        "chelsea": "CHE",
+        "liverpool": "LIV",
+        "newcastle": "NEW",
+        "magpies": "NEW",
+        "villa": "AVL",
+        "aston villa": "AVL",
+        "brighton": "BHA",
+        "seagulls": "BHA",
+        "crystal palace": "CRY",
+        "palace": "CRY",
+        "fulham": "FUL",
+        "brentford": "BRE",
+        "bournemouth": "BOU",
+        "nottingham forest": "NFO",
+        "forest": "NFO",
+        "everton": "EVE",
+        "toffees": "EVE",
+        "ipswich": "IPS",
+        "leeds": "LEE",
+        "leeds united": "LEE",
+        "sunderland": "SUN",
+        "coventry": "COV",
+        "hull": "HUL",
+        "hull city": "HUL",
+    },
+    # School-name helpers for college boards (mascots are not indexed alone)
+    "ncaaf": {
+        "ohio st": "OSU",
+        "ohio state": "OSU",
+        "penn st": "PSU",
+        "penn state": "PSU",
+        "florida st": "FSU",
+        "florida state": "FSU",
+        "michigan st": "MSU",
+        "michigan state": "MSU",
+        "oklahoma st": "OKST",
+        "oklahoma state": "OKST",
+        "oregon st": "ORST",
+        "oregon state": "ORST",
+        "mississippi st": "MSST",
+        "mississippi state": "MSST",
+        "washington st": "WSU",
+        "washington state": "WSU",
+        "ole miss": "MISS",
+        "lsu": "LSU",
+        "usc": "USC",
+        "ucla": "UCLA",
+        "byu": "BYU",
+        "tcu": "TCU",
+        "smu": "SMU",
+        "ucf": "UCF",
+        "usu": "USU",
+        "texas a m": "TA&M",
+        "texas am": "TA&M",
+        "a m": "TA&M",
+        "notre dame": "ND",
+        "miami fl": "MIA",
+        "miami florida": "MIA",
+        "boston college": "BC",
+    },
+    "ncaah": {
+        "ohio st": "OSU",
+        "ohio state": "OSU",
+        "penn st": "PSU",
+        "penn state": "PSU",
+        "michigan st": "MSU",
+        "michigan state": "MSU",
+        "minnesota st": "MNST",
+        "minnesota state": "MNST",
+        "boston university": "BU",
+        "boston u": "BU",
+        "bu": "BU",
+        "bc": "BC",
+        "boston college": "BC",
+        "umass": "MASS",
+        "massachusetts": "MASS",
+        "uconn": "CONN",
+        "connecticut": "CONN",
+        "north dakota": "UND",
+        "und": "UND",
+        "denver": "DEN",
+        "providence": "PROV",
+        "quinnipiac": "QUIN",
+        "st cloud": "SCSU",
+        "st cloud state": "SCSU",
+        "minnesota duluth": "UMD",
+        "umd": "UMD",
+        "wisconsin": "WIS",
+        "notre dame": "ND",
+        "northeastern": "NE",
+    },
 }
 
 _SPLIT_RE = re.compile(
@@ -248,31 +421,59 @@ def build_alias_index(
     for league, teams in catalog.items():
         by_abbr = {t["abbreviation"].upper(): t for t in teams if t.get("abbreviation")}
         index: dict[str, set[str]] = {}
-        for team in teams:
-            tid = team["id"]
-            for field in (
+        # College mascots collide endlessly (Bulldogs/Tigers); school names matter
+        if league in COLLEGE_LEAGUES:
+            fields = ("abbreviation", "location", "displayName")
+        else:
+            fields = (
                 "abbreviation",
                 "name",
                 "location",
                 "displayName",
                 "shortDisplayName",
-            ):
+            )
+        for team in teams:
+            tid = team["id"]
+            for field in fields:
                 _add_alias(index, team.get(field) or "", tid)
             slug = (team.get("slug") or "").replace("-", " ")
             _add_alias(index, slug, tid)
-            # "Boston Bruins" also yields "Boston" + "Bruins" already via fields
 
         for alias, target in EXTRA_ALIASES.get(league, {}).items():
-            team = by_abbr.get(target.upper())
+            team = _resolve_extra_target(teams, target)
             if team is None:
-                # Allow raw ESPN ids in EXTRA_ALIASES if needed later
-                if any(t["id"] == str(target) for t in teams):
-                    _add_alias(index, alias, str(target))
                 continue
             _add_alias(index, alias, team["id"])
 
         out[league] = index
     return out
+
+
+def _resolve_extra_target(teams: list[dict[str, str]], target: str) -> dict[str, str] | None:
+    """Map EXTRA_ALIASES values to a team (abbr, id, or unique location/name)."""
+    raw = str(target or "").strip()
+    if not raw:
+        return None
+    for team in teams:
+        if team["id"] == raw:
+            return team
+
+    key = normalize_text(raw)
+    loc_hits = [t for t in teams if normalize_text(t.get("location") or "") == key]
+    if len(loc_hits) == 1:
+        return loc_hits[0]
+    display_hits = [t for t in teams if normalize_text(t.get("displayName") or "") == key]
+    if len(display_hits) == 1:
+        return display_hits[0]
+
+    abbr = raw.upper()
+    abbr_hits = [t for t in teams if (t.get("abbreviation") or "").upper() == abbr]
+    if not abbr_hits:
+        return None
+    if len(abbr_hits) == 1:
+        return abbr_hits[0]
+    # Duplicate abbrs (OSU Buckeyes vs OSU Newark): prefer the shortest location
+    return sorted(abbr_hits, key=lambda t: (len(t.get("location") or ""), t.get("location") or ""))[0]
 
 
 def teams_by_id(
