@@ -68,7 +68,7 @@
                 <Label translation="[28, 16]" width="920" height="28" text="Not in your library" color="0xE5A00D">
                     <Font role="font" uri="pkg:/fonts/Outfit-SemiBold.ttf" size="18" />
                 </Label>
-                <Label id="unavailableBody" translation="[28, 48]" width="920" height="40" text="We don't have this one yet — but we can get it soon." color="0xF0F0F4" wrap="true" maxLines="1">
+                <Label id="unavailableBody" translation="[28, 48]" width="920" height="40" text="We don't have this one yet." color="0xF0F0F4" wrap="true" maxLines="1">
                     <Font role="font" uri="pkg:/fonts/Outfit-Regular.ttf" size="24" />
                 </Label>
             </Group>

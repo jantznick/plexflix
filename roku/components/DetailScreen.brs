@@ -617,11 +617,11 @@ function unavailableMessage(item as Object) as String
     mt = ""
     if item <> invalid then mt = asString(item.mediaType)
     if mt = "show" or mt = "series" or mt = "tv" then
-        return "We don't have this show yet — but we can get it soon."
+        return "We don't have this show yet."
     else if mt = "movie" then
-        return "We don't have this movie yet — but we can get it soon."
+        return "We don't have this movie yet."
     end if
-    return "We don't have this one yet — but we can get it soon."
+    return "We don't have this one yet."
 end function
 
 sub loadUnavailableDetail(item as Object)
