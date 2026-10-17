@@ -67,9 +67,10 @@ This is intentionally a **design/UX shell** on top of existing Plex data. Creden
 - Discover titles not in Plex open a **Not in your library** detail view (no Play)
   with synopsis, similar local picks, **Add to Watchlist**, and optional **Grab Now**
   (only when `grabUrl` is set; fails open if the grab server is down)
-- Partial library shows fill season gaps from TMDB: missing episodes appear greyed
-  with a **GRAB** badge; OK starts Grab Now for that episode and the tile flips to
-  playable in place when Plex indexes it
+- Partial library shows fill season gaps from TMDB: every season gets a row (even
+  ones not in Plex yet), and missing episodes appear greyed with a **GRAB** badge;
+  OK starts Grab Now for that episode and the tile flips to playable in place when
+  Plex indexes it
 
 ## Configure before sideload
 
