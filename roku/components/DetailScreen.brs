@@ -62,6 +62,10 @@ sub init()
     m.grabPollIndex = 0
     m.grabCreateBusy = false
     m.showTmdbId = ""
+    m.focusEpisodeMissing = false
+    m.unavailableIsShow = false
+    m.grabStatusHold = ""
+    m.grabStatusHoldKey = ""
     m.watchedBusy = false
     m.itemWatched = false
     m.canResume = false
@@ -97,6 +101,10 @@ sub onContentSet()
     m.grabPollIndex = 0
     m.grabCreateBusy = false
     m.showTmdbId = ""
+    m.focusEpisodeMissing = false
+    m.unavailableIsShow = false
+    m.grabStatusHold = ""
+    m.grabStatusHoldKey = ""
     m.watchedBusy = false
     m.trailer = invalid
     m.reviews = []
@@ -390,14 +398,26 @@ sub onSeasonItemFocused()
     mediaType = asString(item.mediaType)
     if mediaType = "episode" then
         applyEpisodeHeader(item)
-        m.focusGrabKey = grabKeyForEpisode(item)
+        newKey = grabKeyForEpisode(item)
+        if asString(m.grabStatusHoldKey) <> "" and asString(m.grabStatusHoldKey) <> newKey then
+            m.grabStatusHold = ""
+            m.grabStatusHoldKey = ""
+        end if
+        m.focusGrabKey = newKey
+        m.focusEpisodeMissing = (item.DoesExist("missing") and item.missing = true)
         paintFocusSoftStatus()
+        ' Play / From Start / Mark Watched only apply to episodes we actually own
+        if m.isUnavailable <> true then rebuildActionRow()
     else
         ' Cast / other rows under the same list — show synopsis again
         m.focusGrabKey = ""
+        m.focusEpisodeMissing = false
+        m.grabStatusHold = ""
+        m.grabStatusHoldKey = ""
         restoreShowHeader()
         if m.top.content <> invalid then refreshPlayState(m.top.content)
         paintFocusSoftStatus()
+        if m.isUnavailable <> true then rebuildActionRow()
     end if
 end sub
 
@@ -454,12 +474,16 @@ end sub
 
 sub showUnavailableMode(item as Object)
     m.isUnavailable = true
-    m.isShow = false
+    m.trailer = invalid
+    m.canResume = false
+    m.focusEpisodeMissing = false
+    mt = ""
+    if item <> invalid then mt = LCase(asString(item.mediaType))
+    m.unavailableIsShow = (mt = "show" or mt = "series" or mt = "tv" or mt = "season")
+    m.isShow = m.unavailableIsShow
     m.tvPanel.visible = false
     m.relatedPanel.visible = false
     m.movieActions.visible = true
-    m.trailer = invalid
-    m.canResume = false
     if m.ratingLabel <> invalid then m.ratingLabel.text = ""
     if m.reviewLabel <> invalid then m.reviewLabel.text = ""
     if m.relatedPanel <> invalid then m.relatedPanel.translation = [0, 440]
@@ -564,6 +588,12 @@ sub paintFocusSoftStatus()
             m.softStatus.text = asString(job.line)
             return
         end if
+    end if
+
+    ' Keep a just-finished error/ready line until focus moves away
+    if asString(m.grabStatusHold) <> "" and key <> "" and key = asString(m.grabStatusHoldKey) then
+        m.softStatus.text = asString(m.grabStatusHold)
+        return
     end if
 
     ' No active grab for the focused ep — missing hint or clear
@@ -708,10 +738,21 @@ sub onUnavailableLoaded()
             if asString(detail.guid) <> "" then content.guid = detail.guid
             if asString(response.discoverRatingKey) <> "" then content.discoverRatingKey = response.discoverRatingKey
             if asString(response.guid) <> "" then content.guid = response.guid
+            if asString(response.tmdbId) <> "" then
+                content.tmdbId = asString(response.tmdbId)
+                m.showTmdbId = asString(response.tmdbId)
+            else if asString(detail.tmdbId) <> "" then
+                content.tmdbId = asString(detail.tmdbId)
+                m.showTmdbId = asString(detail.tmdbId)
+            end if
             content.onWatchlist = m.onWatchlist
             content.isDiscover = true
             content.unavailable = true
         end if
+    else if response.DoesExist("tmdbId") and asString(response.tmdbId) <> "" then
+        m.showTmdbId = asString(response.tmdbId)
+        content = m.top.content
+        if content <> invalid then content.tmdbId = m.showTmdbId
     end if
 
     castItems = response.cast
@@ -733,7 +774,22 @@ sub onUnavailableLoaded()
         appendItemsRow(m.relatedContent, "Cast", castItems)
     end if
     m.relatedRows.content = m.relatedContent
-    if similarItems.count() > 0 or castItems.count() > 0 then
+
+    ' Unavailable series: load TMDB season rails (newest first). Movies keep similar/cast.
+    if m.unavailableIsShow = true then
+        if m.relatedPanel <> invalid then m.relatedPanel.translation = [0, 760]
+        if similarItems.count() > 0 or castItems.count() > 0 then
+            m.relatedPanel.visible = true
+        end if
+        if pageGrabJob() = invalid then
+            if m.showTmdbId <> "" then
+                setSoftStatusHint("Loading seasons…")
+            else
+                setSoftStatusHint("Couldn't resolve seasons — grab individual episodes once listed")
+            end if
+        end if
+        loadUnavailableShowSeasons()
+    else if similarItems.count() > 0 or castItems.count() > 0 then
         m.relatedPanel.visible = true
         if similarItems.count() > 0 then
             setSoftStatusHint("Similar titles already in your library")
@@ -747,6 +803,33 @@ sub onUnavailableLoaded()
     m.focusIndex = 0
     rebuildActionRow()
     m.top.setFocus(true)
+end sub
+
+sub loadUnavailableShowSeasons()
+    if m.unavailableIsShow <> true then return
+    item = m.top.content
+    if item = invalid then return
+    if m.showTmdbId = "" and asString(item.tmdbId) = "" then return
+
+    m.loadMode = "seasons"
+    m.pendingSeason = item
+    m.task = createObject("roSGNode", "PlexTask")
+    m.task.config = m.top.config
+    m.task.action = "showSeasons"
+    m.task.item = {
+        ratingKey: "",
+        title: asString(item.title),
+        year: asString(item.year),
+        hdPosterUrl: asString(item.hdPosterUrl),
+        hdShowPosterUrl: asString(item.hdShowPosterUrl),
+        tmdbId: m.showTmdbId,
+        showTmdbId: m.showTmdbId,
+        mediaType: "show"
+    }
+    if asString(m.task.item.tmdbId) = "" then m.task.item.tmdbId = asString(item.tmdbId)
+    if asString(m.task.item.showTmdbId) = "" then m.task.item.showTmdbId = asString(item.tmdbId)
+    m.task.observeField("response", "onChildrenLoaded")
+    m.task.control = "RUN"
 end sub
 
 sub loadChildren(item as Object, mode as String)
@@ -863,10 +946,24 @@ sub onChildrenLoaded()
             row.title = title
         end for
         m.seasonRows.content = m.seasonContent
-        if items.count() = 0 then return
-        ' Prefer the Continue Watching season first so focus lands sooner
-        prioritizeFocusSeason()
-        if m.focusEpisodeKey <> "" then m.seasonRows.setFocus(true)
+        if items.count() = 0 then
+            if m.isUnavailable = true and m.unavailableIsShow = true then
+                setSoftStatusHint("No seasons found — try Watchlist instead")
+            end if
+            return
+        end if
+        if m.isUnavailable = true and m.unavailableIsShow = true then
+            ' Discover series: season rails under the unavailable banner
+            if m.tvPanel <> invalid then
+                m.tvPanel.translation = [0, 450]
+                m.tvPanel.visible = true
+            end if
+            if pageGrabJob() = invalid then setSoftStatusHint("OK on a grey episode to Grab Now")
+        else
+            ' Prefer the Continue Watching season first so focus lands sooner
+            prioritizeFocusSeason()
+            if m.focusEpisodeKey <> "" then m.seasonRows.setFocus(true)
+        end if
         loadSeasonEpisodes()
     else if m.loadMode = "episodes" then
         if response.DoesExist("showTmdbId") and asString(response.showTmdbId) <> "" then
@@ -1318,12 +1415,22 @@ sub rebuildActionRow()
     ' Pack visible buttons left-to-right; focus order matches left→right
     specs = []
     if m.isUnavailable = true then
-        ' Fail-open: Grab Now only when grabUrl is configured
-        if grabIsConfigured() = true then
+        ' Whole-show Grab Now is not supported — only individual episodes.
+        ' Movies still get Grab Now; Discover series use season/episode rails.
+        if m.unavailableIsShow <> true and grabIsConfigured() = true then
             specs.push({ id: "grab", node: m.grabBtn, width: 200 })
         end if
         specs.push({ id: "watchlist", node: m.watchlistBtn, width: 300 })
         specs.push({ id: "back", node: m.backBtn, width: 140 })
+    else if m.focusEpisodeMissing = true then
+        ' Focused episode isn't in the library — no Play / watched controls
+        if m.trailer <> invalid then
+            specs.push({ id: "trailer", node: m.trailerBtn, width: 170 })
+        end if
+        specs.push({ id: "back", node: m.backBtn, width: 140 })
+        if m.isShow = true then
+            specs.push({ id: "random", node: m.randomBtn, width: 170 })
+        end if
     else
         specs.push({ id: "play", node: m.playBtn, width: 200 })
         if m.canResume = true then
@@ -1526,33 +1633,37 @@ sub requestGrabNow()
     item = m.top.content
     if item = invalid then return
 
+    mt = LCase(asString(item.mediaType))
+    ' No whole-series grab — only movies at page level; TV is per-episode OK
+    if mt = "show" or mt = "series" or mt = "tv" or mt = "season" then
+        if m.softStatus <> invalid then
+            m.softStatus.text = "Pick an episode below to Grab Now"
+        end if
+        if m.tvPanel <> invalid and m.tvPanel.visible = true then
+            m.seasonRows.setFocus(true)
+        end if
+        return
+    end if
+
     payload = {
         title: asString(item.title),
         year: asString(item.year),
-        mediaType: asString(item.mediaType),
+        mediaType: "movie",
         tmdbId: asString(item.tmdbId),
         imdbId: asString(item.imdbId),
         tvdbId: asString(item.tvdbId),
         guid: asString(item.guid),
         grabKey: "page"
     }
-    mt = LCase(payload.mediaType)
-    if mt = "show" or mt = "series" or mt = "tv" or mt = "season" or mt = "episode" then
-        payload.mediaType = "episode"
-        payload.season = 1
-        payload.episode = 1
-        if item.DoesExist("season") and item.season <> invalid then payload.season = item.season
-        if item.DoesExist("episode") and item.episode <> invalid then payload.episode = item.episode
-    else
-        payload.mediaType = "movie"
-    end if
 
     m.focusGrabKey = "page"
+    m.grabStatusHold = ""
+    m.grabStatusHoldKey = ""
     startGrabJob(payload, {
         key: "page",
         kind: "page",
-        season: asString(payload.season),
-        episode: asString(payload.episode),
+        season: "",
+        episode: "",
         seasonRow: -1,
         episodeCol: -1,
         showRatingKey: ""
@@ -1609,11 +1720,13 @@ sub requestGrabEpisode(epNode as Object, seasonRowIndex as Integer, episodeColIn
     if show <> invalid then payload.year = asString(show.year)
 
     m.focusGrabKey = key
+    m.grabStatusHold = ""
+    m.grabStatusHoldKey = ""
     startGrabJob(payload, {
         key: key,
         kind: "episode",
-        season: asString(epNode.parentIndex),
-        episode: asString(epNode.index),
+        season: asString(seasonNum),
+        episode: asString(episodeNum),
         seasonRow: seasonRowIndex,
         episodeCol: episodeColIndex,
         showRatingKey: showKey
@@ -1711,7 +1824,7 @@ sub onGrabCreated()
         if response <> invalid and asString(response.error) <> "" then err = asString(response.error)
         if job <> invalid then
             setGrabJobLine(job, err)
-            finishGrabJob(key)
+            finishGrabJob(key, true)
         else if m.softStatus <> invalid and asString(m.focusGrabKey) = key then
             m.softStatus.text = err
         end if
@@ -1723,7 +1836,7 @@ sub onGrabCreated()
     if remote = invalid or asString(remote.id) = "" then
         if job <> invalid then
             setGrabJobLine(job, "Grab unavailable — try again later")
-            finishGrabJob(key)
+            finishGrabJob(key, true)
         end if
         paintGrabLabel()
         return
@@ -1757,15 +1870,25 @@ sub stopGrabPolling()
     paintGrabLabel()
 end sub
 
-sub finishGrabJob(key as String)
+sub finishGrabJob(key as String, keepLine = false as Boolean)
     if m.grabJobs = invalid then return
     if m.grabJobs.DoesExist(key) <> true then return
     job = m.grabJobs[key]
-    if job <> invalid then job.active = false
+    lastLine = ""
+    if job <> invalid then
+        job.active = false
+        lastLine = asString(job.line)
+    end if
     m.grabJobs.delete(key)
     paintGrabLabel()
     if grabActiveCount() = 0 and m.grabPollTimer <> invalid then
         m.grabPollTimer.control = "stop"
+    end if
+    if keepLine = true and lastLine <> "" and asString(m.focusGrabKey) = key then
+        m.grabStatusHold = lastLine
+        m.grabStatusHoldKey = key
+        if m.softStatus <> invalid then m.softStatus.text = lastLine
+        return
     end if
     if asString(m.focusGrabKey) = key then paintFocusSoftStatus()
 end sub
@@ -1866,7 +1989,7 @@ sub onGrabStatus()
             err = "Lost contact with grab server — download may still finish in NZBGet"
             if response <> invalid and asString(response.error) <> "" then err = asString(response.error)
             setGrabJobLine(job, err)
-            finishGrabJob(key)
+            finishGrabJob(key, true)
         end if
         return
     end if
@@ -1894,6 +2017,12 @@ sub applyGrabJobStatusToKey(key as String, remote as Object)
     if status = "ready" then
         paintGrabLabel()
         if job.kind = "episode" then
+            ' Discover-only shows have no Plex show key yet — don't spin forever
+            if asString(job.showRatingKey) = "" then
+                setGrabJobLine(job, "Downloaded — refresh Plex when it appears")
+                finishGrabJob(key, true)
+                return
+            end if
             job.awaitingEpisode = true
             job.awaitingPlex = false
             setGrabJobLine(job, "Ready — waiting for Plex to index…")
@@ -1911,7 +2040,7 @@ sub applyGrabJobStatusToKey(key as String, remote as Object)
         err = message
         if err = "" then err = "Grab failed — try again or use Watchlist"
         setGrabJobLine(job, err)
-        finishGrabJob(key)
+        finishGrabJob(key, true)
         return
     end if
 
@@ -1952,12 +2081,10 @@ sub onFindLocalEpisode()
     end if
 
     promoteMissingEpisodeTile(response.item, job)
+    m.focusEpisodeMissing = false
+    if m.isUnavailable <> true then rebuildActionRow()
     setGrabJobLine(job, "Ready — press OK to Play")
-    finishGrabJob(key)
-    ' After finish, focused missing hint would clear — keep ready message briefly
-    if asString(m.focusGrabKey) = key and m.softStatus <> invalid then
-        m.softStatus.text = "Ready — press OK to Play"
-    end if
+    finishGrabJob(key, true)
 end sub
 
 sub promoteMissingEpisodeTile(localEp as Object, job as Object)
@@ -2048,6 +2175,7 @@ end sub
 
 sub requestMoviePlay(startOver = false as Boolean)
     if m.isUnavailable = true then return
+    if m.focusEpisodeMissing = true then return
     item = m.top.content
     if item = invalid then return
 
@@ -2060,6 +2188,10 @@ sub requestMoviePlay(startOver = false as Boolean)
                 if row <> invalid then
                     ep = row.getChild(info[1])
                     if ep <> invalid and asString(ep.mediaType) = "episode" then
+                        if ep.DoesExist("missing") and ep.missing = true then
+                            requestGrabEpisode(ep, info[0], info[1])
+                            return
+                        end if
                         payload = nodeToItem(ep)
                         if startOver = true then payload.viewOffset = 0
                         m.top.playRequested = payload
