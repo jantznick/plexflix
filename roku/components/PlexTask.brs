@@ -1866,16 +1866,18 @@ function fetchChildren(cfg as Object, item as Object) as Object
 end function
 
 ' Show-level season rails: Plex-owned seasons merged with TMDB so seasons we
-' don't have (or don't have at all yet) still get a row. Fail-open to owned-only
-' when TMDB is unavailable.
+' don't have (or don't have at all yet) still get a row. Works for Discover
+' titles with only a TMDB id (no Plex show ratingKey). Newest season first.
+' Fail-open to owned-only when TMDB is unavailable.
 function fetchShowSeasons(cfg as Object, item as Object) as Object
     if item = invalid then return { ok: false, error: "No item" }
     showKey = safeToStr(item.ratingKey)
-    if showKey = "" then return { ok: false, error: "Missing ratingKey" }
 
-    ownedResult = plexGet(cfg, "/library/metadata/" + showKey + "/children")
     owned = []
-    if ownedResult.ok = true then owned = collectMetadata(cfg, ownedResult.json)
+    if showKey <> "" then
+        ownedResult = plexGet(cfg, "/library/metadata/" + showKey + "/children")
+        if ownedResult.ok = true then owned = collectMetadata(cfg, ownedResult.json)
+    end if
 
     showTitle = safeToStr(item.title)
     showYear = safeToStr(item.year)
@@ -1884,10 +1886,10 @@ function fetchShowSeasons(cfg as Object, item as Object) as Object
 
     tmdbId = safeToStr(item.tmdbId)
     if tmdbId = "" then tmdbId = safeToStr(item.showTmdbId)
-    if tmdbId = "" then tmdbId = resolveShowTmdbId(cfg, showKey)
+    if tmdbId = "" and showKey <> "" then tmdbId = resolveShowTmdbId(cfg, showKey)
     if tmdbId = "" and showTitle <> "" then tmdbId = searchTmdbShowId(cfg, showTitle, showYear)
 
-    if showPosterUrl = "" then showPosterUrl = resolveShowPosterUrl(cfg, showKey)
+    if showPosterUrl = "" and showKey <> "" then showPosterUrl = resolveShowPosterUrl(cfg, showKey)
 
     guide = []
     if tmdbId <> "" then guide = fetchTmdbShowSeasons(cfg, tmdbId)
@@ -2171,7 +2173,29 @@ function mergeShowSeasons(owned as Object, guide as Object, showKey as String, s
         end for
     end if
 
-    return merged
+    ' Newest season first (S51 → S1); Specials stay at the end if present
+    return reverseSeasonsNewestFirst(merged)
+end function
+
+function reverseSeasonsNewestFirst(seasons as Object) as Object
+    if seasons = invalid or seasons.count() <= 1 then return seasons
+    specials = []
+    regular = []
+    for each season in seasons
+        if safeToStr(season.index) = "0" then
+            specials.push(season)
+        else
+            regular.push(season)
+        end if
+    end for
+    out = []
+    for i = regular.count() - 1 to 0 step -1
+        out.push(regular[i])
+    end for
+    for each season in specials
+        out.push(season)
+    end for
+    return out
 end function
 
 function mergeSeasonEpisodes(owned as Object, guide as Object, seasonNum as String, tmdbId as String, showKey as String, showTitle as String, showPosterUrl as String) as Object
