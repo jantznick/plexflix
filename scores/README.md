@@ -1,7 +1,8 @@
 # PlexFlix Scores API
 
 Home-server sidecar that turns Live Sports feed titles into live/final scores for
-the **big four** leagues (NHL, NBA, NFL, MLB).
+NHL, NBA, NFL, MLB, plus **WNBA**, **MLS**, **EPL**, **NCAAF**, and **NCAA D1
+men’s hockey**.
 
 Roku calls this API; this service calls ESPN’s public Site API v2 scoreboards.
 Matching is dictionary-based (team cities / nicknames / abbreviations → ESPN

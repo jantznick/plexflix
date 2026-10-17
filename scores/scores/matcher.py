@@ -6,7 +6,7 @@ from typing import Any
 
 from .aliases import default_alias_index, default_teams_by_id, find_teams_in_title
 from .espn import display_status, score_line
-from .leagues import normalize_league
+from .leagues import candidate_leagues, normalize_league
 
 
 def _pair_key(a: str, b: str) -> frozenset[str]:
@@ -93,26 +93,83 @@ def resolve_title(
     if canon is None:
         return unmatched("unsupported_league", league=league, title=title)
 
-    events = events_by_league.get(canon) or []
-    if not events:
-        return unmatched("no_scoreboard", league=canon, title=title)
+    leagues = candidate_leagues(canon)
+    if not leagues:
+        return unmatched("unsupported_league", league=league, title=title)
 
     alias_index = alias_index or default_alias_index()
     teams_by_id = teams_by_id or default_teams_by_id()
-    found = find_teams_in_title(title, canon, alias_index=alias_index)
+
+    last_miss: dict[str, Any] | None = None
+    near_miss_pairs: list[list[str]] = []
+    for index, league_id in enumerate(leagues):
+        result = _resolve_in_league(
+            title,
+            league_id,
+            events_by_league,
+            alias_index=alias_index,
+            teams_by_id=teams_by_id,
+        )
+        if result.get("matched"):
+            # Fallback / soccer-group hits are still useful but not "primary"
+            if index > 0:
+                result = {**result, "confidence": "medium"}
+            return result
+        ids = result.get("matchedTeamIds") or []
+        if result.get("reason") == "teams_not_playing" and len(ids) == 2:
+            near_miss_pairs.append([str(ids[0]), str(ids[1])])
+        last_miss = result
+
+    # Same school ids appear in NCAAF and NCAAH. If we found both schools on the
+    # wrong college board, look for that pair on any cached scoreboard.
+    for pair in near_miss_pairs:
+        event = _find_pair_across_leagues(pair, events_by_league)
+        if event is not None:
+            return format_match(event, confidence="medium", matched_teams=pair)
+
+    return last_miss or unmatched("no_scoreboard", league=canon, title=title)
+
+
+def _find_pair_across_leagues(
+    team_ids: list[str],
+    events_by_league: dict[str, list[dict[str, Any]]],
+) -> dict[str, Any] | None:
+    if len(team_ids) != 2:
+        return None
+    pair = _pair_key(team_ids[0], team_ids[1])
+    candidates: list[dict[str, Any]] = []
+    for events in events_by_league.values():
+        by_pair = index_events_by_teams(events or [])
+        candidates.extend(by_pair.get(pair) or [])
+    return pick_best_event(candidates)
+
+
+def _resolve_in_league(
+    title: str,
+    league_id: str,
+    events_by_league: dict[str, list[dict[str, Any]]],
+    *,
+    alias_index,
+    teams_by_id,
+) -> dict[str, Any]:
+    events = events_by_league.get(league_id) or []
+    if not events:
+        return unmatched("no_scoreboard", league=league_id, title=title)
+
+    found = find_teams_in_title(title, league_id, alias_index=alias_index)
     team_ids: list[str] = list(found["team_ids"])
 
     # If city-only aliases were ambiguous but exactly one remaining team pairs
     # with an unambiguous hit on today's slate, accept that pair.
     if len(team_ids) < 2 and found["ambiguous"]:
         team_ids = _disambiguate_with_slate(
-            team_ids, found["ambiguous"], events, teams_by_id.get(canon) or {}
+            team_ids, found["ambiguous"], events, teams_by_id.get(league_id) or {}
         )
 
     if len(team_ids) < 2:
         return unmatched(
             "need_two_teams",
-            league=canon,
+            league=league_id,
             title=title,
             matchedTeamIds=team_ids,
             hits=found["hits"],
@@ -127,7 +184,7 @@ def resolve_title(
         if event is None:
             return unmatched(
                 "teams_not_playing",
-                league=canon,
+                league=league_id,
                 title=title,
                 matchedTeamIds=team_ids,
             )
@@ -146,7 +203,7 @@ def resolve_title(
     if event is None:
         return unmatched(
             "teams_not_playing",
-            league=canon,
+            league=league_id,
             title=title,
             matchedTeamIds=team_ids,
         )
@@ -161,7 +218,16 @@ def _disambiguate_with_slate(
 ) -> list[str]:
     """Resolve ambiguous city aliases using who is actually playing today."""
     if not known:
+        # Both sides ambiguous (e.g. two shared nicknames): try pairs on slate
+        option_sets = [set(hit["team_ids"]) for hit in ambiguous_hits if hit.get("team_ids")]
+        if len(option_sets) >= 2:
+            by_pair = index_events_by_teams(events)
+            for a in option_sets[0]:
+                for b in option_sets[1]:
+                    if a != b and _pair_key(a, b) in by_pair:
+                        return [a, b]
         return known
+
     opponent = known[0]
     slate_opponents: set[str] = set()
     for event in events:

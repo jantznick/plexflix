@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 from typing import Any, Callable
 
 from .espn import EspnClient, EspnError
-from .leagues import LEAGUES, normalize_league
+from .leagues import LEAGUES, candidate_leagues, normalize_league
 from .matcher import resolve_items, resolve_title
 
 
@@ -124,9 +124,10 @@ class ScoreService:
         with self._lock:
             if league:
                 canon = normalize_league(league)
-                if canon is None:
+                leagues = candidate_leagues(canon) if canon else []
+                if not leagues:
                     return {}
-                return {canon: list(self._events.get(canon) or [])}
+                return {lg: list(self._events.get(lg) or []) for lg in leagues}
             return {k: list(v) for k, v in self._events.items()}
 
     def resolve(self, title: str, league: str | None) -> dict[str, Any]:
@@ -134,11 +135,11 @@ class ScoreService:
 
     def resolve_many(self, items: list[dict[str, Any]]) -> dict[str, Any]:
         # Touch scoreboards for leagues referenced so first resolve isn't stale
-        needed = set()
+        needed: set[str] = set()
         for item in items:
             canon = normalize_league(item.get("league") or item.get("category") or item.get("sport"))
-            if canon:
-                needed.add(canon)
+            for lg in candidate_leagues(canon):
+                needed.add(lg)
         for league in needed or LEAGUES:
             self.refresh_league(league, force=False)
 
