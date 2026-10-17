@@ -1,0 +1,336 @@
+From 96c68ae0f41bebc0b0aae0705c292d38a2637549 Mon Sep 17 00:00:00 2001
+From: Cursor Agent <cursoragent@cursor.com>
+Date: Sat, 17 Oct 2026 03:03:46 +0000
+Subject: [PATCH] Show live scores on the web feed viewer
+
+Proxy POST /api/scores/resolve to the PlexFlix scores sidecar (SCORES_URL),
+then paint matched score lines on game cards. Soft-fails when scores are unset
+or unreachable so browsing/playback stay unchanged.
+---
+ web/README.md          |   3 ++
+ web/docker-compose.yml |   4 ++
+ web/public/app.js      | 102 +++++++++++++++++++++++++++++++++++++++--
+ web/public/styles.css  |  11 +++++
+ web/server.js          |  67 +++++++++++++++++++++++++++
+ 5 files changed, 182 insertions(+), 5 deletions(-)
+
+diff --git a/web/README.md b/web/README.md
+index 76d72ae..6876571 100644
+--- a/web/README.md
++++ b/web/README.md
+@@ -26,6 +26,8 @@ Open `http://<server-lan-ip>:$WEB_PORT` (default **8080**), or your reverse-prox
+ | `WEB_PORT` | Host port mapped to the container (default `8080`) |
+ | `HLS_PROXY_UPSTREAM` | LAN HLS proxy origin (e.g. `http://192.168.1.50:8787`). Rewrites feed + m3u8 URLs to same-origin `/hls` and proxies traffic. **Required for HTTPS viewers.** |
+ | `PROXY_REWRITE_FROM` / `PROXY_REWRITE_TO` | Optional extra host rewrite inside feed video URLs |
++| `SCORES_URL` | Optional PlexFlix scores sidecar (`http://192.168.1.50:8096`). Enables live score lines on game cards via `/api/scores/resolve`. |
++| `SCORES_TOKEN` | Optional shared secret if the scores sidecar has `SCORES_TOKEN` set |
+ 
+ The browser never fetches the feed from S3/B2 directly (CORS). The container proxies `/api/feed`.
+ 
+@@ -65,6 +67,7 @@ cd web
+ npm install
+ FEED_URL='https://…/feed.json' \
+ HLS_PROXY_UPSTREAM='http://192.168.1.50:8787' \
++SCORES_URL='http://192.168.1.50:8096' \
+ PORT=8091 npm start
+ ```
+ 
+diff --git a/web/docker-compose.yml b/web/docker-compose.yml
+index 4127a5a..8775ef5 100644
+--- a/web/docker-compose.yml
++++ b/web/docker-compose.yml
+@@ -26,4 +26,8 @@ services:
+       # Proxies HLS via same-origin /hls so the browser is not blocked by Mixed Content.
+       # Example: HLS_PROXY_UPSTREAM=http://192.168.1.50:8787
+       HLS_PROXY_UPSTREAM: "${HLS_PROXY_UPSTREAM:-}"
++      # Optional PlexFlix scores sidecar (plexflix/scores). Leave empty to skip.
++      # Example: SCORES_URL=http://192.168.1.50:8096
++      SCORES_URL: "${SCORES_URL:-}"
++      SCORES_TOKEN: "${SCORES_TOKEN:-}"
+     restart: unless-stopped
+diff --git a/web/public/app.js b/web/public/app.js
+index 7985dc9..69aa381 100644
+--- a/web/public/app.js
++++ b/web/public/app.js
+@@ -25,12 +25,18 @@ let activeLeague = '';
+ let hls = null;
+ /** @type {number | null} */
+ let feedAgeTimer = null;
+-/** @type {{ hlsProxyUpstream: string | null, hlsMount: string }} */
++/** @type {{ hlsProxyUpstream: string | null, hlsMount: string, scoresConfigured: boolean }} */
+ let appConfig = {
+   hlsProxyUpstream: null,
+   hlsMount: '/hls',
++  scoresConfigured: false,
+ };
+ 
++/** @type {Map<string, { scoreLine: string, displayStatus: string, matched: boolean }>} */
++const scoresByKey = new Map();
++/** @type {number | null} */
++let scoresTimer = null;
++
+ /**
+  * Rewrite LAN proxy URLs to same-origin /hls so HTTPS pages are not blocked by Mixed Content.
+  * Works even when /api/feed still returns http://192.168.x.x URLs.
+@@ -92,12 +98,77 @@ async function loadConfig() {
+     appConfig = {
+       hlsProxyUpstream: payload.hlsProxyUpstream || null,
+       hlsMount: payload.hlsMount || '/hls',
++      scoresConfigured: Boolean(payload.scoresConfigured),
+     };
+   } catch {
+     // keep defaults — rewriteToHls still maps /proxy paths on foreign hosts
+   }
+ }
+ 
++function scoreKey(league, game, index) {
++  const id = game?.id || game?.channelId || '';
++  if (id) return `${league}::${id}`;
++  return `${league}::${index}::${game?.title || ''}`;
++}
++
++function collectScoreItems() {
++  const items = [];
++  if (!feed) return items;
++  for (const league of leagues) {
++    const games = feed[league] || [];
++    games.forEach((game, index) => {
++      const title = game?.title || game?.name;
++      if (!title) return;
++      items.push({
++        id: scoreKey(league, game, index),
++        title,
++        league,
++      });
++    });
++  }
++  return items;
++}
++
++async function loadScores() {
++  if (!appConfig.scoresConfigured || !feed) return;
++
++  const items = collectScoreItems();
++  if (!items.length) return;
++
++  try {
++    const res = await fetch('/api/scores/resolve', {
++      method: 'POST',
++      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
++      body: JSON.stringify({ items }),
++    });
++    const payload = await res.json();
++    if (!res.ok || payload.skipped) return;
++
++    scoresByKey.clear();
++    for (const row of payload.results || []) {
++      if (!row?.id) continue;
++      if (row.matched) {
++        scoresByKey.set(row.id, {
++          matched: true,
++          scoreLine: row.scoreLine || '',
++          displayStatus: row.displayStatus || row.shortDetail || '',
++        });
++      }
++    }
++    renderGames();
++  } catch {
++    // Soft fail — feed viewer still works without scores
++  }
++}
++
++function startScoresTimer() {
++  if (scoresTimer) clearInterval(scoresTimer);
++  if (!appConfig.scoresConfigured) return;
++  scoresTimer = window.setInterval(() => {
++    loadScores();
++  }, 45000);
++}
++
+ function setStatus(message, isError = false) {
+   els.status.textContent = message || '';
+   els.status.classList.toggle('error', Boolean(isError));
+@@ -162,13 +233,16 @@ async function loadFeed() {
+     const savedLeague = localStorage.getItem(LEAGUE_STORAGE_KEY);
+     activeLeague = leagues.includes(savedLeague) ? savedLeague : (leagues[0] || '');
+ 
++    scoresByKey.clear();
+     renderLeagues();
+     renderGames();
+     startFeedAgeTimer();
+     setStatus(`${leagues.length} league${leagues.length === 1 ? '' : 's'} loaded`);
++    loadScores().then(() => startScoresTimer());
+   } catch (error) {
+     feed = null;
+     leagues = [];
++    scoresByKey.clear();
+     els.leagueNav.innerHTML = '';
+     els.gameList.innerHTML = '<p class="empty">Could not load feed.</p>';
+     updateFeedAge();
+@@ -203,26 +277,44 @@ function renderGames() {
+     return;
+   }
+ 
+-  for (const game of games) {
++  games.forEach((game, index) => {
+     const btn = document.createElement('button');
+     btn.type = 'button';
+     btn.className = 'game-card';
+     const streams = game?.content?.videos?.length || 0;
++    const score = scoresByKey.get(scoreKey(activeLeague, game, index));
++    const metaBits = [];
++    if (game.shortDescription || game.startTime) {
++      metaBits.push(game.shortDescription || game.startTime);
++    }
++    metaBits.push(`${streams} stream${streams === 1 ? '' : 's'}`);
++    const scoreHtml = score?.matched && score.scoreLine
++      ? `<p class="score-line"><span class="score">${escapeHtml(score.scoreLine)}</span>${
++          score.displayStatus ? ` · ${escapeHtml(score.displayStatus)}` : ''
++        }</p>`
++      : '';
+     btn.innerHTML = `
+       <img src="${escapeAttr(game.thumbnail || '')}" alt="" loading="lazy" />
+       <div>
+         <h3>${escapeHtml(game.title || 'Untitled')}</h3>
+-        <p>${escapeHtml(game.shortDescription || game.startTime || '')} · ${streams} stream${streams === 1 ? '' : 's'}</p>
++        ${scoreHtml}
++        <p>${escapeHtml(metaBits.join(' · '))}</p>
+       </div>
+     `;
+     btn.addEventListener('click', () => openGame(game, activeLeague));
+     els.gameList.appendChild(btn);
+-  }
++  });
+ }
+ 
+ function openGame(game, league) {
+   els.playerSection.classList.remove('hidden');
+-  els.nowLeague.textContent = league;
++  const games = feed?.[league] || [];
++  const index = games.indexOf(game);
++  const score = scoresByKey.get(scoreKey(league, game, index >= 0 ? index : 0));
++  const leagueLabel = score?.matched && score.scoreLine
++    ? `${league} · ${score.scoreLine}${score.displayStatus ? ` · ${score.displayStatus}` : ''}`
++    : league;
++  els.nowLeague.textContent = leagueLabel;
+   els.nowTitle.textContent = game.title || 'Stream';
+   renderQualities(game);
+   const first = game?.content?.videos?.[0];
+diff --git a/web/public/styles.css b/web/public/styles.css
+index 16f3d32..af7db59 100644
+--- a/web/public/styles.css
++++ b/web/public/styles.css
+@@ -230,6 +230,17 @@ button.active {
+   font-size: 0.82rem;
+ }
+ 
++.game-card .score-line {
++  margin: 0.3rem 0 0;
++  color: var(--text);
++  font-size: 0.9rem;
++  font-weight: 600;
++}
++
++.game-card .score-line .score {
++  color: var(--accent);
++}
++
+ .empty {
+   color: var(--muted);
+   padding: 2rem 0.5rem;
+diff --git a/web/server.js b/web/server.js
+index 2bc315b..e6c7421 100644
+--- a/web/server.js
++++ b/web/server.js
+@@ -12,6 +12,9 @@ const PROXY_REWRITE_FROM = process.env.PROXY_REWRITE_FROM || '';
+ const PROXY_REWRITE_TO = process.env.PROXY_REWRITE_TO || '';
+ /** LAN HLS proxy origin, e.g. http://192.168.1.50:8787 — required for HTTPS pages (mixed content). */
+ const HLS_PROXY_UPSTREAM = normalizeUpstream(process.env.HLS_PROXY_UPSTREAM || '');
++/** PlexFlix scores sidecar origin, e.g. http://192.168.1.50:8096 — optional live scores. */
++const SCORES_URL = normalizeUpstream(process.env.SCORES_URL || '');
++const SCORES_TOKEN = String(process.env.SCORES_TOKEN || '').trim();
+ const HLS_MOUNT = '/hls';
+ 
+ function normalizeUpstream(raw) {
+@@ -35,9 +38,68 @@ app.get('/api/config', (_req, res) => {
+     hlsProxyUpstream: HLS_PROXY_UPSTREAM || null,
+     // Always advertise the mount so the client can rewrite LAN URLs even if feed rewrite failed.
+     hlsMount: HLS_MOUNT,
++    scoresConfigured: Boolean(SCORES_URL),
+   });
+ });
+ 
++/**
++ * Batch-resolve feed titles against the PlexFlix scores sidecar.
++ * Browser stays same-origin; SCORES_URL is server-only (like FEED_URL).
++ * Soft-fails when unset so the viewer still works without scores.
++ */
++app.post('/api/scores/resolve', express.json({ limit: '1mb' }), async (req, res) => {
++  if (!SCORES_URL) {
++    res.json({ ok: true, skipped: true, matched: 0, total: 0, results: [] });
++    return;
++  }
++
++  const items = Array.isArray(req.body?.items) ? req.body.items : [];
++  if (items.length === 0) {
++    res.json({ ok: true, matched: 0, total: 0, results: [] });
++    return;
++  }
++  if (items.length > 200) {
++    res.status(400).json({ error: 'max 200 items' });
++    return;
++  }
++
++  const headers = {
++    Accept: 'application/json',
++    'Content-Type': 'application/json',
++  };
++  if (SCORES_TOKEN) {
++    headers.Authorization = `Bearer ${SCORES_TOKEN}`;
++    headers['X-Scores-Token'] = SCORES_TOKEN;
++  }
++
++  try {
++    const upstream = await fetch(`${SCORES_URL}/v1/resolve`, {
++      method: 'POST',
++      headers,
++      body: JSON.stringify({ items }),
++      signal: AbortSignal.timeout(20000),
++    });
++    const text = await upstream.text();
++    let payload;
++    try {
++      payload = JSON.parse(text);
++    } catch {
++      res.status(502).json({ error: 'Scores upstream returned non-JSON' });
++      return;
++    }
++    if (!upstream.ok) {
++      res.status(502).json({
++        error: payload.error || `Scores upstream returned ${upstream.status}`,
++      });
++      return;
++    }
++    res.setHeader('Cache-Control', 'no-store');
++    res.json(payload);
++  } catch (error) {
++    res.status(502).json({ error: error.message || 'Failed to reach scores service' });
++  }
++});
++
+ /**
+  * Server-side feed fetch avoids browser CORS issues with Backblaze/S3.
+  * Feed URL comes only from FEED_URL env (no client override).
+@@ -248,4 +310,9 @@ app.listen(PORT, '0.0.0.0', () => {
+   } else {
+     console.log('HLS_PROXY_UPSTREAM unset — HTTPS pages will block http:// LAN stream URLs (mixed content)');
+   }
++  if (SCORES_URL) {
++    console.log(`Scores: /api/scores/resolve → ${SCORES_URL}/v1/resolve`);
++  } else {
++    console.log('SCORES_URL unset — live score lines disabled');
++  }
+ });
+-- 
+2.43.0
+
