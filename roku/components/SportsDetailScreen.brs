@@ -143,9 +143,7 @@ sub onRefocus()
         m.top.setFocus(true)
         return
     end if
-    ' The list kept its own place, so the stream just tried stays highlighted
-    m.streamList.focusable = true
-    m.streamList.setFocus(true)
+    focusStreamList()
 end sub
 
 sub onStreamError()
@@ -187,11 +185,27 @@ sub onMultiviewNote()
     if note = "" then return
     m.summaryLabel.color = "0xC8C8D0"
     m.summaryLabel.text = note
+    focusStreamList()
+end sub
+
+' This page always keeps a stream row focused while it is on screen.
+sub focusStreamList()
+    if m.streams.count() = 0 then return
+    if m.streamList = invalid then return
+    m.streamList.focusable = true
+    m.streamList.setFocus(true)
 end sub
 
 sub toggleFocusedStream()
+    if m.streamList = invalid or not m.streamList.isInFocusChain() then
+        focusStreamList()
+        return
+    end if
     idx = m.streamList.itemFocused
-    if idx = invalid or idx < 0 or idx >= m.streams.count() then return
+    if idx = invalid or idx < 0 or idx >= m.streams.count() then
+        focusStreamList()
+        return
+    end if
     stream = m.streams[idx]
     title = m.titleLabel.text
     ' Alternates of one game are told apart by their stream label
@@ -205,6 +219,8 @@ sub toggleFocusedStream()
         streamFormat: format,
         hdPosterUrl: asString(m.eventItem.hdPosterUrl)
     }
+    ' Keep the lit row here — the guide underneath must not take focus.
+    focusStreamList()
 end sub
 
 function onKeyEvent(key as String, press as Boolean) as Boolean
@@ -213,12 +229,13 @@ function onKeyEvent(key as String, press as Boolean) as Boolean
         m.top.closed = true
         return true
     end if
-    ' OK always plays the focused stream (list may have lost focus after redraw).
     if key = "OK" then
-        idx = 0
-        if m.streamList <> invalid and m.streamList.itemFocused <> invalid then
-            idx = m.streamList.itemFocused
+        if m.streamList = invalid or not m.streamList.isInFocusChain() then
+            focusStreamList()
+            return true
         end if
+        idx = 0
+        if m.streamList.itemFocused <> invalid then idx = m.streamList.itemFocused
         playStreamAt(idx)
         return true
     end if
@@ -228,6 +245,12 @@ function onKeyEvent(key as String, press as Boolean) as Boolean
             return true
         else if key = "play" then
             m.top.multiviewLaunch = true
+            return true
+        end if
+    end if
+    if m.streamList <> invalid and not m.streamList.isInFocusChain() then
+        if key = "up" or key = "down" or key = "rewind" or key = "fastforward" then
+            focusStreamList()
             return true
         end if
     end if

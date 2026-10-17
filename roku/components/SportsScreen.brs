@@ -543,6 +543,20 @@ sub onScoresTimer()
     loadScores()
 end sub
 
+' When the guide is the active surface, a row must stay focused. When the game
+' page (or multiview) is on top, do not call setFocus here — that would steal
+' keys from the screen the viewer is actually looking at.
+sub restoreGuideFocus()
+    if m.zone <> "list" then return
+    if m.events.count() = 0 then return
+    if m.top = invalid or not m.top.isInFocusChain() then return
+    m.guideList.focusable = true
+    m.guideList.setFocus(true)
+    if m.currentIndex >= 0 and m.currentIndex < m.events.count() then
+        m.guideList.jumpToItem = m.currentIndex
+    end if
+end sub
+
 ' Rebuild visible guide rows so col2 picks up fresh score lines
 sub refreshScoreRows()
     ' Never touch the guide while the * options panel is up — replaceChild
@@ -557,14 +571,8 @@ sub refreshScoreRows()
             root.replaceChild(fresh, i)
         end if
     end for
-    ' replaceChild can drop list focus; put it back so OK keeps working
-    if m.zone = "list" and m.events.count() > 0 then
-        m.guideList.focusable = true
-        m.guideList.setFocus(true)
-        if m.currentIndex >= 0 and m.currentIndex < m.events.count() then
-            m.guideList.jumpToItem = m.currentIndex
-        end if
-    end if
+    ' replaceChild can drop list focus; put it back only if we still own keys
+    restoreGuideFocus()
 end sub
 
 '--------------------------------------------------------------------
@@ -661,13 +669,8 @@ sub refreshMultiviewRows()
             end if
         end if
     end for
-    if changed and m.zone = "list" and m.events.count() > 0 then
-        m.guideList.focusable = true
-        m.guideList.setFocus(true)
-        if m.currentIndex >= 0 and m.currentIndex < m.events.count() then
-            m.guideList.jumpToItem = m.currentIndex
-        end if
-    end if
+    ' Adding from the game page must not yank focus onto the guide underneath.
+    if changed then restoreGuideFocus()
 end sub
 
 sub paintMultiTray()

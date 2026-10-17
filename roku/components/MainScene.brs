@@ -547,12 +547,20 @@ sub showSportsDetail(item as Object)
 end sub
 
 sub onSportsDetailClosed()
-    if m.sportsDetailScreen <> invalid then
-        m.screens.removeChild(m.sportsDetailScreen)
-        m.sportsDetailScreen = invalid
-    end if
+    dismissSportsDetail()
     updateNavRail()
-    if m.sportsScreen <> invalid then m.sportsScreen.setFocus(true)
+    if m.sportsScreen <> invalid then
+        m.sportsScreen.setFocus(true)
+        m.sportsScreen.refocus = true
+    end if
+end sub
+
+' Drop the game page without firing closed→refocus (used before multiview).
+sub dismissSportsDetail()
+    if m.sportsDetailScreen = invalid then return
+    m.sportsDetailScreen.unobserveField("closed")
+    m.screens.removeChild(m.sportsDetailScreen)
+    m.sportsDetailScreen = invalid
 end sub
 
 sub onSportsPlayRequested()
@@ -594,6 +602,9 @@ sub onMultiviewRequested(event as Object)
 end sub
 
 sub showMultiview(payload as Object)
+    ' Don't keep a game page parked under the mosaic — Play / Watch Multiview
+    ' from the guide was returning to the last detail after the session ended.
+    dismissSportsDetail()
     releaseMultiview()
     m.multiviewScreen = createObject("roSGNode", "MultiviewScreen")
     m.multiviewScreen.config = m.config
@@ -615,12 +626,7 @@ end sub
 sub onMultiviewClosed()
     releaseMultiview()
     updateNavRail()
-    if m.sportsDetailScreen <> invalid then
-        m.sportsDetailScreen.setFocus(true)
-        m.sportsDetailScreen.refocus = true
-    else
-        restoreSectionFocus()
-    end if
+    restoreSectionFocus()
 end sub
 
 ' The DELETE runs from here for the same reason playback reports do: a Task
