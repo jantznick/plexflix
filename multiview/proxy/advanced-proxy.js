@@ -18,7 +18,7 @@ const port = process.env.PORT || 8787;
 const proxyHost = process.env.PROXY_HOST || '192.168.1.50:8787';
 const debug = process.env.PROXY_DEBUG === 'true';
 
-const PROXY_VERSION = 'embed-first-v21-timst-unwrap';
+const PROXY_VERSION = 'embed-first-v22-chrome-shell';
 
 // GOAT disguises each MPEG-TS segment as a tiny PNG so it can live on TikTok's
 // image CDN. The real TS payload starts right after the PNG's IEND chunk. Strip
@@ -208,7 +208,23 @@ async function resolvePlaybackContext(
         let stream = getCachedStream(embedUrl);
         if (!stream) {
             console.log('  - TimStreams: opening embed for signed m3u8 + segment cookies');
-            stream = await getResolvedStream(embedUrl);
+            try {
+                stream = await getResolvedStream(embedUrl);
+            } catch (err) {
+                // Chrome SIGSEGV / launch failures used to 500 every Roku play.
+                // Fall back to the feed's signed URL over plain HTTP.
+                console.error(
+                    `  - Embed resolve failed (${err.message}); using feed URL via HTTP`
+                );
+                return {
+                    upstreamUrl: streamUrl,
+                    referer: feedReferer,
+                    extraHeaders: feedHeaders,
+                    directOk: true,
+                    manifestBaseUrl: streamUrl,
+                    resolvedFromEmbed: false,
+                };
+            }
         }
         const freshUrl = stream.streamUrl || streamUrl;
         const useFresh = isManifest && Boolean(stream.streamUrl);
@@ -226,7 +242,21 @@ async function resolvePlaybackContext(
     // manifest capture). Always honor the exact URL the client asked for.
     let stream = getCachedStream(embedUrl);
     if (!stream) {
-        stream = await getResolvedStream(embedUrl);
+        try {
+            stream = await getResolvedStream(embedUrl);
+        } catch (err) {
+            console.error(
+                `  - Embed resolve failed (${err.message}); using feed URL via HTTP`
+            );
+            return {
+                upstreamUrl: streamUrl,
+                referer: feedReferer,
+                extraHeaders: feedHeaders,
+                directOk: true,
+                manifestBaseUrl: streamUrl,
+                resolvedFromEmbed: false,
+            };
+        }
     }
 
     return {

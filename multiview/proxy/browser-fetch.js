@@ -316,9 +316,16 @@ class BrowserSession {
 async function launchBrowser() {
     const mode = describePuppeteerMode();
     logStep(`Launching Chromium (${mode})...`);
-    browserLaunchPromise = launchStealthBrowser();
+    try {
+        browser = await launchStealthBrowser();
+    } catch (err) {
+        // A rejected launch promise used to stick forever and 500 every stream
+        browser = null;
+        browserLaunchPromise = null;
+        logStep(`Chromium launch failed: ${err.message}`);
+        throw err;
+    }
 
-    browser = await browserLaunchPromise;
     browser.on('disconnected', () => {
         browser = null;
         browserLaunchPromise = null;
@@ -336,10 +343,17 @@ async function getBrowser() {
         return browser;
     }
 
-    if (!browserLaunchPromise) {
-        return launchBrowser();
+    if (browserLaunchPromise) {
+        return browserLaunchPromise;
     }
 
+    browserLaunchPromise = launchBrowser().finally(() => {
+        // Only clear when this attempt finished without leaving a live browser;
+        // success keeps the handle on `browser`, failure must allow retry.
+        if (!isBrowserConnected(browser)) {
+            browserLaunchPromise = null;
+        }
+    });
     return browserLaunchPromise;
 }
 
