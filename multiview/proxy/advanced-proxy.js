@@ -637,4 +637,15 @@ http.createServer(app).listen(port, () => {
     console.log(`Advanced HLS Proxy server listening at http://localhost:${port}`);
 });
 
+// Puppeteer TargetCloseError / Chrome death often lands here. Log and keep
+// serving; a hard crash still exits and the multiview entrypoint restarts us.
+process.on('unhandledRejection', (reason) => {
+    const msg = reason && reason.stack ? reason.stack : String(reason);
+    console.error(`[proxy] unhandledRejection: ${msg}`);
+});
+process.on('uncaughtException', (err) => {
+    console.error(`[proxy] uncaughtException: ${err && err.stack ? err.stack : err}`);
+    process.exit(1);
+});
+
 // SIGINT/SIGTERM cleanup (including remux ffmpeg) lives in browser-fetch.js.
