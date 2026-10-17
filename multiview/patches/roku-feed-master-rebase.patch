@@ -1,0 +1,299 @@
+diff --git a/proxy/advanced-proxy.js b/proxy/advanced-proxy.js
+index 870d3da..59f0bb7 100644
+--- a/proxy/advanced-proxy.js
++++ b/proxy/advanced-proxy.js
+@@ -18,7 +18,52 @@ const port = process.env.PORT || 8787;
+ const proxyHost = process.env.PROXY_HOST || '192.168.1.50:8787';
+ const debug = process.env.PROXY_DEBUG === 'true';
+ 
+-const PROXY_VERSION = 'embed-first-v22-chrome-shell';
++const PROXY_VERSION = 'embed-first-v23-master-rebase';
++
++/** Path after the quality root (/1/high/mono.m3u8 → high/mono.m3u8). */
++function qualityPathSuffix(pathname) {
++    const match = String(pathname || '').match(/\/\d+\/(.+)$/);
++    return match ? match[1] : '';
++}
++
++/**
++ * Map a stale feed/CDN URL onto the live token/host from embed resolve.
++ * fresh master: .../TOKEN/1/playlist.m3u8
++ * request:      .../OLD/1/high/mono.m3u8
++ * result:       .../TOKEN/1/high/mono.m3u8
++ */
++function rebaseOntoFreshMaster(requestUrl, freshMasterUrl) {
++    try {
++        const req = new URL(requestUrl);
++        const fresh = new URL(freshMasterUrl);
++        const suffix = qualityPathSuffix(req.pathname);
++        const freshRoot = fresh.pathname.match(/^(.*\/\d+)\//);
++        if (!suffix || !freshRoot) {
++            return null;
++        }
++        // Entry / master itself → keep the resolved master URL.
++        if (suffix === 'playlist.m3u8' || suffix.endsWith('/playlist.m3u8')) {
++            return fresh.href;
++        }
++        fresh.pathname = `${freshRoot[1]}/${suffix}`;
++        fresh.search = '';
++        return fresh.href;
++    } catch {
++        return null;
++    }
++}
++
++function masterVariantSuffixes(masterBody) {
++    const suffixes = new Set();
++    for (const line of String(masterBody || '').split('\n')) {
++        const trimmed = line.trim();
++        if (!trimmed || trimmed.startsWith('#')) {
++            continue;
++        }
++        suffixes.add(trimmed.replace(/^\.\//, ''));
++    }
++    return suffixes;
++}
+ 
+ // GOAT disguises each MPEG-TS segment as a tiny PNG so it can live on TikTok's
+ // image CDN. The real TS payload starts right after the PNG's IEND chunk. Strip
+@@ -239,7 +284,9 @@ async function resolvePlaybackContext(
+     }
+ 
+     // Streamed embeds: keep the player open/resolved (referer + headers and live
+-    // manifest capture). Always honor the exact URL the client asked for.
++    // manifest capture). Rebase feed URLs onto the live CDN token from resolve —
++    // otherwise we either serve the captured master for every mono.m3u8 (nested
++    // /high/high/ rewrite) or 403 on the stale feed path.
+     let stream = getCachedStream(embedUrl);
+     if (!stream) {
+         try {
+@@ -259,13 +306,53 @@ async function resolvePlaybackContext(
+         }
+     }
+ 
++    let upstreamUrl = streamUrl;
++    let manifestBaseUrl = streamUrl;
++    let resolvedFromEmbed = false;
++
++    if (isManifest && stream.streamUrl) {
++        const masterBody = stream.manifestBody || '';
++        const isMaster = masterBody.includes('#EXT-X-STREAM-INF');
++        if (isMaster) {
++            let reqSuffix = '';
++            try {
++                reqSuffix = qualityPathSuffix(new URL(streamUrl).pathname);
++            } catch {
++                reqSuffix = '';
++            }
++            const variants = masterVariantSuffixes(masterBody);
++            if (!reqSuffix || reqSuffix === 'playlist.m3u8' || !variants.has(reqSuffix)) {
++                upstreamUrl = stream.streamUrl;
++                manifestBaseUrl = stream.streamUrl;
++                resolvedFromEmbed = stream.streamUrl !== streamUrl;
++                if (resolvedFromEmbed) {
++                    console.log(`  - Streamed: serving live master (${stream.streamUrl.slice(0, 80)}...)`);
++                }
++            } else {
++                const rebased = rebaseOntoFreshMaster(streamUrl, stream.streamUrl);
++                if (rebased) {
++                    upstreamUrl = rebased;
++                    manifestBaseUrl = rebased;
++                    resolvedFromEmbed = rebased !== streamUrl;
++                    if (resolvedFromEmbed) {
++                        console.log(`  - Streamed: rebased variant → ${rebased.slice(0, 100)}...`);
++                    }
++                }
++            }
++        } else if (stream.streamUrl !== streamUrl) {
++            upstreamUrl = stream.streamUrl;
++            manifestBaseUrl = stream.streamUrl;
++            resolvedFromEmbed = true;
++        }
++    }
++
+     return {
+-        upstreamUrl: streamUrl,
++        upstreamUrl,
+         referer: stream.referer,
+         extraHeaders: stream.requestHeaders,
+         directOk: stream.directFetchOk,
+-        manifestBaseUrl: streamUrl,
+-        resolvedFromEmbed: false,
++        manifestBaseUrl,
++        resolvedFromEmbed,
+     };
+ }
+ 
+@@ -383,6 +470,17 @@ app.get('/proxy/*b64Payload', async (req, res) => {
+ 
+             console.log('  - Rewriting manifest segment URLs through /proxy...');
+ 
++            // Master playlists must rewrite relative to the live master URL, not
++            // the feed's mono.m3u8 path (that produced /high/high/ nesting).
++            let rewriteBase = ctx.manifestBaseUrl || streamUrl;
++            if (playlist.includes('#EXT-X-STREAM-INF') && embedUrl) {
++                const cached = getCachedStream(embedUrl);
++                if (cached?.streamUrl) {
++                    rewriteBase = cached.streamUrl;
++                    console.log(`  - Master rewrite base: ${rewriteBase.slice(0, 100)}...`);
++                }
++            }
++
+             const KEY_TAG = '#EXT-X-KEY:';
+             const rewrittenLines = [];
+             let segmentCount = 0;
+@@ -390,7 +488,7 @@ app.get('/proxy/*b64Payload', async (req, res) => {
+                 if (line.startsWith(KEY_TAG)) {
+                     const uriMatch = line.match(/URI="([^"]+)"/);
+                     if (uriMatch?.[1]) {
+-                        const fullKeyUrl = new URL(uriMatch[1], ctx.manifestBaseUrl).href;
++                        const fullKeyUrl = new URL(uriMatch[1], rewriteBase).href;
+                         const proxiedKeyUrl = `http://${proxyHost}/proxy/${buildRewrittenPayload(
+                             fullKeyUrl,
+                             ctx.referer,
+@@ -409,7 +507,7 @@ app.get('/proxy/*b64Payload', async (req, res) => {
+                         console.log(`  - Skipping unrecognized line: ${trimmed.slice(0, 80)}`);
+                         continue;
+                     }
+-                    const segmentUrl = new URL(trimmed, ctx.manifestBaseUrl).href;
++                    const segmentUrl = new URL(trimmed, rewriteBase).href;
+                     rewrittenLines.push(`http://${proxyHost}/proxy/${buildRewrittenPayload(
+                         segmentUrl,
+                         ctx.referer,
+diff --git a/proxy/browser-fetch.js b/proxy/browser-fetch.js
+index c42585d..963c0d3 100644
+--- a/proxy/browser-fetch.js
++++ b/proxy/browser-fetch.js
+@@ -515,7 +515,7 @@ export async function fetchViaBrowser(url, { embedUrl, referer, extraHeaders = {
+     if (isText && embedAlive) {
+         let body = getLatestManifestBody(embedPage, url);
+         if (!body) {
+-            body = await waitForLatestManifestBody(embedPage, url, 8000);
++            body = await waitForLatestManifestBody(embedPage, url, 2500);
+         }
+         if (body) {
+             logStep(`Serving live manifest from embed player (${body.length} chars)`);
+@@ -525,8 +525,9 @@ export async function fetchViaBrowser(url, { embedUrl, referer, extraHeaders = {
+                 body,
+             };
+         }
+-        logStep('No live manifest on embed page yet; falling back to navigation');
+-        return fetchManifestOnPage(embedPage, url, referer, logStep);
++        // Never page.goto() the embed tab — that kills the player session and
++        // used to fall back to the wrong (master) playlist for every mono.m3u8.
++        logStep('No matching manifest on embed page; fetching via session tab');
+     }
+ 
+     if (!isText) {
+diff --git a/src/manifest-capture.js b/src/manifest-capture.js
+index bd2393d..a7b3056 100644
+--- a/src/manifest-capture.js
++++ b/src/manifest-capture.js
+@@ -11,6 +11,12 @@ function isManifestUrl(url) {
+     return url.includes('.m3u8') || url.includes('.mpd');
+ }
+ 
++/** Path after the quality root (/1/high/mono.m3u8 → high/mono.m3u8). */
++function qualityPathSuffix(pathname) {
++    const match = String(pathname || '').match(/\/\d+\/(.+)$/);
++    return match ? match[1] : '';
++}
++
+ function isValidManifestText(text) {
+     return text.includes('#EXTM3U') || text.includes('#EXT-X-');
+ }
+@@ -97,44 +103,65 @@ export async function attachManifestCapture(page, log = () => {}) {
+             return values.length > 0 ? values[values.length - 1] : null;
+         },
+ 
+-        /** Latest body for a URL — matches by filename when CDN host differs. */
++        /**
++         * Latest body for a URL. Match exact URL, same pathname, or same
++         * quality-root suffix (/N/high/mono.m3u8). Never return a different
++         * playlist (e.g. master playlist.m3u8 for a mono.m3u8 request) — that
++         * caused nested /high/high/ rewrite loops on Roku.
++         */
+         getLatestForUrl(preferredUrl) {
+             const exact = bodiesByUrl.get(preferredUrl);
+             if (exact) {
+                 return exact;
+             }
+-            const filename = preferredUrl.split('/').pop()?.split('?')[0] || '';
+-            if (filename) {
+-                for (const [url, body] of bodiesByUrl) {
+-                    if (url.includes(filename)) {
+-                        return body;
+-                    }
+-                }
++
++            let preferredPath = '';
++            try {
++                preferredPath = new URL(preferredUrl).pathname;
++            } catch {
++                preferredPath = preferredUrl.split('?')[0] || '';
++            }
++            if (!preferredPath) {
++                return null;
+             }
++
+             for (const [url, body] of bodiesByUrl) {
+-                if (url.includes('mono.m3u8')) {
+-                    return body;
++                try {
++                    if (new URL(url).pathname === preferredPath) {
++                        return body;
++                    }
++                } catch {
++                    // Ignore malformed capture keys.
+                 }
+             }
+-            for (const [url, body] of bodiesByUrl) {
+-                if (url.includes('playlist.m3u8')) {
+-                    return body;
++
++            const preferredSuffix = qualityPathSuffix(preferredPath);
++            if (preferredSuffix) {
++                for (const [url, body] of bodiesByUrl) {
++                    try {
++                        if (qualityPathSuffix(new URL(url).pathname) === preferredSuffix) {
++                            return body;
++                        }
++                    } catch {
++                        // Ignore malformed capture keys.
++                    }
+                 }
+             }
+-            return this.getAnyBody();
++
++            return null;
+         },
+ 
+         /** @param {string} url @param {number} [timeoutMs] */
+         async waitForBody(url, timeoutMs = 12000) {
+             const deadline = Date.now() + timeoutMs;
+             while (Date.now() < deadline) {
+-                const exact = bodiesByUrl.get(url);
+-                if (exact) {
+-                    return exact;
++                const matched = this.getLatestForUrl(url);
++                if (matched) {
++                    return matched;
+                 }
+                 await sleep(150);
+             }
+-            return bodiesByUrl.get(url) || null;
++            return this.getLatestForUrl(url);
+         },
+ 
+         dispose() {
+@@ -260,6 +287,10 @@ export async function waitForLatestManifestBody(page, url, timeoutMs = 8000) {
+     if (!capture) {
+         return null;
+     }
++    // Already have manifests but none match this URL → don't stall; caller fetches.
++    if (capture.getAnyBody() && !capture.getLatestForUrl(url)) {
++        return null;
++    }
+     await capture.waitForBody(url, timeoutMs);
+     return capture.getLatestForUrl(url);
+ }

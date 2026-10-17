@@ -515,7 +515,7 @@ export async function fetchViaBrowser(url, { embedUrl, referer, extraHeaders = {
     if (isText && embedAlive) {
         let body = getLatestManifestBody(embedPage, url);
         if (!body) {
-            body = await waitForLatestManifestBody(embedPage, url, 8000);
+            body = await waitForLatestManifestBody(embedPage, url, 2500);
         }
         if (body) {
             logStep(`Serving live manifest from embed player (${body.length} chars)`);
@@ -525,8 +525,9 @@ export async function fetchViaBrowser(url, { embedUrl, referer, extraHeaders = {
                 body,
             };
         }
-        logStep('No live manifest on embed page yet; falling back to navigation');
-        return fetchManifestOnPage(embedPage, url, referer, logStep);
+        // Never page.goto() the embed tab — that kills the player session and
+        // used to fall back to the wrong (master) playlist for every mono.m3u8.
+        logStep('No matching manifest on embed page; fetching via session tab');
     }
 
     if (!isText) {

@@ -11,6 +11,12 @@ function isManifestUrl(url) {
     return url.includes('.m3u8') || url.includes('.mpd');
 }
 
+/** Path after the quality root (/1/high/mono.m3u8 → high/mono.m3u8). */
+function qualityPathSuffix(pathname) {
+    const match = String(pathname || '').match(/\/\d+\/(.+)$/);
+    return match ? match[1] : '';
+}
+
 function isValidManifestText(text) {
     return text.includes('#EXTM3U') || text.includes('#EXT-X-');
 }
@@ -97,44 +103,65 @@ export async function attachManifestCapture(page, log = () => {}) {
             return values.length > 0 ? values[values.length - 1] : null;
         },
 
-        /** Latest body for a URL — matches by filename when CDN host differs. */
+        /**
+         * Latest body for a URL. Match exact URL, same pathname, or same
+         * quality-root suffix (/N/high/mono.m3u8). Never return a different
+         * playlist (e.g. master playlist.m3u8 for a mono.m3u8 request) — that
+         * caused nested /high/high/ rewrite loops on Roku.
+         */
         getLatestForUrl(preferredUrl) {
             const exact = bodiesByUrl.get(preferredUrl);
             if (exact) {
                 return exact;
             }
-            const filename = preferredUrl.split('/').pop()?.split('?')[0] || '';
-            if (filename) {
-                for (const [url, body] of bodiesByUrl) {
-                    if (url.includes(filename)) {
+
+            let preferredPath = '';
+            try {
+                preferredPath = new URL(preferredUrl).pathname;
+            } catch {
+                preferredPath = preferredUrl.split('?')[0] || '';
+            }
+            if (!preferredPath) {
+                return null;
+            }
+
+            for (const [url, body] of bodiesByUrl) {
+                try {
+                    if (new URL(url).pathname === preferredPath) {
                         return body;
+                    }
+                } catch {
+                    // Ignore malformed capture keys.
+                }
+            }
+
+            const preferredSuffix = qualityPathSuffix(preferredPath);
+            if (preferredSuffix) {
+                for (const [url, body] of bodiesByUrl) {
+                    try {
+                        if (qualityPathSuffix(new URL(url).pathname) === preferredSuffix) {
+                            return body;
+                        }
+                    } catch {
+                        // Ignore malformed capture keys.
                     }
                 }
             }
-            for (const [url, body] of bodiesByUrl) {
-                if (url.includes('mono.m3u8')) {
-                    return body;
-                }
-            }
-            for (const [url, body] of bodiesByUrl) {
-                if (url.includes('playlist.m3u8')) {
-                    return body;
-                }
-            }
-            return this.getAnyBody();
+
+            return null;
         },
 
         /** @param {string} url @param {number} [timeoutMs] */
         async waitForBody(url, timeoutMs = 12000) {
             const deadline = Date.now() + timeoutMs;
             while (Date.now() < deadline) {
-                const exact = bodiesByUrl.get(url);
-                if (exact) {
-                    return exact;
+                const matched = this.getLatestForUrl(url);
+                if (matched) {
+                    return matched;
                 }
                 await sleep(150);
             }
-            return bodiesByUrl.get(url) || null;
+            return this.getLatestForUrl(url);
         },
 
         dispose() {
@@ -258,6 +285,10 @@ export function getLatestManifestBody(page, preferredUrl = '') {
 export async function waitForLatestManifestBody(page, url, timeoutMs = 8000) {
     const capture = capturesByPage.get(page);
     if (!capture) {
+        return null;
+    }
+    // Already have manifests but none match this URL → don't stall; caller fetches.
+    if (capture.getAnyBody() && !capture.getLatestForUrl(url)) {
         return null;
     }
     await capture.waitForBody(url, timeoutMs);
