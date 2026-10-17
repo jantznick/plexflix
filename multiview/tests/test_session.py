@@ -101,7 +101,7 @@ class _FakeMosaic:
 
 
 class SessionReconfigureTests(unittest.TestCase):
-    def _session(self, count=2, live_slots=2):
+    def _session(self, count=2):
         streams = [
             {"url": f"http://example/{i}.m3u8", "title": chr(ord("A") + i)}
             for i in range(count)
@@ -111,7 +111,7 @@ class SessionReconfigureTests(unittest.TestCase):
             streams,
             "grid",
             "/tmp",
-            {"live_slots": live_slots},
+            {},
             relay=_FakeRelay(),
             mosaic_factory=_FakeMosaic,
         )
@@ -125,8 +125,8 @@ class SessionReconfigureTests(unittest.TestCase):
         self.assertEqual(snap["tiles"][0]["stream"], 1)
         self.assertEqual(snap["tiles"][0]["title"], "B")
 
-    def test_live_slots_follow_order_prefix(self):
-        session = self._session(count=3, live_slots=2)
+    def test_first_two_order_slots_are_decoded(self):
+        session = self._session(count=3)
         self.assertTrue(session.feeds[0].live)
         self.assertTrue(session.feeds[1].live)
         self.assertFalse(session.feeds[2].live)

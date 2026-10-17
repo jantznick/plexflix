@@ -54,8 +54,6 @@ def settings_from_env(env=os.environ):
         "token": env.get("MULTIVIEW_TOKEN", ""),
         "port": int(env.get("PORT", "8095")),
         "allow_local_inputs": env.get("ALLOW_LOCAL_INPUTS", "") == "1",
-        # How many layout slots get a real decode (rest are placeholder slate)
-        "live_slots": int(env.get("LIVE_SLOTS", "2")),
     }
 
 

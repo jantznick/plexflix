@@ -24,6 +24,9 @@ FAILURE_WINDOW = 60
 MAX_BACKOFF = 30
 RETIRED_GENERATION_GRACE = 30
 STITCH_WINDOW = 10
+# Incremental build: this many order-prefix slots are decoded; the rest are slate.
+# Not an env knob — bump the constant when more of the function lands.
+DECODED_SLOTS = 2
 
 
 class Feed:
@@ -57,8 +60,7 @@ class Session:
         self._relay = relay
         self._mosaic_factory = mosaic_factory
 
-        # Incremental: decode the feeds currently in the first LIVE_SLOTS.
-        # FF/RW rotates `order`, so which games are live follows those slots.
+        # Incremental: decode feeds in the first DECODED_SLOTS of `order`.
         self.feeds = [Feed(i, spec, live=False) for i, spec in enumerate(feeds)]
         self.order = list(range(len(feeds)))
         self._sync_live_flags()
@@ -148,8 +150,7 @@ class Session:
                 pass
 
     def _sync_live_flags(self):
-        slots = max(1, int(self.settings.get("live_slots", 2)))
-        live = set(self.order[: min(slots, len(self.order))])
+        live = set(self.order[: min(DECODED_SLOTS, len(self.order))])
         for feed in self.feeds:
             feed.live = feed.index in live
 
@@ -187,7 +188,6 @@ class Session:
                 "generation": self.generation,
                 "restarts": self.restarts,
                 "paused": self.paused,
-                "liveSlots": max(1, int(self.settings.get("live_slots", 2))),
                 "playlistUrl": f"/sessions/{self.id}/master.m3u8",
                 "tiles": tiles,
             }
