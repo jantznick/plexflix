@@ -48,6 +48,14 @@ sub updateNavRail()
     overlay = (m.videoScreen <> invalid or m.detailScreen <> invalid or m.castDetailScreen <> invalid or m.sportsDetailScreen <> invalid or m.multiviewScreen <> invalid)
     m.sideNav.railVisible = not overlay
     m.sideNav.suppressed = splashShowing()
+    syncSportsInput()
+end sub
+
+' Buried Live Sports must not accept focus or OK while an overlay owns the remote.
+sub syncSportsInput()
+    if m.sportsScreen = invalid then return
+    blocked = (m.multiviewScreen <> invalid or m.sportsDetailScreen <> invalid or m.videoScreen <> invalid)
+    m.sportsScreen.inputActive = not blocked
 end sub
 
 ' Nothing draws over the splash mosaic, open menu or rail
@@ -478,6 +486,11 @@ function isLiveContinueItem(item as Object) as Boolean
 end function
 
 sub onSportsItemSelected()
+    ' Buried guide can steal OK from multiview / the game page and fire
+    ' selectedItem for whatever row currentIndex happens to sit on.
+    if m.multiviewScreen <> invalid then return
+    if m.videoScreen <> invalid then return
+    if m.sportsDetailScreen <> invalid then return
     item = m.sportsScreen.selectedItem
     if item = invalid then return
     streams = sportsStreamList(item)

@@ -13,6 +13,9 @@
         <field id="launchMultiview" type="boolean" alwaysNotify="true" onChange="onLaunchMultiview" />
         <field id="multiviewMessage" type="string" alwaysNotify="true" />
         <field id="multiviewRequested" type="assocarray" alwaysNotify="true" />
+        <!-- False while detail / multiview / player is on top so the buried
+             guide cannot take focus or open a game from leaked OK presses -->
+        <field id="inputActive" type="boolean" value="true" onChange="onInputActive" />
     </interface>
 
     <script type="text/brightscript" uri="SportsScreen.brs" />

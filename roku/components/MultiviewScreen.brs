@@ -21,6 +21,8 @@ sub init()
     m.rotateTimer.observeField("fire", "onRotateDebounced")
     m.promoteTimer = m.top.findNode("promoteTimer")
     m.promoteTimer.observeField("fire", "onPromoteReady")
+    m.focusTimer = m.top.findNode("focusTimer")
+    m.focusTimer.observeField("fire", "onFocusTick")
 
     m.streams = []
     m.session = invalid
@@ -50,6 +52,7 @@ sub init()
     m.video.observeField("state", "onVideoState")
     m.video.observeField("availableAudioTracks", "onAudioTracks")
     m.top.observeField("focusedChild", "onFocusedChild")
+    m.focusTimer.control = "start"
 end sub
 
 '--------------------------------------------------------------------
@@ -574,6 +577,7 @@ sub promoteFocused()
     m.switching = false
     m.settleTimer.control = "stop"
     m.pendingOrder = invalid
+    if m.focusTimer <> invalid then m.focusTimer.control = "stop"
     hideOverlay()
     releaseVideo()
     setStatus("Opening game...")
@@ -605,6 +609,7 @@ sub onResume()
     m.playing = false
     m.pendingPromote = invalid
     ensureVideoNode()
+    if m.focusTimer <> invalid then m.focusTimer.control = "start"
     ensureFocus()
     ' While the fullscreen player was up the mosaic session can be reaped
     ' (idle) or still only "starting". Don't point Video at a stale playlistUrl.
@@ -889,11 +894,19 @@ sub onFocusedChild()
     if child.isSameNode(m.video) then ensureFocus()
 end sub
 
+sub onFocusTick()
+    if m.closing or m.promoted then return
+    if m.top.isInFocusChain() then return
+    ensureFocus()
+end sub
+
 sub ensureFocus()
     if m.video = invalid then return
+    if m.closing or m.promoted then return
     m.video.focusable = false
     ' Always re-assert: hasFocus() is false while Video holds focus, and that
-    ' is exactly when FF/RW never reach onKeyEvent
+    ' is exactly when FF/RW never reach onKeyEvent — and when focus falls
+    ' through to the Live Sports guide underneath the mosaic.
     m.top.setFocus(true)
 end sub
 
@@ -913,6 +926,7 @@ sub closeScreen()
     m.settleTimer.control = "stop"
     m.rotateTimer.control = "stop"
     m.promoteTimer.control = "stop"
+    if m.focusTimer <> invalid then m.focusTimer.control = "stop"
     m.pendingOrder = invalid
     m.pendingPromote = invalid
     releaseVideo()

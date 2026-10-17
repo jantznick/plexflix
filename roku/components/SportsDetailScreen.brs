@@ -14,6 +14,25 @@ sub init()
     m.streamList.observeField("itemSelected", "onStreamSelected")
     m.streamList.observeField("escapeBack", "onListEscapeBack")
     m.streamList.observeField("escapeOptions", "onListEscapeOptions")
+    ' If anything clears list focus while this page is active, pin it back.
+    m.top.observeField("focusedChild", "onDetailFocusedChild")
+    m.focusTimer = m.top.findNode("focusTimer")
+    m.focusTimer.observeField("fire", "onFocusTick")
+    m.focusTimer.control = "start"
+end sub
+
+sub onDetailFocusedChild()
+    if not m.top.isInFocusChain() then return
+    if m.streams.count() = 0 then return
+    if m.streamList <> invalid and m.streamList.isInFocusChain() then return
+    focusStreamList()
+end sub
+
+sub onFocusTick()
+    if not m.top.isInFocusChain() then return
+    if m.streams.count() = 0 then return
+    if m.streamList <> invalid and m.streamList.isInFocusChain() then return
+    focusStreamList()
 end sub
 
 sub onContentSet()
@@ -170,7 +189,7 @@ end sub
 sub showHint()
     m.summaryLabel.color = "0xC8C8D0"
     if m.top.multiviewEnabled = true then
-        m.summaryLabel.text = "Add streams to multiview, or play one fullscreen."
+        m.summaryLabel.text = "* adds to multiview · OK plays this stream · Play starts multiview"
     else
         m.summaryLabel.text = ""
     end if

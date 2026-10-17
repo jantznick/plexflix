@@ -60,6 +60,10 @@ sub init()
     m.multiList = m.top.findNode("multiList")
     m.multiHint = m.top.findNode("multiHint")
     m.lastOpenAt = 0
+    ' Guide row rebuilds while the game page owns the remote — defer until
+    ' this screen is focused again so replaceChild can't clear focus.
+    m.guideRowsDirty = false
+    m.inputActive = true
 
     m.guideList.observeField("itemFocused", "onGuideFocused")
     m.guideList.observeField("itemSelected", "onGuideSelected")
@@ -331,6 +335,7 @@ sub focusList()
     m.zone = "list"
     paintPills()
     if m.guideList <> invalid then m.guideList.focusable = true
+    flushDirtyGuideRows()
     if m.events.count() = 0 then
         m.top.setFocus(true)
         return
@@ -543,13 +548,30 @@ sub onScoresTimer()
     loadScores()
 end sub
 
-' When the guide is the active surface, a row must stay focused. When the game
-' page (or multiview) is on top, do not call setFocus here — that would steal
-' keys from the screen the viewer is actually looking at.
+sub onInputActive()
+    m.inputActive = (m.top.inputActive <> false)
+    if m.guideList <> invalid then m.guideList.focusable = m.inputActive
+    m.top.focusable = m.inputActive
+    if m.inputActive then
+        flushDirtyGuideRows()
+    else if m.zone = "menu" then
+        m.menu.visible = false
+        m.zone = m.menuReturnZone
+    end if
+end sub
+
+function guideIsActive() as Boolean
+    if m.inputActive <> true then return false
+    if m.zone = "menu" then return false
+    if m.top = invalid then return false
+    return m.top.isInFocusChain()
+end function
+
+' When the guide is on screen it always has a lit row.
 sub restoreGuideFocus()
     if m.zone <> "list" then return
     if m.events.count() = 0 then return
-    if m.top = invalid or not m.top.isInFocusChain() then return
+    if not guideIsActive() then return
     m.guideList.focusable = true
     m.guideList.setFocus(true)
     if m.currentIndex >= 0 and m.currentIndex < m.events.count() then
@@ -557,11 +579,8 @@ sub restoreGuideFocus()
     end if
 end sub
 
-' Rebuild visible guide rows so col2 picks up fresh score lines
-sub refreshScoreRows()
-    ' Never touch the guide while the * options panel is up — replaceChild
-    ' steals focus from menuList, so OK opens the game under the dimmed menu.
-    if m.zone = "menu" then return
+' Rebuild every visible row from current event/multiview state.
+sub rebuildGuideRows()
     root = m.guideList.content
     if root = invalid then return
     for i = 0 to m.events.count() - 1
@@ -571,7 +590,25 @@ sub refreshScoreRows()
             root.replaceChild(fresh, i)
         end if
     end for
-    ' replaceChild can drop list focus; put it back only if we still own keys
+end sub
+
+sub flushDirtyGuideRows()
+    if m.guideRowsDirty <> true then return
+    if not guideIsActive() then return
+    m.guideRowsDirty = false
+    rebuildGuideRows()
+    restoreGuideFocus()
+end sub
+
+' Rebuild visible guide rows so col2 picks up fresh score lines
+sub refreshScoreRows()
+    ' replaceChild on a parked guide (game page on top) can clear focus with
+    ' nothing focused — defer until this screen owns the remote again.
+    if not guideIsActive() then
+        m.guideRowsDirty = true
+        return
+    end if
+    rebuildGuideRows()
     restoreGuideFocus()
 end sub
 
@@ -654,7 +691,10 @@ end sub
 ' Rows are swapped rather than edited: a list item only redraws when it is
 ' handed a new content node
 sub refreshMultiviewRows()
-    if m.zone = "menu" then return
+    if not guideIsActive() then
+        m.guideRowsDirty = true
+        return
+    end if
     root = m.guideList.content
     if root = invalid then return
     changed = false
@@ -669,7 +709,6 @@ sub refreshMultiviewRows()
             end if
         end if
     end for
-    ' Adding from the game page must not yank focus onto the guide underneath.
     if changed then restoreGuideFocus()
 end sub
 
@@ -884,6 +923,7 @@ sub onGuideSelected()
 end sub
 
 sub requestOpen()
+    if m.inputActive <> true then return
     if m.events.count() = 0 then return
     now = CreateObject("roDateTime").AsSeconds()
     if m.lastOpenAt <> 0 and now - m.lastOpenAt < 1 then return
@@ -928,6 +968,7 @@ sub onRefocus()
     else
         m.zone = "list"
         paintPills()
+        flushDirtyGuideRows()
         if m.events.count() > 0 then
             m.guideList.setFocus(true)
             if m.currentIndex >= 0 and m.currentIndex < m.events.count() then
@@ -941,6 +982,7 @@ end sub
 
 function onKeyEvent(key as String, press as Boolean) as Boolean
     if not press then return false
+    if m.inputActive <> true then return false
 
     if m.zone = "menu" then
         if key = "back" or key = "options" then
@@ -970,13 +1012,13 @@ function onKeyEvent(key as String, press as Boolean) as Boolean
         return true
     end if
     if m.zone = "list" then
-        ' Backup when the guide list lost focus after a score/multiview redraw:
-        ' OK must still open the focused event. Skip when the list itself has
-        ' focus — itemSelected already handles that path.
-        if key = "OK" then
-            if m.guideList <> invalid and m.guideList.isInFocusChain() then return false
-            requestOpen()
-            return true
+        ' No lit row → put focus back. Never treat that OK as "open game".
+        if m.guideList = invalid or not m.guideList.isInFocusChain() then
+            if key = "OK" or key = "up" or key = "down" or key = "rewind" or key = "fastforward" then
+                flushDirtyGuideRows()
+                restoreGuideFocus()
+                return true
+            end if
         end if
         if m.multiEnabled and key = "play" then
             message = requestMultiview()

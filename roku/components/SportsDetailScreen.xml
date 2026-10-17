@@ -21,6 +21,9 @@
     <script type="text/brightscript" uri="pkg:/source/Fonts.brs" />
 
     <children>
+        <!-- Keep a stream row lit; guide rebuilds under this page can clear focus -->
+        <Timer id="focusTimer" duration="0.25" repeat="true" />
+
         <Rectangle width="1920" height="1080" color="0x07070B" />
 
         <Poster id="backdrop" width="1920" height="720" loadDisplayMode="scaleToZoom" opacity="0.22" uri="" />
