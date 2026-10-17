@@ -104,6 +104,36 @@ Same “watch sports” idea also exists as **four clients**: plexflix Roku, rok
 
 ---
 
+## Future: Plex content inside multiview
+
+Today multiview tiles are **HTTP(S) HLS URLs** (sports/cable via `:8787` / vendored `:18787`). Plex Live TV and library media are different:
+
+| Source | What ffmpeg needs | Extra work |
+|--------|-------------------|------------|
+| **Plex Live TV** | HLS from a **tune** (`/livetv/…` or playback decision) with `X-Plex-*` headers / token | Channel (or multiview server) must **tune** before the tile is live; pass URL **plus headers** into the session; keep the Plex playback session alive while the mosaic runs; tear down on pause/promote/delete. Multiview’s stream spec is currently `{url, title}` only — needs optional `headers` (API already mentions them in places; mosaic/relay must forward them on every ffmpeg/proxy fetch). |
+| **Plex library (VOD)** | Transcode or direct HLS/file URL for a `ratingKey` | Same header/session story; VOD is not “live” — decide behavior (loop? slate when finished? start at `viewOffset`?). ffmpeg already has `-live_start_index` for live feeds; VOD would use normal `-ss` / playhead or just start at 0. |
+| **Mixed mosaic** (2 sports + 1 Plex channel) | Both of the above in one filtergraph | Session create accepts mixed specs; UI pickers on Live TV / library “Add to multiview”; promote-to-fullscreen must route Plex tiles back through **Plex** play (not sports `playDirect`). |
+
+### Rough lift (not a schedule — scope only)
+
+1. **Small / medium — Plex Live TV tiles only**  
+   - Extend multiview stream objects: `{ url, title, headers?, kind: "plex-live"|"sports" }`.  
+   - Server: on create/update, call Plex tune (or accept a pre-tuned URL from the channel), thread headers into ffmpeg inputs (today `-i url` has no header support — need `-headers` / proxy that injects them).  
+   - Channel: Live TV guide “add to multiview” + promote path that uses existing `tuneLiveChannel` / VideoScreen Plex path.  
+   - Careful: Plex sessions expire; mosaic pause/promote must stop/release tunes like sports pause frees `:8787`.
+
+2. **Larger — library movies/episodes as tiles**  
+   - Everything in (1), plus `buildStreamUrl` / decision API per item, poster/title from metadata, and a clear UX (why put a movie in a 4-tile sports mosaic?).  
+   - Probably lower priority unless you want “game + baby monitor cam + security HLS” style dashboards.
+
+3. **Already friendly**  
+   - Mosaic ffmpeg already joins live inputs near the tip (`-live_start_index -3`).  
+   - Relay can warm non-Plex proxy URLs; Plex would skip roku-feed proxy and hit PMS directly (or a tiny header-injecting proxy).
+
+Bottleneck is **session + headers + UI**, not the compositor math.
+
+---
+
 ## Combining later (target shape)
 
 When collapsing into one deployable system, a natural layout is a single repo (or monorepo) with one of each:
