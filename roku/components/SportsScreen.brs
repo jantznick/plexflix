@@ -545,6 +545,9 @@ end sub
 
 ' Rebuild visible guide rows so col2 picks up fresh score lines
 sub refreshScoreRows()
+    ' Never touch the guide while the * options panel is up — replaceChild
+    ' steals focus from menuList, so OK opens the game under the dimmed menu.
+    if m.zone = "menu" then return
     root = m.guideList.content
     if root = invalid then return
     for i = 0 to m.events.count() - 1
@@ -643,6 +646,7 @@ end sub
 ' Rows are swapped rather than edited: a list item only redraws when it is
 ' handed a new content node
 sub refreshMultiviewRows()
+    if m.zone = "menu" then return
     root = m.guideList.content
     if root = invalid then return
     changed = false
@@ -733,6 +737,9 @@ sub openActionMenu(title as String, subText as String, actions as Object)
     m.menuSub.text = subText
     setMenuActions(actions)
     m.menu.visible = true
+    ' New content resets selection; clear so the next OK always notifies even
+    ' when the user picks the same row index as last time.
+    m.menuList.itemSelected = -1
     m.menuList.jumpToItem = 0
     m.menuList.setFocus(true)
 end sub
@@ -772,10 +779,15 @@ sub closeActionMenu()
 end sub
 
 sub onMenuSelected()
-    idx = m.menuList.itemSelected
+    activateMenuActionAt(m.menuList.itemSelected)
+end sub
+
+sub activateMenuActionAt(idx as Dynamic)
+    ' First handler wins — OK key + itemSelected can both fire for one press.
+    if m.zone <> "menu" then return
     if idx = invalid or idx < 0 or idx >= m.menuActions.count() then return
     action = m.menuActions[idx]
-    if action.act = "none" then return
+    if action = invalid or action.act = "none" then return
     if action.act = "close" then
         closeActionMenu()
     else if action.act = "refresh" then
@@ -928,8 +940,26 @@ function onKeyEvent(key as String, press as Boolean) as Boolean
     if not press then return false
 
     if m.zone = "menu" then
-        if key = "back" or key = "options" then closeActionMenu()
-        return true
+        if key = "back" or key = "options" then
+            closeActionMenu()
+            return true
+        end if
+        if key = "OK" then
+            ' LabelList often won't re-fire itemSelected for the same index.
+            ' Drive actions from itemFocused so Watch Multiview always works.
+            idx = 0
+            if m.menuList <> invalid and m.menuList.itemFocused <> invalid then
+                idx = m.menuList.itemFocused
+            end if
+            activateMenuActionAt(idx)
+            return true
+        end if
+        ' Something stole focus (score row rebuild, etc.) — put it back so
+        ' arrows keep moving the menu instead of the guide under the overlay.
+        if m.menuList <> invalid and not m.menuList.isInFocusChain() then
+            m.menuList.setFocus(true)
+        end if
+        return false
     end if
 
     if key = "options" then
