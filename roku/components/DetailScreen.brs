@@ -73,6 +73,8 @@ sub init()
     m.reviews = []
     m.seasons = []
     m.seasonQueue = 0
+    m.seasonLoadOrder = []
+    m.focusSeasonRow = 0
     m.seasonContent = invalid
     m.pendingSeason = invalid
     m.relatedContent = invalid
@@ -92,6 +94,8 @@ sub onContentSet()
 
     m.focusEpisodeKey = asString(item.focusEpisodeKey)
     m.focusSeasonKey = asString(item.focusSeasonKey)
+    m.seasonLoadOrder = []
+    m.focusSeasonRow = 0
 
     m.isUnavailable = false
     m.onWatchlist = false
@@ -952,6 +956,7 @@ sub onChildrenLoaded()
             end if
             return
         end if
+        buildSeasonLoadOrder()
         if m.isUnavailable = true and m.unavailableIsShow = true then
             ' Discover series: season rails under the unavailable banner
             if m.tvPanel <> invalid then
@@ -959,10 +964,8 @@ sub onChildrenLoaded()
                 m.tvPanel.visible = true
             end if
             if pageGrabJob() = invalid then setSoftStatusHint("OK on a grey episode to Grab Now")
-        else
-            ' Prefer the Continue Watching season first so focus lands sooner
-            prioritizeFocusSeason()
-            if m.focusEpisodeKey <> "" then m.seasonRows.setFocus(true)
+        else if m.focusEpisodeKey <> "" or m.focusSeasonRow > 0 then
+            m.seasonRows.setFocus(true)
         end if
         loadSeasonEpisodes()
     else if m.loadMode = "episodes" then
@@ -971,68 +974,93 @@ sub onChildrenLoaded()
             content = m.top.content
             if content <> invalid then content.tmdbId = m.showTmdbId
         end if
-        fillSeasonRow(m.seasonQueue, m.pendingSeason, items)
+        rowIndex = m.seasonQueue
+        if m.seasonLoadOrder <> invalid and m.seasonQueue < m.seasonLoadOrder.count() then
+            rowIndex = m.seasonLoadOrder[m.seasonQueue]
+        end if
+        fillSeasonRow(rowIndex, m.pendingSeason, items)
         m.seasonQueue = m.seasonQueue + 1
         loadSeasonEpisodes()
     end if
 end sub
 
-sub prioritizeFocusSeason()
-    if m.focusSeasonKey = "" or m.seasons = invalid then return
-    target = -1
+' Keep display order (oldest→newest for library shows). Build a load queue that
+' fetches the Continue Watching / first-owned season first, then the rest.
+sub buildSeasonLoadOrder()
+    m.seasonLoadOrder = []
+    m.focusSeasonRow = 0
+    if m.seasons = invalid then return
+
+    count = m.seasons.count()
+    for i = 0 to count - 1
+        m.seasonLoadOrder.push(i)
+    end for
+
+    target = findHighlightSeasonIndex()
+    if target < 0 then target = 0
+    m.focusSeasonRow = target
+
+    if target <= 0 or count <= 1 then return
+
+    ' preferred first, then everyone else in display order
+    order = [target]
+    for i = 0 to count - 1
+        if i <> target then order.push(i)
+    end for
+    m.seasonLoadOrder = order
+end sub
+
+function findHighlightSeasonIndex() as Integer
+    if m.seasons = invalid then return -1
+
+    ' 1) Continue Watching / deep-link season key
+    if m.focusSeasonKey <> "" then
+        for i = 0 to m.seasons.count() - 1
+            season = m.seasons[i]
+            if season = invalid then
+                ' skip
+            else if asString(season.ratingKey) <> "" and asString(season.ratingKey) = m.focusSeasonKey then
+                return i
+            else if asString(season.index) <> "" and asString(season.index) = m.focusSeasonKey then
+                return i
+            end if
+        end for
+    end if
+
+    ' 2) First season we actually own (not a TMDB-only gap row)
     for i = 0 to m.seasons.count() - 1
         season = m.seasons[i]
         if season = invalid then
             ' skip
-        else if asString(season.ratingKey) <> "" and asString(season.ratingKey) = m.focusSeasonKey then
-            target = i
-            exit for
-        else if asString(season.index) <> "" and asString(season.index) = m.focusSeasonKey then
-            ' Fallback: focusSeasonKey sometimes carries the season number
-            target = i
-            exit for
+        else if asString(season.ratingKey) <> "" then
+            isMissing = false
+            if season.DoesExist("missing") and season.missing = true then isMissing = true
+            if isMissing <> true then return i
         end if
     end for
-    if target <= 0 then return
 
-    ' Rotate so the focus season is loaded first, then wrap around
-    reordered = []
-    for i = target to m.seasons.count() - 1
-        reordered.push(m.seasons[i])
-    end for
-    for i = 0 to target - 1
-        reordered.push(m.seasons[i])
-    end for
-    m.seasons = reordered
-
-    ' Keep ContentNode row titles aligned with the new order
-    if m.seasonContent = invalid then return
-    while m.seasonContent.getChildCount() > 0
-        m.seasonContent.removeChildIndex(0)
-    end while
-    for each season in m.seasons
-        row = m.seasonContent.createChild("ContentNode")
-        title = asString(season.title)
-        if title = "" then
-            if asString(season.index) <> "" then
-                title = "Season " + asString(season.index)
-            else
-                title = "Season"
-            end if
-        end if
-        row.title = title
-    end for
-    m.seasonRows.content = m.seasonContent
-end sub
+    return 0
+end function
 
 sub loadSeasonEpisodes()
-    if m.seasons = invalid or m.seasonQueue >= m.seasons.count() then
+    if m.seasons = invalid then return
+    if m.seasonLoadOrder = invalid or m.seasonLoadOrder.count() = 0 then
+        buildSeasonLoadOrder()
+    end if
+    if m.seasonQueue >= m.seasonLoadOrder.count() then
+        ' Highlight season already jumped when its row filled; only ensure focus
         if m.seasonContent <> invalid and m.seasonContent.getChildCount() > 0 then
-            m.seasonRows.setFocus(true)
+            if m.seasonRows.hasFocus() <> true then m.seasonRows.setFocus(true)
         end if
         return
     end if
-    loadChildren(m.seasons[m.seasonQueue], "episodes")
+    idx = m.seasonLoadOrder[m.seasonQueue]
+    if idx < 0 or idx >= m.seasons.count() then
+        m.seasonQueue = m.seasonQueue + 1
+        loadSeasonEpisodes()
+        return
+    end if
+    loadChildren(m.seasons[idx], "episodes")
 end sub
 
 sub fillSeasonRow(index as Integer, season as Object, episodes as Object)
@@ -1075,7 +1103,18 @@ sub fillSeasonRow(index as Integer, season as Object, episodes as Object)
     end for
 
     m.seasonRows.content = m.seasonContent
-    maybeFocusEpisode(index)
+    ' Land on the owned / Continue Watching season as soon as its row fills —
+    ' don't wait for every later (often missing) season to finish loading.
+    if index = m.focusSeasonRow then
+        if m.focusEpisodeKey <> "" then
+            maybeFocusEpisode(index)
+        else
+            m.seasonRows.jumpToRowItem = [index, 0]
+            m.seasonRows.setFocus(true)
+        end if
+    else
+        maybeFocusEpisode(index)
+    end if
 end sub
 
 sub maybeFocusEpisode(seasonIndex as Integer)

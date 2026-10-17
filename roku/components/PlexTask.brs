@@ -2227,16 +2227,53 @@ function mergeShowSeasons(owned as Object, guide as Object, showKey as String, s
         end for
     end if
 
-    ' Newest season first (S51 → S1); Specials stay at the end if present
-    return reverseSeasonsNewestFirst(merged)
+    ' Library shows (we own at least one season): oldest → newest so S1 leads.
+    ' Discover-only (nothing in Plex yet): newest first so recent seasons are on top.
+    if owned.count() = 0 then return reverseSeasonsNewestFirst(merged)
+    return putSpecialsLast(merged)
 end function
 
-function reverseSeasonsNewestFirst(seasons as Object) as Object
+function putSpecialsLast(seasons as Object) as Object
     if seasons = invalid or seasons.count() <= 1 then return seasons
     specials = []
     regular = []
     for each season in seasons
-        if safeToStr(season.index) = "0" then
+        if tmdbNumStr(season.index) = "0" then
+            specials.push(season)
+        else
+            regular.push(season)
+        end if
+    end for
+    ' Oldest → newest by season number (S1, S2, …); Specials stay at the end
+    n = regular.count()
+    if n > 1 then
+        for i = 0 to n - 2
+            for j = i + 1 to n - 1
+                if intOrZero(regular[j].index) < intOrZero(regular[i].index) then
+                    tmp = regular[i]
+                    regular[i] = regular[j]
+                    regular[j] = tmp
+                end if
+            end for
+        end for
+    end if
+    out = []
+    for each season in regular
+        out.push(season)
+    end for
+    for each season in specials
+        out.push(season)
+    end for
+    return out
+end function
+
+function reverseSeasonsNewestFirst(seasons as Object) as Object
+    if seasons = invalid or seasons.count() <= 1 then return seasons
+    ordered = putSpecialsLast(seasons)
+    specials = []
+    regular = []
+    for each season in ordered
+        if tmdbNumStr(season.index) = "0" then
             specials.push(season)
         else
             regular.push(season)
