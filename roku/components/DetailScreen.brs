@@ -468,7 +468,7 @@ sub showUnavailableMode(item as Object)
     if m.softStatus <> invalid then m.softStatus.translation = [248, 412]
 
     if m.unavailableBody <> invalid then m.unavailableBody.text = unavailableMessage(item)
-    if m.softStatus <> invalid then m.softStatus.text = "Looking up details & similar titles…"
+    setSoftStatusHint("Looking up details & similar titles…")
     paintWatchlistLabel()
     paintGrabLabel()
 
