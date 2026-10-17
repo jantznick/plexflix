@@ -6,9 +6,12 @@ sub init()
     m.progressBg = m.top.findNode("progressBg")
     m.progressFg = m.top.findNode("progressFg")
     m.watchedBadge = m.top.findNode("watchedBadge")
+    m.missingDim = m.top.findNode("missingDim")
+    m.grabBadge = m.top.findNode("grabBadge")
     m.itemWidth = 320
     m.itemHeight = 180
     m.focusPad = 8
+    m.isMissing = false
     setFocused(false)
 end sub
 
@@ -27,10 +30,18 @@ sub onSizeChange()
     m.still.loadWidth = Int(contentW * 1.5)
     m.still.loadHeight = Int(contentH * 1.5)
     m.still.translation = [pad, pad]
+    if m.missingDim <> invalid then
+        m.missingDim.width = contentW
+        m.missingDim.height = contentH
+        m.missingDim.translation = [pad, pad]
+    end if
     m.titleScrim.width = contentW
     m.titleScrim.translation = [pad, pad + contentH - 52]
     m.titleLabel.width = contentW - 24
     m.titleLabel.translation = [pad + 12, pad + contentH - 44]
+    if m.grabBadge <> invalid then
+        m.grabBadge.translation = [pad + 12, pad + 10]
+    end if
 
     if m.shadow <> invalid then
         m.shadow.width = contentW
@@ -48,6 +59,7 @@ sub onSizeChange()
         m.watchedBadge.translation = [pad + contentW - badge - 8, pad + 8]
     end if
     refreshProgress()
+    applyMissingVisual()
 end sub
 
 sub onContentChange()
@@ -63,13 +75,46 @@ sub onContentChange()
     label = ""
     if item.title <> invalid then label = item.title
     m.titleLabel.text = label
+
+    m.isMissing = false
+    if item.DoesExist("missing") and item.missing = true then m.isMissing = true
+
     refreshProgress()
-    if m.watchedBadge <> invalid then m.watchedBadge.visible = (item.watched = true)
+    if m.watchedBadge <> invalid then
+        if m.isMissing = true then
+            m.watchedBadge.visible = false
+        else
+            m.watchedBadge.visible = (item.watched = true)
+        end if
+    end if
+    applyMissingVisual()
+    refreshFocusVisual()
+end sub
+
+sub applyMissingVisual()
+    if m.isMissing = true then
+        m.still.opacity = 0.38
+        if m.missingDim <> invalid then
+            m.missingDim.visible = true
+            m.missingDim.opacity = 0.35
+        end if
+        if m.titleLabel <> invalid then m.titleLabel.color = "0x9A9AA4"
+        if m.grabBadge <> invalid then m.grabBadge.visible = true
+        if m.progressBg <> invalid then m.progressBg.visible = false
+        if m.progressFg <> invalid then m.progressFg.visible = false
+    else
+        if m.missingDim <> invalid then
+            m.missingDim.visible = false
+            m.missingDim.opacity = 0.0
+        end if
+        if m.titleLabel <> invalid then m.titleLabel.color = "0xFFFFFF"
+        if m.grabBadge <> invalid then m.grabBadge.visible = false
+    end if
 end sub
 
 sub refreshProgress()
     item = m.top.itemContent
-    if item = invalid then
+    if item = invalid or m.isMissing = true then
         m.progressBg.visible = false
         m.progressFg.visible = false
         return
@@ -108,6 +153,23 @@ sub refreshFocusVisual()
 end sub
 
 sub setFocused(focused as Boolean)
+    if m.isMissing = true then
+        if focused then
+            m.still.opacity = 0.55
+            if m.shadow <> invalid then
+                m.shadow.opacity = 0.55
+                m.shadow.translation = [m.focusPad + 8, m.focusPad + 8]
+            end if
+        else
+            m.still.opacity = 0.38
+            if m.shadow <> invalid then
+                m.shadow.opacity = 0.4
+                m.shadow.translation = [m.focusPad + 6, m.focusPad + 6]
+            end if
+        end if
+        return
+    end if
+
     if focused then
         m.still.opacity = 1.0
         if m.shadow <> invalid then
