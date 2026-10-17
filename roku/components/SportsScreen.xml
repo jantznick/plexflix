@@ -1,8 +1,9 @@
 <?xml version="1.0" encoding="utf-8" ?>
-<component name="SportsScreen" extends="Group">
+<component name="SportsScreen" extends="Group" focusable="true">
     <interface>
         <field id="config" type="assocarray" onChange="onConfigReady" />
-        <field id="selectedItem" type="assocarray" />
+        <!-- alwaysNotify: same game AA is re-selected after Back from detail -->
+        <field id="selectedItem" type="assocarray" alwaysNotify="true" />
         <field id="loadingMessage" type="string" />
         <field id="openMenu" type="boolean" alwaysNotify="true" />
         <field id="refocus" type="boolean" alwaysNotify="true" onChange="onRefocus" />
@@ -11,7 +12,7 @@
         <field id="multiviewToggle" type="assocarray" alwaysNotify="true" onChange="onMultiviewToggle" />
         <field id="launchMultiview" type="boolean" alwaysNotify="true" onChange="onLaunchMultiview" />
         <field id="multiviewMessage" type="string" alwaysNotify="true" />
-        <field id="multiviewRequested" type="assocarray" />
+        <field id="multiviewRequested" type="assocarray" alwaysNotify="true" />
     </interface>
 
     <script type="text/brightscript" uri="SportsScreen.brs" />

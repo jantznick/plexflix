@@ -12,7 +12,7 @@
         <field id="close" type="boolean" alwaysNotify="true" onChange="onCloseRequested" />
         <!-- One game full screen, through the regular player; this screen
              stays underneath with its session alive -->
-        <field id="playRequested" type="assocarray" />
+        <field id="playRequested" type="assocarray" alwaysNotify="true" />
         <field id="resume" type="boolean" alwaysNotify="true" onChange="onResume" />
         <field id="notice" type="string" alwaysNotify="true" onChange="onNotice" />
         <!-- Read by MainScene on close, so the teardown request outlives us -->
