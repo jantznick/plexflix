@@ -337,9 +337,10 @@ cd multiview && python3 -m unittest discover -s tests
 - **Play** (guide or game page) starts multiview once 2–4 games are picked
 - In multiview: **arrows** move between games and **the sound follows the
   highlight** (red bar under the tile); **OK** opens that game full screen in
-  the normal player, and Back returns to the mosaic; **\*** cycles
-  Grid → Spotlight → Picture in picture; **Fast forward** (or Rewind) moves
-  the highlighted game into the main spot; **Back** exits
+  the normal player, and Back returns to the mosaic; **Instant Replay** cycles
+  Picture in picture ↔ Grid (`*` often opens the TV settings while Video plays,
+  so it is not reliable here); **Fast forward** (or Rewind) moves the
+  highlighted game into the main spot; **Back** exits
 
 ### When a feed hiccups
 
