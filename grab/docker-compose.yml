@@ -10,8 +10,8 @@ services:
     # subnetted"). Matches our LAN-IP config for NZBGet/Plex/Roku.
     network_mode: host
     environment:
-      # Host networking: this must be free on the host. 8096 is often taken.
-      PORT: "18096"
+      # Host networking: this must be free on the host. 8096/18096 are often taken.
+      PORT: "8097"
       # Optional shared secret; same value as grabToken in PlexConfig.brs later
       GRAB_TOKEN: ""
 

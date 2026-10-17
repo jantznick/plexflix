@@ -43,7 +43,7 @@ SAMPLE_FEED = b"""<?xml version="1.0" encoding="UTF-8"?>
 class SettingsTests(unittest.TestCase):
     def test_defaults(self):
         s = settings_from_env({})
-        self.assertEqual(s["port"], 18096)
+        self.assertEqual(s["port"], 8097)
         self.assertEqual(s["nzbget_priority"], 900)
         self.assertEqual(s["max_size_bytes"], 5 * 1024 * 1024 * 1024)
 

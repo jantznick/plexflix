@@ -24,7 +24,7 @@ Optional auth: set `GRAB_TOKEN` and send header `X-Grab-Token: <token>`.
 ### Start a movie
 
 ```bash
-curl -s -X POST http://192.168.1.50:18096/jobs \
+curl -s -X POST http://192.168.1.50:8097/jobs \
   -H 'Content-Type: application/json' \
   -d '{"mediaType":"movie","title":"Example","year":"2020","tmdbId":"123","imdbId":"tt0000001","guid":"plex://movie/..."}'
 ```
@@ -32,7 +32,7 @@ curl -s -X POST http://192.168.1.50:18096/jobs \
 ### Start a specific episode (or S01E01)
 
 ```bash
-curl -s -X POST http://192.168.1.50:18096/jobs \
+curl -s -X POST http://192.168.1.50:8097/jobs \
   -H 'Content-Type: application/json' \
   -d '{"mediaType":"episode","title":"Some Show","tmdbId":"456","season":1,"episode":1}'
 ```
@@ -68,8 +68,8 @@ curl -s -X POST http://192.168.1.50:18096/jobs \
 - Configure grab with that LAN IP for NZBGet / Plex / (later) Sonarr — **not**
   docker service DNS names. With `network_mode: host`, `127.0.0.1` also works
   for NZBGet/Plex on the same machine; Roku still needs the LAN IP.
-- Roku will call `http://<host-lan-ip>:18096` (same idea as `multiviewUrl`).
-- Port **18096** is intentional so it stays off the busy 7878/8989/8080/3000 range.
+- Roku will call `http://<host-lan-ip>:8097` (same idea as `multiviewUrl`).
+- Port **8097** is intentional so it stays off the busy 7878/8989/8080/3000 range.
 - Host networking avoids Docker creating a new bridge network (fixes
   `all predefined address pools have been fully subnetted` on busy hosts).
 
@@ -147,7 +147,7 @@ Put the movie library’s `key` in `PLEX_MOVIE_SECTION_ID` and the TV library’
 cd grab
 cp .env.example .env   # then edit
 docker compose up -d --build
-curl -s http://192.168.1.50:18096/healthz
+curl -s http://192.168.1.50:8097/healthz
 ```
 
 Compose reads `.env` for variable substitution when you reference them; this
