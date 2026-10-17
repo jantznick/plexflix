@@ -131,7 +131,10 @@ export async function ensureRemuxSession(b64Payload) {
         '-hide_banner',
         '-loglevel', 'warning',
         '-nostdin',
+        // Proxied segment URLs have no .ts suffix; HLS demuxer rejects them
+        // unless allowed_extensions is ALL ("not in allowed_segment_extensions").
         '-protocol_whitelist', 'file,http,https,tcp,tls,crypto',
+        '-allowed_extensions', 'ALL',
         '-fflags', '+genpts+discardcorrupt',
         '-reconnect', '1',
         '-reconnect_streamed', '1',
