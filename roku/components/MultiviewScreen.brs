@@ -455,7 +455,7 @@ sub onUpdated()
 
     ' Pause-for-promote: mosaic is down; open the normal sports player next
     if m.pendingPromote <> invalid and response.session <> invalid then
-        if response.session.paused = true or asString(response.session.state) = "paused" then
+        if asString(response.session.state) = "paused" then
             m.switching = false
             m.promoteTimer.control = "stop"
             m.promoteTimer.control = "start"
