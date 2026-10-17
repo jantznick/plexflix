@@ -69,7 +69,7 @@ CATEGORY_ALIASES: dict[str, str] = {
     "ncaa football": "ncaaf",
     "ncaa fb": "ncaaf",
     "american football ncaa": "ncaaf",
-    # NCAA D1 men's hockey
+    # NCAA D1 men's hockey (feed labels vary a lot)
     "ncaah": "ncaah",
     "ncaa hockey": "ncaah",
     "college hockey": "ncaah",
@@ -78,6 +78,18 @@ CATEGORY_ALIASES: dict[str, str] = {
     "ncaa d1 hockey": "ncaah",
     "ncaa division 1 hockey": "ncaah",
     "ncaa division i hockey": "ncaah",
+    "ncaa d1 mens": "ncaah",
+    "ncaa d1 men's": "ncaah",
+    "ncaa d1 men": "ncaah",
+    "ncaa mens": "ncaah",
+    "ncaa men's": "ncaah",
+    "ncaa men": "ncaah",
+    "d1 mens": "ncaah",
+    "d1 men's": "ncaah",
+    "d1 mens hockey": "ncaah",
+    "d1 men's hockey": "ncaah",
+    "ncaa d1 mens hockey": "ncaah",
+    "ncaa d1 men's hockey": "ncaah",
 }
 
 
@@ -86,9 +98,21 @@ def normalize_league(value: str | None) -> str | None:
     if not value:
         return None
     key = " ".join(str(value).strip().lower().replace("_", " ").replace("-", " ").split())
+    key = key.replace("'", "").replace("'", "")
     if key in LEAGUES or key in LEAGUE_GROUPS:
         return key
-    return CATEGORY_ALIASES.get(key)
+    hit = CATEGORY_ALIASES.get(key)
+    if hit:
+        return hit
+    # Feed shorthand like "NCAA D1 Mens" / "NCAA Mens" without the word hockey
+    if "ncaa" in key or key.startswith("d1 "):
+        if any(x in key for x in ("football", "ncaaf", "cfb", "basketball", "soccer", "baseball")):
+            return None
+        if "women" in key or "womens" in key:
+            return None
+        if "hockey" in key or "mens" in key or key.endswith(" men") or " men " in key:
+            return "ncaah"
+    return None
 
 
 def candidate_leagues(canon: str | None) -> list[str]:
