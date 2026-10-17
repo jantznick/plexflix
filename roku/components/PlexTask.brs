@@ -18,6 +18,8 @@ sub exec()
         m.top.response = fetchRandomEpisode(cfg, m.top.item)
     else if action = "children" then
         m.top.response = fetchChildren(cfg, m.top.item)
+    else if action = "showSeasons" then
+        m.top.response = fetchShowSeasons(cfg, m.top.item)
     else if action = "seasonEpisodes" then
         m.top.response = fetchSeasonEpisodes(cfg, m.top.item)
     else if action = "findLocalEpisode" then
@@ -1863,16 +1865,49 @@ function fetchChildren(cfg as Object, item as Object) as Object
     return { ok: true, items: items }
 end function
 
+' Show-level season rails: Plex-owned seasons merged with TMDB so seasons we
+' don't have (or don't have at all yet) still get a row. Fail-open to owned-only
+' when TMDB is unavailable.
+function fetchShowSeasons(cfg as Object, item as Object) as Object
+    if item = invalid then return { ok: false, error: "No item" }
+    showKey = safeToStr(item.ratingKey)
+    if showKey = "" then return { ok: false, error: "Missing ratingKey" }
+
+    ownedResult = plexGet(cfg, "/library/metadata/" + showKey + "/children")
+    owned = []
+    if ownedResult.ok = true then owned = collectMetadata(cfg, ownedResult.json)
+
+    showTitle = safeToStr(item.title)
+    showYear = safeToStr(item.year)
+    showPosterUrl = safeToStr(item.hdPosterUrl)
+    if showPosterUrl = "" then showPosterUrl = safeToStr(item.hdShowPosterUrl)
+
+    tmdbId = safeToStr(item.tmdbId)
+    if tmdbId = "" then tmdbId = safeToStr(item.showTmdbId)
+    if tmdbId = "" then tmdbId = resolveShowTmdbId(cfg, showKey)
+    if tmdbId = "" and showTitle <> "" then tmdbId = searchTmdbShowId(cfg, showTitle, showYear)
+
+    if showPosterUrl = "" then showPosterUrl = resolveShowPosterUrl(cfg, showKey)
+
+    guide = []
+    if tmdbId <> "" then guide = fetchTmdbShowSeasons(cfg, tmdbId)
+
+    merged = mergeShowSeasons(owned, guide, showKey, showTitle, showYear, showPosterUrl, tmdbId)
+    return { ok: true, items: merged, showTmdbId: tmdbId }
+end function
+
 ' Full season rail: Plex-owned episodes merged with a TMDB guide so missing
-' episodes still appear (greyed) and can be Grab Now targets.
+' episodes still appear (greyed) and can be Grab Now targets. Works for fully
+' missing seasons too (no Plex season ratingKey — guide-only).
 function fetchSeasonEpisodes(cfg as Object, item as Object) as Object
     if item = invalid then return { ok: false, error: "No item" }
     ratingKey = safeToStr(item.ratingKey)
-    if ratingKey = "" then return { ok: false, error: "Missing ratingKey" }
 
-    ownedResult = plexGet(cfg, "/library/metadata/" + ratingKey + "/children")
     owned = []
-    if ownedResult.ok = true then owned = collectMetadata(cfg, ownedResult.json)
+    if ratingKey <> "" then
+        ownedResult = plexGet(cfg, "/library/metadata/" + ratingKey + "/children")
+        if ownedResult.ok = true then owned = collectMetadata(cfg, ownedResult.json)
+    end if
 
     seasonNum = safeToStr(item.index)
     if seasonNum = "" then seasonNum = safeToStr(item.parentIndex)
@@ -1896,6 +1931,11 @@ function fetchSeasonEpisodes(cfg as Object, item as Object) as Object
     guide = []
     if tmdbId <> "" and seasonNum <> "" then
         guide = fetchTmdbSeasonGuide(cfg, tmdbId, seasonNum)
+    end if
+
+    ' Fully missing season with no TMDB guide — nothing to show (fail-open)
+    if ratingKey = "" and guide.count() = 0 and owned.count() = 0 then
+        return { ok: true, items: [], showTmdbId: tmdbId }
     end if
 
     merged = mergeSeasonEpisodes(owned, guide, seasonNum, tmdbId, showKey, showTitle, showPosterUrl)
@@ -2015,6 +2055,18 @@ function searchTmdbShowId(cfg as Object, title as String, year as String) as Str
     return safeToStr(search.results[0].id)
 end function
 
+function fetchTmdbShowSeasons(cfg as Object, tmdbId as String) as Object
+    apiKey = ""
+    if cfg.tmdbApiKey <> invalid then apiKey = safeToStr(cfg.tmdbApiKey)
+    if apiKey = "" or apiKey = "REPLACE_WITH_TMDB_API_KEY" then return []
+    if tmdbId = "" then return []
+
+    url = "https://api.themoviedb.org/3/tv/" + tmdbId + "?api_key=" + apiKey
+    data = httpGetJson(url)
+    if data = invalid or data.seasons = invalid then return []
+    return data.seasons
+end function
+
 function fetchTmdbSeasonGuide(cfg as Object, tmdbId as String, seasonNum as String) as Object
     apiKey = ""
     if cfg.tmdbApiKey <> invalid then apiKey = safeToStr(cfg.tmdbApiKey)
@@ -2025,6 +2077,101 @@ function fetchTmdbSeasonGuide(cfg as Object, tmdbId as String, seasonNum as Stri
     data = httpGetJson(url)
     if data = invalid or data.episodes = invalid then return []
     return data.episodes
+end function
+
+function mergeShowSeasons(owned as Object, guide as Object, showKey as String, showTitle as String, showYear as String, showPosterUrl as String, tmdbId as String) as Object
+    if owned = invalid then owned = []
+    if guide = invalid then guide = []
+
+    ownedMap = {}
+    for each season in owned
+        key = safeToStr(season.index)
+        if key <> "" then ownedMap[key] = season
+    end for
+
+    merged = []
+    used = {}
+
+    if guide.count() > 0 then
+        for each g in guide
+            seasonNum = ""
+            if g.season_number <> invalid then seasonNum = safeToStr(g.season_number)
+            if seasonNum = "" then
+                ' skip
+            else
+                epCount = 0
+                if g.episode_count <> invalid then epCount = g.episode_count
+                ' Skip TMDB Specials (0) unless Plex already has that season
+                if seasonNum = "0" and ownedMap.DoesExist("0") <> true then
+                    ' skip
+                else if ownedMap.DoesExist(seasonNum) then
+                    season = ownedMap[seasonNum]
+                    season.missing = false
+                    season.showRatingKey = showKey
+                    season.showTitle = showTitle
+                    season.showYear = showYear
+                    season.showPosterUrl = showPosterUrl
+                    season.showTmdbId = tmdbId
+                    if tmdbId <> "" then season.tmdbId = tmdbId
+                    merged.push(season)
+                    used[seasonNum] = true
+                else if epCount > 0 then
+                    name = safeToStr(g.name)
+                    if name = "" then name = "Season " + seasonNum
+                    poster = showPosterUrl
+                    if g.poster_path <> invalid and safeToStr(g.poster_path) <> "" then
+                        poster = "https://image.tmdb.org/t/p/w500" + safeToStr(g.poster_path)
+                    end if
+                    merged.push({
+                        title: name,
+                        mediaType: "season",
+                        ratingKey: "",
+                        key: "",
+                        index: seasonNum,
+                        missing: true,
+                        leafCount: epCount,
+                        viewedLeafCount: 0,
+                        hdPosterUrl: poster,
+                        hdBackdropUrl: showPosterUrl,
+                        showRatingKey: showKey,
+                        showTitle: showTitle,
+                        showYear: showYear,
+                        showPosterUrl: showPosterUrl,
+                        showTmdbId: tmdbId,
+                        tmdbId: tmdbId,
+                        year: Left(safeToStr(g.air_date), 4)
+                    })
+                    used[seasonNum] = true
+                end if
+            end if
+        end for
+    end if
+
+    for each season in owned
+        key = safeToStr(season.index)
+        if key <> "" and used.DoesExist(key) <> true then
+            season.missing = false
+            season.showRatingKey = showKey
+            season.showTitle = showTitle
+            season.showYear = showYear
+            season.showPosterUrl = showPosterUrl
+            season.showTmdbId = tmdbId
+            if tmdbId <> "" then season.tmdbId = tmdbId
+            merged.push(season)
+        else if key = "" then
+            season.missing = false
+            merged.push(season)
+        end if
+    end for
+
+    if merged.count() = 0 then
+        for each season in owned
+            season.missing = false
+            merged.push(season)
+        end for
+    end if
+
+    return merged
 end function
 
 function mergeSeasonEpisodes(owned as Object, guide as Object, seasonNum as String, tmdbId as String, showKey as String, showTitle as String, showPosterUrl as String) as Object
