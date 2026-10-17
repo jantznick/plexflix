@@ -45,15 +45,11 @@ sub init()
     m.isUnavailable = false
     m.onWatchlist = false
     m.watchlistBusy = false
-    m.grabBusy = false
-    m.grabJobId = ""
-    m.grabPollFails = 0
-    m.grabStatusBusy = false
-    m.grabAwaitingPlex = false
-    m.grabAwaitingEpisode = false
-    m.plexCheckBusy = false
+    m.grabJobs = {}
+    m.focusGrabKey = ""
+    m.grabPollIndex = 0
+    m.grabCreateBusy = false
     m.showTmdbId = ""
-    m.grabPromote = invalid
     m.seasons = []
     m.seasonQueue = 0
     m.seasonContent = invalid
@@ -79,15 +75,11 @@ sub onContentSet()
     m.isUnavailable = false
     m.onWatchlist = false
     m.watchlistBusy = false
-    m.grabBusy = false
-    m.grabJobId = ""
-    m.grabPollFails = 0
-    m.grabStatusBusy = false
-    m.grabAwaitingPlex = false
-    m.grabAwaitingEpisode = false
-    m.plexCheckBusy = false
+    m.grabJobs = {}
+    m.focusGrabKey = ""
+    m.grabPollIndex = 0
+    m.grabCreateBusy = false
     m.showTmdbId = ""
-    m.grabPromote = invalid
     if item.DoesExist("onWatchlist") and item.onWatchlist = true then m.onWatchlist = true
     if item.DoesExist("tmdbId") and asString(item.tmdbId) <> "" then m.showTmdbId = asString(item.tmdbId)
     if item.DoesExist("isDiscover") and item.isDiscover = true then m.isUnavailable = true
@@ -248,31 +240,23 @@ sub onSeasonItemFocused()
     mediaType = asString(item.mediaType)
     if mediaType = "episode" then
         applyEpisodeHeader(item)
-        if item.DoesExist("missing") and item.missing = true then
-            if m.grabBusy <> true and m.softStatus <> invalid then
-                if grabIsConfigured() then
-                    m.softStatus.text = "Not in library — OK to Grab Now"
-                else
-                    m.softStatus.text = "Not in library"
-                end if
-            end if
-        else if m.grabBusy <> true and m.grabAwaitingEpisode <> true and m.softStatus <> invalid then
-            ' Clear the missing hint when moving onto an owned episode
-            cur = m.softStatus.text
-            if cur = "Not in library — OK to Grab Now" or cur = "Not in library" then
-                m.softStatus.text = ""
-            end if
-        end if
+        m.focusGrabKey = grabKeyForEpisode(item)
+        paintFocusSoftStatus()
     else
         ' Cast / other rows under the same list — show synopsis again
+        m.focusGrabKey = ""
         restoreShowHeader()
+        if m.softStatus <> invalid then
+            ' Only clear grab/missing hints when leaving episodes
+            paintFocusSoftStatus()
+        end if
     end if
 end sub
 
 sub showTvMode()
     m.isUnavailable = false
-    ' Don't kill an in-flight episode grab when (re)entering TV layout
-    if m.grabBusy <> true and m.grabAwaitingEpisode <> true then stopGrabPolling()
+    ' Keep polling if any episode grabs are still active on this page
+    if grabActiveCount() = 0 then stopGrabPolling()
     m.movieActions.visible = true
     if m.unavailablePanel <> invalid then m.unavailablePanel.visible = false
     if m.grabBtn <> invalid then m.grabBtn.visible = false
@@ -378,7 +362,9 @@ end sub
 
 sub paintGrabLabel()
     if m.grabLabel = invalid then return
-    if m.grabJobId <> "" and m.grabBusy = true then
+    pageJob = invalid
+    if m.grabJobs <> invalid and m.grabJobs.DoesExist("page") then pageJob = m.grabJobs["page"]
+    if pageJob <> invalid and pageJob.active = true then
         m.grabLabel.text = "Grabbing…"
     else
         m.grabLabel.text = "Grab Now"
@@ -393,6 +379,91 @@ function grabIsConfigured() as Boolean
     return (cfg.grabUrl + "").Trim() <> ""
 end function
 
+function grabKeyForEpisode(ep as Object) as String
+    if ep = invalid then return ""
+    seasonNo = asString(ep.parentIndex)
+    epNo = asString(ep.index)
+    if seasonNo = "" and ep.DoesExist("season") then seasonNo = asString(ep.season)
+    if epNo = "" and ep.DoesExist("episode") then epNo = asString(ep.episode)
+    if seasonNo = "" or epNo = "" then return ""
+    return "S" + seasonNo + "E" + epNo
+end function
+
+function grabActiveCount() as Integer
+    if m.grabJobs = invalid then return 0
+    n = 0
+    for each key in m.grabJobs
+        job = m.grabJobs[key]
+        if job <> invalid and job.active = true then n = n + 1
+    end for
+    return n
+end function
+
+function grabJobKeys() as Object
+    keys = []
+    if m.grabJobs = invalid then return keys
+    for each key in m.grabJobs
+        job = m.grabJobs[key]
+        if job <> invalid and job.active = true then keys.push(key)
+    end for
+    return keys
+end function
+
+sub paintFocusSoftStatus()
+    if m.softStatus = invalid then return
+
+    ' Page-level unavailable grab always owns the status line on that screen
+    if m.isUnavailable = true then
+        pageJob = invalid
+        if m.grabJobs <> invalid and m.grabJobs.DoesExist("page") then pageJob = m.grabJobs["page"]
+        if pageJob <> invalid and pageJob.active = true then
+            m.softStatus.text = asString(pageJob.line)
+            return
+        end if
+    end if
+
+    key = asString(m.focusGrabKey)
+    if key <> "" and m.grabJobs <> invalid and m.grabJobs.DoesExist(key) then
+        job = m.grabJobs[key]
+        if job <> invalid and job.active = true then
+            m.softStatus.text = asString(job.line)
+            return
+        end if
+    end if
+
+    ' No active grab for the focused ep — missing hint or clear
+    if key <> "" then
+        ep = focusedEpisodeNode()
+        if ep <> invalid and ep.DoesExist("missing") and ep.missing = true then
+            if grabIsConfigured() then
+                m.softStatus.text = "Not in library — OK to Grab Now"
+            else
+                m.softStatus.text = "Not in library"
+            end if
+            return
+        end if
+    end if
+
+    m.softStatus.text = ""
+end sub
+
+function focusedEpisodeNode() as Object
+    if m.seasonRows = invalid or m.seasonRows.content = invalid then return invalid
+    info = m.seasonRows.rowItemFocused
+    if info = invalid or info.count() < 2 then return invalid
+    row = m.seasonRows.content.getChild(info[0])
+    if row = invalid then return invalid
+    return row.getChild(info[1])
+end function
+
+sub setGrabJobLine(job as Object, line as String)
+    if job = invalid then return
+    job.line = line
+    if asString(job.key) = asString(m.focusGrabKey) or (job.key = "page" and m.isUnavailable = true) then
+        if m.softStatus <> invalid then m.softStatus.text = line
+    end if
+end sub
+
 function unavailableMessage(item as Object) as String
     mt = ""
     if item <> invalid then mt = asString(item.mediaType)
@@ -405,7 +476,10 @@ function unavailableMessage(item as Object) as String
 end function
 
 sub loadUnavailableDetail(item as Object)
-    if m.grabAwaitingPlex <> true then
+    pageJob = invalid
+    if m.grabJobs <> invalid and m.grabJobs.DoesExist("page") then pageJob = m.grabJobs["page"]
+    awaitingPage = (pageJob <> invalid and pageJob.active = true and pageJob.awaitingPlex = true)
+    if awaitingPage <> true then
         if m.softStatus <> invalid then m.softStatus.text = "Looking up details & similar titles…"
     end if
     m.extrasTask = createObject("roSGNode", "PlexTask")
@@ -418,19 +492,21 @@ end sub
 
 sub onUnavailableLoaded()
     response = m.extrasTask.response
-    m.plexCheckBusy = false
+    pageJob = invalid
+    if m.grabJobs <> invalid and m.grabJobs.DoesExist("page") then pageJob = m.grabJobs["page"]
+    if pageJob <> invalid then pageJob.findBusy = false
 
-    ' Post-grab: keep rechecking until Plex has the title, then auto-flip to Play
-    if m.grabAwaitingPlex = true then
+    ' Post-grab page flip: keep rechecking until Plex has the title
+    if pageJob <> invalid and pageJob.active = true and pageJob.awaitingPlex = true then
         if response <> invalid and response.ok = true and response.localItem <> invalid then
             localItem = response.localItem
             if response.onWatchlist = true then localItem.onWatchlist = true
-            stopGrabPolling()
+            finishGrabJob("page")
             if m.softStatus <> invalid then m.softStatus.text = "Ready — opening…"
             m.top.content = localItem
             return
         end if
-        if m.softStatus <> invalid then m.softStatus.text = "Ready — waiting for Plex to index…"
+        setGrabJobLine(pageJob, "Ready — waiting for Plex to index…")
         return
     end if
 
@@ -765,7 +841,8 @@ end sub
 
 sub onExtrasLoaded()
     response = m.extrasTask.response
-    if m.softStatus <> invalid and m.grabBusy <> true and m.grabAwaitingEpisode <> true then m.softStatus.text = ""
+    ' Don't leave a stale grab line if focus moved while extras were loading
+    paintFocusSoftStatus()
     if response = invalid or response.ok <> true then return
 
     if response.DoesExist("tmdbId") and asString(response.tmdbId) <> "" then
@@ -1112,16 +1189,12 @@ sub onWatchlistMutated()
     end if
 end sub
 
-' --- Grab Now (fail-open: errors only update softStatus; never block the page) ---
+' --- Grab Now (fail-open; per-episode jobs; softStatus only for focused ep) ---
 
 sub requestGrabNow()
     if m.isUnavailable <> true then return
     if grabIsConfigured() <> true then
         if m.softStatus <> invalid then m.softStatus.text = "Grab server not configured"
-        return
-    end if
-    if m.grabBusy = true then
-        if m.softStatus <> invalid then m.softStatus.text = "Already grabbing…"
         return
     end if
 
@@ -1135,12 +1208,12 @@ sub requestGrabNow()
         tmdbId: asString(item.tmdbId),
         imdbId: asString(item.imdbId),
         tvdbId: asString(item.tvdbId),
-        guid: asString(item.guid)
+        guid: asString(item.guid),
+        grabKey: "page"
     }
     mt = LCase(payload.mediaType)
     if mt = "show" or mt = "series" or mt = "tv" or mt = "season" or mt = "episode" then
         payload.mediaType = "episode"
-        ' Unavailable show detail: start at S01E01
         payload.season = 1
         payload.episode = 1
         if item.DoesExist("season") and item.season <> invalid then payload.season = item.season
@@ -1149,9 +1222,16 @@ sub requestGrabNow()
         payload.mediaType = "movie"
     end if
 
-    m.grabPromote = invalid
-    m.grabAwaitingEpisode = false
-    startGrabJob(payload)
+    m.focusGrabKey = "page"
+    startGrabJob(payload, {
+        key: "page",
+        kind: "page",
+        season: asString(payload.season),
+        episode: asString(payload.episode),
+        seasonRow: -1,
+        episodeCol: -1,
+        showRatingKey: ""
+    })
 end sub
 
 sub requestGrabEpisode(epNode as Object, seasonRowIndex as Integer, episodeColIndex as Integer)
@@ -1160,9 +1240,19 @@ sub requestGrabEpisode(epNode as Object, seasonRowIndex as Integer, episodeColIn
         if m.softStatus <> invalid then m.softStatus.text = "Grab server not configured"
         return
     end if
-    if m.grabBusy = true then
-        if m.softStatus <> invalid then m.softStatus.text = "Already grabbing…"
+
+    key = grabKeyForEpisode(epNode)
+    if key = "" then
+        if m.softStatus <> invalid then m.softStatus.text = "Can't grab — missing season/episode"
         return
+    end if
+    if m.grabJobs <> invalid and m.grabJobs.DoesExist(key) then
+        existing = m.grabJobs[key]
+        if existing <> invalid and existing.active = true then
+            m.focusGrabKey = key
+            paintFocusSoftStatus()
+            return
+        end if
     end if
 
     show = m.top.content
@@ -1174,6 +1264,11 @@ sub requestGrabEpisode(epNode as Object, seasonRowIndex as Integer, episodeColIn
     showKey = asString(epNode.showRatingKey)
     if showKey = "" and show <> invalid then showKey = asString(show.ratingKey)
 
+    seasonNum = asInteger(epNode.parentIndex)
+    episodeNum = asInteger(epNode.index)
+    if seasonNum = 0 then seasonNum = 1
+    if episodeNum = 0 then episodeNum = 1
+
     payload = {
         title: showTitle,
         year: "",
@@ -1182,228 +1277,315 @@ sub requestGrabEpisode(epNode as Object, seasonRowIndex as Integer, episodeColIn
         imdbId: "",
         tvdbId: "",
         guid: "",
-        season: asInteger(epNode.parentIndex),
-        episode: asInteger(epNode.index)
+        season: seasonNum,
+        episode: episodeNum,
+        grabKey: key
     }
-    if payload.season = 0 then payload.season = 1
-    if payload.episode = 0 then payload.episode = 1
     if show <> invalid then payload.year = asString(show.year)
 
-    m.grabPromote = {
-        seasonRow: seasonRowIndex,
-        episodeCol: episodeColIndex,
+    m.focusGrabKey = key
+    startGrabJob(payload, {
+        key: key,
+        kind: "episode",
         season: asString(epNode.parentIndex),
         episode: asString(epNode.index),
+        seasonRow: seasonRowIndex,
+        episodeCol: episodeColIndex,
         showRatingKey: showKey
-    }
-    m.grabAwaitingEpisode = false
-    startGrabJob(payload)
+    })
 end sub
 
-sub startGrabJob(payload as Object)
-    m.grabBusy = true
-    m.grabPollFails = 0
-    paintGrabLabel()
-    if m.softStatus <> invalid then m.softStatus.text = "Starting grab…"
+sub startGrabJob(payload as Object, meta as Object)
+    if meta = invalid then return
+    key = asString(meta.key)
+    if key = "" then return
+    if m.grabCreateBusy = true then
+        if m.softStatus <> invalid and asString(m.focusGrabKey) = key then
+            m.softStatus.text = "Starting another grab…"
+        end if
+        ' Fall through — still allow; create tasks are keyed below
+    end if
 
-    m.grabTask = createObject("roSGNode", "GrabTask")
-    m.grabTask.config = m.top.config
-    m.grabTask.action = "create"
-    m.grabTask.item = payload
-    m.grabTask.observeField("response", "onGrabCreated")
-    m.grabTask.control = "RUN"
+    if m.grabJobs = invalid then m.grabJobs = {}
+    job = {
+        key: key,
+        kind: asString(meta.kind),
+        active: true,
+        jobId: "",
+        status: "starting",
+        percent: 0,
+        line: "Starting grab…",
+        season: asString(meta.season),
+        episode: asString(meta.episode),
+        seasonRow: meta.seasonRow,
+        episodeCol: meta.episodeCol,
+        showRatingKey: asString(meta.showRatingKey),
+        awaitingEpisode: false,
+        awaitingPlex: false,
+        pollFails: 0,
+        statusBusy: false,
+        findBusy: false
+    }
+    m.grabJobs[key] = job
+    setGrabJobLine(job, "Starting grab…")
+    paintGrabLabel()
+
+    task = createObject("roSGNode", "GrabTask")
+    task.config = m.top.config
+    task.action = "create"
+    task.item = payload
+    ' Stash key on the task so the response can be matched if several overlap
+    task.addFields({ grabKey: key })
+    task.observeField("response", "onGrabCreated")
+    if m.grabCreateTasks = invalid then m.grabCreateTasks = {}
+    m.grabCreateTasks[key] = task
+    m.grabCreateBusy = true
+    task.control = "RUN"
+    startGrabPolling()
 end sub
 
 sub onGrabCreated()
+    ' Find which create task completed
+    key = ""
     response = invalid
-    if m.grabTask <> invalid then response = m.grabTask.response
+    if m.grabCreateTasks <> invalid then
+        for each k in m.grabCreateTasks
+            t = m.grabCreateTasks[k]
+            if t <> invalid and t.response <> invalid then
+                ' Prefer a task whose response just arrived and still maps to an active starting job
+                job = invalid
+                if m.grabJobs <> invalid and m.grabJobs.DoesExist(k) then job = m.grabJobs[k]
+                if job <> invalid and job.active = true and asString(job.jobId) = "" then
+                    key = k
+                    response = t.response
+                    m.grabCreateTasks.delete(k)
+                    exit for
+                end if
+            end if
+        end for
+    end if
+    if key = "" and m.grabTask <> invalid then
+        ' Fallback for older single-task path
+        response = m.grabTask.response
+        if m.grabTask.item <> invalid then key = asString(m.grabTask.item.grabKey)
+    end if
+    m.grabCreateBusy = false
+    if m.grabCreateTasks <> invalid then
+        for each k in m.grabCreateTasks
+            m.grabCreateBusy = true
+            exit for
+        end for
+    end if
 
-    ' Fail-open: any problem unlocks the button and leaves Watchlist/Back alone
+    if key = "" then key = asString(m.focusGrabKey)
+    job = invalid
+    if m.grabJobs <> invalid and m.grabJobs.DoesExist(key) then job = m.grabJobs[key]
+
     if response = invalid or response.ok <> true then
-        m.grabBusy = false
-        m.grabJobId = ""
-        m.grabPromote = invalid
-        paintGrabLabel()
         err = "Grab unavailable — try again later"
         if response <> invalid and asString(response.error) <> "" then err = asString(response.error)
-        if m.softStatus <> invalid then m.softStatus.text = err
+        if job <> invalid then
+            setGrabJobLine(job, err)
+            finishGrabJob(key)
+        else if m.softStatus <> invalid and asString(m.focusGrabKey) = key then
+            m.softStatus.text = err
+        end if
+        paintGrabLabel()
         return
     end if
 
-    job = response.job
+    remote = response.job
+    if remote = invalid or asString(remote.id) = "" then
+        if job <> invalid then
+            setGrabJobLine(job, "Grab unavailable — try again later")
+            finishGrabJob(key)
+        end if
+        paintGrabLabel()
+        return
+    end if
+
     if job = invalid then
-        m.grabBusy = false
-        m.grabPromote = invalid
-        paintGrabLabel()
-        if m.softStatus <> invalid then m.softStatus.text = "Grab unavailable — try again later"
-        return
+        job = { key: key, kind: "episode", active: true }
+        if m.grabJobs = invalid then m.grabJobs = {}
+        m.grabJobs[key] = job
     end if
-
-    m.grabJobId = asString(job.id)
-    if m.grabJobId = "" then
-        m.grabBusy = false
-        m.grabPromote = invalid
-        paintGrabLabel()
-        if m.softStatus <> invalid then m.softStatus.text = "Grab unavailable — try again later"
-        return
-    end if
-
+    job.jobId = asString(remote.id)
+    job.active = true
     paintGrabLabel()
-    applyGrabJobStatus(job)
+    applyGrabJobStatusToKey(key, remote)
     startGrabPolling()
 end sub
 
 sub startGrabPolling()
     if m.grabPollTimer = invalid then return
-    if m.grabJobId = "" and m.grabAwaitingPlex <> true and m.grabAwaitingEpisode <> true then return
+    if grabActiveCount() = 0 then return
     m.grabPollTimer.control = "start"
 end sub
 
 sub stopGrabPolling()
     if m.grabPollTimer <> invalid then m.grabPollTimer.control = "stop"
-    m.grabBusy = false
-    m.grabJobId = ""
-    m.grabPollFails = 0
-    m.grabAwaitingPlex = false
-    m.grabAwaitingEpisode = false
-    m.plexCheckBusy = false
-    m.grabPromote = invalid
+    m.grabJobs = {}
+    m.focusGrabKey = ""
+    m.grabPollIndex = 0
+    m.grabCreateBusy = false
+    m.grabCreateTasks = {}
     paintGrabLabel()
 end sub
 
+sub finishGrabJob(key as String)
+    if m.grabJobs = invalid then return
+    if m.grabJobs.DoesExist(key) <> true then return
+    job = m.grabJobs[key]
+    if job <> invalid then job.active = false
+    m.grabJobs.delete(key)
+    paintGrabLabel()
+    if grabActiveCount() = 0 and m.grabPollTimer <> invalid then
+        m.grabPollTimer.control = "stop"
+    end if
+    if asString(m.focusGrabKey) = key then paintFocusSoftStatus()
+end sub
+
 sub onGrabPollFire()
-    ' Episode-tile promote path (library show with a missing ep)
-    if m.grabAwaitingEpisode = true then
-        if m.plexCheckBusy = true then return
-        if m.grabPromote = invalid then
-            stopGrabPolling()
-            return
-        end if
-        m.plexCheckBusy = true
-        m.findEpTask = createObject("roSGNode", "PlexTask")
-        m.findEpTask.config = m.top.config
-        m.findEpTask.action = "findLocalEpisode"
-        m.findEpTask.item = {
-            showRatingKey: asString(m.grabPromote.showRatingKey),
-            season: asString(m.grabPromote.season),
-            episode: asString(m.grabPromote.episode)
-        }
-        m.findEpTask.observeField("response", "onFindLocalEpisode")
-        m.findEpTask.control = "RUN"
+    keys = grabJobKeys()
+    if keys.count() = 0 then
+        if m.grabPollTimer <> invalid then m.grabPollTimer.control = "stop"
         return
     end if
 
-    ' Unavailable Discover title → flip whole page to Play
-    if m.grabAwaitingPlex = true then
+    if m.grabPollIndex >= keys.count() then m.grabPollIndex = 0
+    key = keys[m.grabPollIndex]
+    m.grabPollIndex = m.grabPollIndex + 1
+    if m.grabPollIndex >= keys.count() then m.grabPollIndex = 0
+
+    job = m.grabJobs[key]
+    if job = invalid or job.active <> true then return
+
+    if job.awaitingEpisode = true then
+        if job.findBusy = true then return
+        job.findBusy = true
+        task = createObject("roSGNode", "PlexTask")
+        task.config = m.top.config
+        task.action = "findLocalEpisode"
+        task.item = {
+            showRatingKey: asString(job.showRatingKey),
+            season: asString(job.season),
+            episode: asString(job.episode),
+            grabKey: key
+        }
+        task.addFields({ grabKey: key })
+        task.observeField("response", "onFindLocalEpisode")
+        if m.grabFindTasks = invalid then m.grabFindTasks = {}
+        m.grabFindTasks[key] = task
+        task.control = "RUN"
+        return
+    end if
+
+    if job.awaitingPlex = true then
+        if job.findBusy = true then return
         if m.isUnavailable <> true then
-            stopGrabPolling()
+            finishGrabJob(key)
             return
         end if
-        if m.plexCheckBusy = true then return
+        job.findBusy = true
         item = m.top.content
         if item = invalid then
-            stopGrabPolling()
+            finishGrabJob(key)
             return
         end if
-        m.plexCheckBusy = true
         loadUnavailableDetail(item)
         return
     end if
 
-    if m.grabJobId = "" then
-        stopGrabPolling()
-        return
-    end if
-    ' Don't stack overlapping status tasks
-    if m.grabStatusBusy = true then return
-    m.grabStatusBusy = true
+    if asString(job.jobId) = "" then return
+    if job.statusBusy = true then return
+    job.statusBusy = true
 
-    m.grabStatusTask = createObject("roSGNode", "GrabTask")
-    m.grabStatusTask.config = m.top.config
-    m.grabStatusTask.action = "status"
-    m.grabStatusTask.item = { id: m.grabJobId }
-    m.grabStatusTask.observeField("response", "onGrabStatus")
-    m.grabStatusTask.control = "RUN"
+    task = createObject("roSGNode", "GrabTask")
+    task.config = m.top.config
+    task.action = "status"
+    task.item = { id: job.jobId, grabKey: key }
+    task.addFields({ grabKey: key })
+    task.observeField("response", "onGrabStatus")
+    if m.grabStatusTasks = invalid then m.grabStatusTasks = {}
+    m.grabStatusTasks[key] = task
+    task.control = "RUN"
 end sub
 
 sub onGrabStatus()
-    m.grabStatusBusy = false
+    key = ""
     response = invalid
-    if m.grabStatusTask <> invalid then response = m.grabStatusTask.response
+    if m.grabStatusTasks <> invalid then
+        for each k in m.grabStatusTasks
+            t = m.grabStatusTasks[k]
+            if t <> invalid and t.response <> invalid then
+                job = invalid
+                if m.grabJobs <> invalid and m.grabJobs.DoesExist(k) then job = m.grabJobs[k]
+                if job <> invalid and job.statusBusy = true then
+                    key = k
+                    response = t.response
+                    job.statusBusy = false
+                    m.grabStatusTasks.delete(k)
+                    exit for
+                end if
+            end if
+        end for
+    end if
+    if key = "" then return
+
+    job = m.grabJobs[key]
+    if job = invalid then return
 
     if response = invalid or response.ok <> true then
-        m.grabPollFails = m.grabPollFails + 1
-        ' After a few misses, stop polling so a dead server can't spin forever
-        if m.grabPollFails >= 3 then
-            if m.grabPollTimer <> invalid then m.grabPollTimer.control = "stop"
-            m.grabBusy = false
-            paintGrabLabel()
+        job.pollFails = job.pollFails + 1
+        if job.pollFails >= 3 then
             err = "Lost contact with grab server — download may still finish in NZBGet"
             if response <> invalid and asString(response.error) <> "" then err = asString(response.error)
-            if m.softStatus <> invalid then m.softStatus.text = err
+            setGrabJobLine(job, err)
+            finishGrabJob(key)
         end if
         return
     end if
 
-    m.grabPollFails = 0
-    job = response.job
-    if job = invalid then return
-    applyGrabJobStatus(job)
+    job.pollFails = 0
+    remote = response.job
+    if remote = invalid then return
+    applyGrabJobStatusToKey(key, remote)
 end sub
 
-sub applyGrabJobStatus(job as Object)
-    if job = invalid then return
-    status = LCase(asString(job.status))
+sub applyGrabJobStatusToKey(key as String, remote as Object)
+    if m.grabJobs = invalid or m.grabJobs.DoesExist(key) <> true then return
+    job = m.grabJobs[key]
+    if job = invalid or remote = invalid then return
+
+    status = LCase(asString(remote.status))
     percent = 0
-    if job.DoesExist("percent") and job.percent <> invalid then percent = job.percent
-    message = asString(job.message)
-    if message = "" then message = asString(job.stage)
+    if remote.DoesExist("percent") and remote.percent <> invalid then percent = remote.percent
+    message = asString(remote.message)
+    if message = "" then message = asString(remote.stage)
+    job.status = status
+    job.percent = percent
 
     if status = "ready" then
-        m.grabBusy = false
         paintGrabLabel()
-        if m.grabPromote <> invalid then
-            m.grabAwaitingEpisode = true
-            m.grabAwaitingPlex = false
-            if m.softStatus <> invalid then m.softStatus.text = "Ready — waiting for Plex to index…"
+        if job.kind = "episode" then
+            job.awaitingEpisode = true
+            job.awaitingPlex = false
+            setGrabJobLine(job, "Ready — waiting for Plex to index…")
             startGrabPolling()
-            ' Immediate first check
-            m.plexCheckBusy = true
-            m.findEpTask = createObject("roSGNode", "PlexTask")
-            m.findEpTask.config = m.top.config
-            m.findEpTask.action = "findLocalEpisode"
-            m.findEpTask.item = {
-                showRatingKey: asString(m.grabPromote.showRatingKey),
-                season: asString(m.grabPromote.season),
-                episode: asString(m.grabPromote.episode)
-            }
-            m.findEpTask.observeField("response", "onFindLocalEpisode")
-            m.findEpTask.control = "RUN"
             return
         end if
-
-        m.grabAwaitingPlex = true
-        if m.softStatus <> invalid then m.softStatus.text = "Ready — waiting for Plex to index…"
+        job.awaitingPlex = true
+        job.awaitingEpisode = false
+        setGrabJobLine(job, "Ready — waiting for Plex to index…")
         startGrabPolling()
-        item = m.top.content
-        if item <> invalid then
-            m.plexCheckBusy = true
-            loadUnavailableDetail(item)
-        end if
         return
     end if
 
     if status = "failed" then
-        if m.grabPollTimer <> invalid then m.grabPollTimer.control = "stop"
-        m.grabBusy = false
-        m.grabJobId = ""
-        m.grabAwaitingPlex = false
-        m.grabAwaitingEpisode = false
-        m.grabPromote = invalid
-        paintGrabLabel()
         err = message
         if err = "" then err = "Grab failed — try again or use Watchlist"
-        if m.softStatus <> invalid then m.softStatus.text = err
+        setGrabJobLine(job, err)
+        finishGrabJob(key)
         return
     end if
 
@@ -1411,32 +1593,56 @@ sub applyGrabJobStatus(job as Object)
     if status <> "" then line = UCase(Left(status, 1)) + Mid(status, 2)
     if percent > 0 then line = line + " " + StrI(percent).Trim() + "%"
     if message <> "" and message <> status then line = line + " — " + message
-    if m.softStatus <> invalid then m.softStatus.text = line
+    setGrabJobLine(job, line)
 end sub
 
 sub onFindLocalEpisode()
-    m.plexCheckBusy = false
+    key = ""
     response = invalid
-    if m.findEpTask <> invalid then response = m.findEpTask.response
+    if m.grabFindTasks <> invalid then
+        for each k in m.grabFindTasks
+            t = m.grabFindTasks[k]
+            if t <> invalid and t.response <> invalid then
+                job = invalid
+                if m.grabJobs <> invalid and m.grabJobs.DoesExist(k) then job = m.grabJobs[k]
+                if job <> invalid and job.findBusy = true then
+                    key = k
+                    response = t.response
+                    job.findBusy = false
+                    m.grabFindTasks.delete(k)
+                    exit for
+                end if
+            end if
+        end for
+    end if
+    if key = "" then return
+
+    job = m.grabJobs[key]
+    if job = invalid then return
+
     if response = invalid or response.ok <> true or response.item = invalid then
-        if m.softStatus <> invalid then m.softStatus.text = "Ready — waiting for Plex to index…"
+        setGrabJobLine(job, "Ready — waiting for Plex to index…")
         return
     end if
 
-    promoteMissingEpisodeTile(response.item)
-    stopGrabPolling()
-    if m.softStatus <> invalid then m.softStatus.text = "Ready — press OK to Play"
+    promoteMissingEpisodeTile(response.item, job)
+    setGrabJobLine(job, "Ready — press OK to Play")
+    finishGrabJob(key)
+    ' After finish, focused missing hint would clear — keep ready message briefly
+    if asString(m.focusGrabKey) = key and m.softStatus <> invalid then
+        m.softStatus.text = "Ready — press OK to Play"
+    end if
 end sub
 
-sub promoteMissingEpisodeTile(localEp as Object)
+sub promoteMissingEpisodeTile(localEp as Object, job as Object)
     if localEp = invalid or m.seasonContent = invalid then return
     seasonNo = asString(localEp.parentIndex)
     epNo = asString(localEp.index)
     preferRow = -1
     preferCol = -1
-    if m.grabPromote <> invalid then
-        preferRow = m.grabPromote.seasonRow
-        preferCol = m.grabPromote.episodeCol
+    if job <> invalid then
+        preferRow = job.seasonRow
+        preferCol = job.episodeCol
     end if
 
     rowCount = m.seasonContent.getChildCount()
