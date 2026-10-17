@@ -125,19 +125,22 @@ class SessionReconfigureTests(unittest.TestCase):
         self.assertEqual(snap["tiles"][0]["stream"], 1)
         self.assertEqual(snap["tiles"][0]["title"], "B")
 
-    def test_first_two_order_slots_are_decoded(self):
+    def test_feeds_slice_is_decoded_order_only_moves_tiles(self):
+        # feeds[:2] are live; rotating order does not change which feeds decode
         session = self._session(count=3)
         self.assertTrue(session.feeds[0].live)
         self.assertTrue(session.feeds[1].live)
         self.assertFalse(session.feeds[2].live)
         session._mosaic = _FakeMosaic()
         session.reconfigure(order=[2, 0, 1])
-        self.assertTrue(session.feeds[2].live)
         self.assertTrue(session.feeds[0].live)
-        self.assertFalse(session.feeds[1].live)
+        self.assertTrue(session.feeds[1].live)
+        self.assertFalse(session.feeds[2].live)
         snap = session.snapshot()
         self.assertEqual(snap["tiles"][0]["stream"], 2)
-        self.assertEqual(snap["tiles"][2]["status"], "placeholder")
+        self.assertEqual(snap["tiles"][0]["status"], "placeholder")
+        self.assertEqual(snap["tiles"][1]["stream"], 0)
+        self.assertEqual(snap["tiles"][2]["stream"], 1)
 
     def test_pause_stops_mosaic_for_fullscreen_promote(self):
         session = self._session()

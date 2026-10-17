@@ -24,9 +24,6 @@ FAILURE_WINDOW = 60
 MAX_BACKOFF = 30
 RETIRED_GENERATION_GRACE = 30
 STITCH_WINDOW = 10
-# Incremental build: this many order-prefix slots are decoded; the rest are slate.
-# Not an env knob — bump the constant when more of the function lands.
-DECODED_SLOTS = 2
 
 
 class Feed:
@@ -60,10 +57,11 @@ class Session:
         self._relay = relay
         self._mosaic_factory = mosaic_factory
 
-        # Incremental: decode feeds in the first DECODED_SLOTS of `order`.
-        self.feeds = [Feed(i, spec, live=False) for i, spec in enumerate(feeds)]
+        # Incremental: only feeds[:N] are wired into the mosaic so far.
+        # Was feeds[:1]; now feeds[:2]. Widen the slice in code when the next
+        # feed path is actually built — not a runtime setting.
+        self.feeds = [Feed(i, spec, live=(i < 2)) for i, spec in enumerate(feeds)]
         self.order = list(range(len(feeds)))
-        self._sync_live_flags()
 
         self.state = "starting"
         self.error = ""
@@ -122,7 +120,6 @@ class Session:
                 changed = True
             if order is not None and order != self.order:
                 self.order = list(order)
-                self._sync_live_flags()
                 changed = True
             if paused is not None:
                 want = bool(paused)
@@ -148,11 +145,6 @@ class Session:
                 mosaic.stop()
             except Exception:
                 pass
-
-    def _sync_live_flags(self):
-        live = set(self.order[: min(DECODED_SLOTS, len(self.order))])
-        for feed in self.feeds:
-            feed.live = feed.index in live
 
     def snapshot(self):
         with self._lock:
@@ -255,7 +247,6 @@ class Session:
         gen_dir = os.path.join(self.dir, f"gen-{self.generation}")
         os.makedirs(gen_dir, exist_ok=True)
         with self._lock:
-            self._sync_live_flags()
             placements = self._placements()
             specs = self._feed_specs()
             warm = [f.url for f in self.feeds if f.live]
