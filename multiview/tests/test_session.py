@@ -88,15 +88,29 @@ class SessionWarmTests(unittest.TestCase):
 
 
 class _FakeRelay:
-    def warm(self, _urls):
-        return None
+    def __init__(self, fail_urls=None):
+        self.fail_urls = set(fail_urls or [])
+        self.port = 9
+
+    def warm(self, urls):
+        return {url: url not in self.fail_urls for url in urls}
+
+    def url_for(self, upstream_url):
+        return f"http://127.0.0.1:{self.port}/r/fake.m3u8"
 
 
 class _FakeMosaic:
     def __init__(self, *args, **kwargs):
-        pass
+        self.specs = args[1] if len(args) > 1 else kwargs.get("feeds")
+        self.started = False
+
+    def start(self):
+        self.started = True
 
     def stop(self):
+        return None
+
+    def poll_error(self):
         return None
 
 
@@ -153,6 +167,20 @@ class SessionReconfigureTests(unittest.TestCase):
         session.reconfigure(paused=False)
         self.assertFalse(session.paused)
         self.assertEqual(session.state, "starting")
+
+    def test_warm_failure_slates_that_feed_so_mosaic_still_starts(self):
+        bad = "http://example/1.m3u8"
+        session = self._session(count=2)
+        session._relay = _FakeRelay(fail_urls={bad})
+        session._mosaic_factory = _FakeMosaic
+        session._start_mosaic()
+        self.assertEqual(session._mosaic_live, {0})
+        self.assertTrue(session._mosaic.started)
+        self.assertTrue(session._mosaic.specs[0]["live"])
+        self.assertFalse(session._mosaic.specs[1]["live"])
+        snap = session.snapshot()
+        self.assertEqual(snap["tiles"][0]["status"], "starting")
+        self.assertEqual(snap["tiles"][1]["status"], "placeholder")
 
 
 if __name__ == "__main__":

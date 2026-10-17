@@ -40,7 +40,7 @@ def build_command(ffmpeg, feeds, placements, out_dir, settings):
     cmd = [ffmpeg, "-hide_banner", "-nostdin", "-loglevel", "error", "-y"]
     filter_parts = []
     input_index = 0
-    live_audio_input = None
+    live_audio_by_feed = {}
     tile_labels = {}
 
     cmd += ["-f", "lavfi", "-i", f"color=c=black:s=1920x1080:r={fps}"]
@@ -58,7 +58,7 @@ def build_command(ffmpeg, feeds, placements, out_dir, settings):
             continue
         w, h = int(rect["w"]), int(rect["h"])
         label = f"t{feed_index}"
-        if feed["live"]:
+        if feed["live"] and feed.get("url"):
             cmd += [
                 "-rw_timeout", "90000000",
                 "-live_start_index", "-3",
@@ -67,8 +67,7 @@ def build_command(ffmpeg, feeds, placements, out_dir, settings):
             ]
             idx = input_index
             input_index += 1
-            if live_audio_input is None:
-                live_audio_input = idx
+            live_audio_by_feed[feed_index] = idx
             filter_parts.append(
                 f"[{idx}:v]scale={w}:{h}:force_original_aspect_ratio=decrease,"
                 f"pad={w}:{h}:(ow-iw)/2:(oh-ih)/2:black,setsar=1,fps={fps},format=yuv420p[{label}]"
@@ -107,14 +106,14 @@ def build_command(ffmpeg, feeds, placements, out_dir, settings):
         )
         current = f"[{out}]"
 
-    # Audio per slot: live feed's audio follows that feed's slot; else silence.
+    # Audio per slot: that tile's live feed audio when available, else silence.
     slot_count = len(placements)
     silence_slots = []
     for slot, (feed_index, _rect, _z) in enumerate(placements):
-        feed = by_feed[feed_index]
-        if feed["live"] and live_audio_input is not None:
+        ain = live_audio_by_feed.get(feed_index)
+        if ain is not None:
             filter_parts.append(
-                f"[{live_audio_input}:a]aresample=async=1000,"
+                f"[{ain}:a]aresample=async=1000,"
                 f"aformat=sample_rates=48000:channel_layouts=stereo[a{slot}]"
             )
         else:

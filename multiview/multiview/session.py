@@ -81,6 +81,9 @@ class Session:
         self._retired = {}
         self._playlists = {}
         self._last_wait_log = 0.0
+        # Feed indexes actually opened as live inputs in the current mosaic
+        # (warm-failed feeds from feeds[:2] fall back to slate for that gen).
+        self._mosaic_live = set()
         self._thread = threading.Thread(target=self._run, name=f"session-{session_id[:8]}", daemon=True)
 
     def start(self):
@@ -152,7 +155,8 @@ class Session:
             tiles = []
             for slot, feed_index in enumerate(self.order):
                 feed = self.feeds[feed_index]
-                if not feed.live:
+                # feeds[:2] are candidates; only warm-ok indexes are live this gen
+                if feed_index not in self._mosaic_live:
                     status = "placeholder"
                 elif self.state == "running":
                     status = "live"
@@ -186,14 +190,8 @@ class Session:
 
     def _run(self):
         try:
-            live = [f for f in self.feeds if f.live]
-            held = [f for f in self.feeds if not f.live]
-            if held:
-                self._log(f"decoding {len(live)} feed(s); placeholder on {len(held)} tile(s)")
-            if live:
-                targets = [rewrite_to_local_proxy(f.url) for f in live]
-                self._log(f"warming {len(targets)} feed(s) through vendored proxy")
-                self._relay.warm(targets)
+            wired = sum(1 for f in self.feeds if f.live)
+            self._log(f"wired feeds[:{wired}] ({len(self.feeds)} tile(s) total)")
             self._start_mosaic()
             while not self._stop.is_set():
                 self._tick()
@@ -228,13 +226,12 @@ class Session:
             return now - self._gen_started > STARTUP_TIMEOUT
         return now - self._last_video_at > STALL_TIMEOUT
 
-    def _feed_specs(self):
+    def _feed_specs(self, live_indexes):
         specs = []
         for feed in self.feeds:
-            url = ""
-            if feed.live:
-                url = source_for({"url": feed.url}, self._relay)
-            specs.append({"live": feed.live, "url": url, "title": feed.title})
+            use = feed.index in live_indexes
+            url = source_for({"url": feed.url}, self._relay) if use else ""
+            specs.append({"live": use, "url": url, "title": feed.title})
         return specs
 
     def _placements(self):
@@ -242,19 +239,33 @@ class Session:
         return [(feed_index, rects[slot], 0 if slot == 0 else slot)
                 for slot, feed_index in enumerate(self.order)]
 
+    def _warm_candidates(self):
+        """Warm feeds[:2] candidates; return indexes the proxy actually served."""
+        with self._lock:
+            candidates = [f for f in self.feeds if f.live]
+        if not candidates:
+            return set()
+        by_url = {rewrite_to_local_proxy(f.url): f.index for f in candidates}
+        self._log(f"warming {len(by_url)} feed(s) through vendored proxy")
+        results = self._relay.warm(list(by_url.keys()))
+        ok = set()
+        for url, index in by_url.items():
+            if results.get(url):
+                ok.add(index)
+            else:
+                title = self.feeds[index].title
+                self._log(f"feed {index} ({title}) warm failed — slate this generation")
+        return ok
+
     def _start_mosaic(self):
         self.generation += 1
         gen_dir = os.path.join(self.dir, f"gen-{self.generation}")
         os.makedirs(gen_dir, exist_ok=True)
+        live_indexes = self._warm_candidates()
         with self._lock:
+            self._mosaic_live = set(live_indexes)
             placements = self._placements()
-            specs = self._feed_specs()
-            warm = [f.url for f in self.feeds if f.live]
-        if warm:
-            try:
-                self._relay.warm([rewrite_to_local_proxy(url) for url in warm])
-            except Exception as exc:
-                self._log(f"proxy warm failed: {exc}")
+            specs = self._feed_specs(live_indexes)
         mosaic = self._mosaic_factory(gen_dir, specs, placements, self.settings)
         try:
             mosaic.start()
@@ -268,7 +279,10 @@ class Session:
         self._gen_started = self._clock()
         self._last_video_at = None
         self._mosaic = mosaic
-        self._log(f"mosaic generation {self.generation} started, layout {self.layout}")
+        self._log(
+            f"mosaic generation {self.generation} started, layout {self.layout}, "
+            f"live={sorted(live_indexes)}"
+        )
 
     def _replace_mosaic(self, reason):
         mosaic = self._mosaic

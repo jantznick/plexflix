@@ -129,10 +129,17 @@ class Relay:
         return f"http://127.0.0.1:{self.port}/r/{token}{ext}"
 
     def warm(self, urls):
-        """Hit the proxy (via cache) for each feed URL before ffmpeg starts."""
+        """Hit the proxy (via cache) for each feed URL before ffmpeg starts.
+
+        Returns {url: True/False}. A failed warm must not be passed to ffmpeg —
+        one dead input kills the whole mosaic.
+        """
+        results = {url: False for url in urls}
+
         def one(url):
             try:
                 self.handle(self.url_for(url).split("/r/", 1)[1].rsplit(".", 1)[0])
+                results[url] = True
                 self._count("warm_ok")
             except Exception as exc:
                 self._count("warm_failed")
@@ -143,6 +150,7 @@ class Relay:
             t.start()
         for t in threads:
             t.join(timeout=UPSTREAM_TIMEOUT + 15)
+        return results
 
     def handle(self, token):
         with self._lock:
