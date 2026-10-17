@@ -17,6 +17,7 @@ sub init()
     m.elapsedLabel = m.top.findNode("elapsedLabel")
     m.endsAtLabel = m.top.findNode("endsAtLabel")
     m.remainingLabel = m.top.findNode("remainingLabel")
+    m.clockLabel = m.top.findNode("clockLabel")
     m.buttonRow = m.top.findNode("buttonRow")
 
     m.castPanel = m.top.findNode("castPanel")
@@ -54,6 +55,8 @@ sub init()
     m.reportTimer.observeField("fire", "onReportTimer")
     m.stallTimer = m.top.findNode("stallTimer")
     m.stallTimer.observeField("fire", "onStallTimer")
+    m.liveMetaTimer = m.top.findNode("liveMetaTimer")
+    m.liveMetaTimer.observeField("fire", "onLiveMetaTick")
 
     m.trackWidth = m.track.width
 
@@ -98,6 +101,11 @@ sub init()
 
     m.pendingSeek = invalid
 
+    m.livePrograms = []
+    m.liveChannelName = ""
+    m.liveMetaRefreshing = false
+    m.liveMetaLastFetch = 0
+
     m.clock24 = (CreateObject("roDeviceInfo").GetClockFormat() = "24h")
 
     ' Belt-and-suspenders with focusable="false" in XML: some firmware still
@@ -134,12 +142,7 @@ sub onContentSet()
     paintMeta()
     setStatus("Preparing " + valueOrEmpty(item.title) + "...")
 
-    if directUrl <> "" and Left(directUrl, 4) = "http" then
-        playDirect(directUrl, item)
-        return
-    end if
-
-    ' Live TV channels: tune DVR then play session HLS
+    ' Live TV always retunes — a saved session URL from Continue Watching is stale
     if mediaType = "livetv" then
         setStatus("Tuning " + valueOrEmpty(item.title) + "...")
         m.task = createObject("roSGNode", "PlexTask")
@@ -148,6 +151,20 @@ sub onContentSet()
         m.task.item = item
         m.task.observeField("response", "onStreamReady")
         m.task.control = "RUN"
+        loadCast()
+        ' Plex EPG rarely includes cast — pull from TMDB while the tune starts
+        maybeEnrichLiveMeta()
+        startLiveMetaTracking()
+        return
+    end if
+
+    if directUrl <> "" and Left(directUrl, 4) = "http" then
+        playDirect(directUrl, item)
+        ' Cable/sports may ship TMDB cast on the item; Plex cast needs a ratingKey
+        loadCast()
+        ' Cable without sidecar enrichment can still fill cast from TMDB
+        maybeEnrichLiveMeta()
+        startLiveMetaTracking()
         return
     end if
 
@@ -178,6 +195,7 @@ sub requestStream(startAt as Integer)
 end sub
 
 sub playDirect(url as String, item as Object)
+    if m.video = invalid then return
     logPlayback("direct url " + url)
     contentNode = createObject("roSGNode", "ContentNode")
     contentNode.url = url
@@ -225,6 +243,7 @@ end function
 
 sub onStreamReady()
     response = m.task.response
+    if m.video = invalid then return
     if response = invalid or response.ok <> true or response.url = invalid or response.url = "" then
         err = "Playback failed"
         if response <> invalid and response.error <> invalid then err = response.error
@@ -260,6 +279,7 @@ end sub
 sub onFocusedChild()
     ' If anything under this screen (especially Video) grabs focus, take it
     ' back so onKeyEvent keeps owning the remote.
+    if m.video = invalid then return
     child = m.top.focusedChild
     if child = invalid then return
     if child.isSameNode(m.video) then
@@ -268,6 +288,7 @@ sub onFocusedChild()
 end sub
 
 sub ensurePlayerFocus()
+    if m.video = invalid then return
     m.video.focusable = false
     ' Always re-assert: hasFocus() is false while a child holds focus, and that
     ' is exactly the broken state we are trying to leave.
@@ -275,6 +296,8 @@ sub ensurePlayerFocus()
 end sub
 
 sub onVideoState()
+    ' Teardown nulls m.video before/while stop notifications drain
+    if m.video = invalid then return
     state = m.video.state
     logPlayback("state=" + state + " position=" + StrI(m.position).Trim() + " duration=" + StrI(m.duration).Trim())
 
@@ -315,7 +338,11 @@ sub onVideoState()
     else if state = "finished" then
         m.reportTimer.control = "stop"
         if playedToEnd() then
+            rememberLiveContinueWatch()
             sendPlaybackActions([scrobbleAction(), releaseAction()])
+            ' Tear the Video node down here so MainScene's follow-up stop does
+            ' not race a still-observed handle.
+            hardStopVideo()
             m.top.closed = true
         else
             ' Finishing without having played is a failure, not a completed
@@ -330,12 +357,14 @@ end sub
 
 ' The same 0-100 figure Roku's stock player shows as "Loading X%"
 function bufferPercent() as Integer
+    if m.video = invalid then return -1
     status = m.video.bufferingStatus
     if status = invalid or status.percentage = invalid then return -1
     return numberOf(status.percentage)
 end function
 
 sub onBufferingStatus()
+    if m.video = invalid then return
     if m.video.state <> "buffering" then return
     pct = bufferPercent()
     if pct = m.lastBufferPct then return
@@ -378,6 +407,7 @@ sub restartStallTimer()
 end sub
 
 sub onStallTimer()
+    if m.video = invalid then return
     state = m.video.state
     if state = "playing" or state = "paused" then return
     m.reportTimer.control = "stop"
@@ -409,7 +439,9 @@ sub failStream(reason as String)
     m.stallTimer.control = "stop"
     m.hideTimer.control = "stop"
     m.seekTimer.control = "stop"
-    m.video.control = "stop"
+    if m.video <> invalid then m.video.control = "stop"
+    ' Still pin Live TV / Cable when a stream dies mid-airing
+    rememberLiveContinueWatch()
     m.top.failure = message
     m.top.closed = true
 end sub
@@ -433,7 +465,7 @@ sub showPlaybackError(reason as String)
     m.spinner.visible = false
     hideBuffer()
     m.statusLabel.visible = true
-    m.statusLabel.text = message + Chr(10) + "Press Back to return"
+    m.statusLabel.text = message
 end sub
 
 ' Whatever the firmware is willing to tell us about why a stream died. Worth
@@ -441,6 +473,7 @@ end sub
 ' simply ended.
 function videoErrorDetail() as String
     bits = []
+    if m.video = invalid then return ""
 
     code = m.video.errorCode
     if code <> invalid and code <> 0 then bits.push("code " + StrI(code).Trim())
@@ -469,6 +502,7 @@ sub logPlayback(message as String)
 end sub
 
 sub onPositionChange()
+    if m.video = invalid then return
     m.position = Int(m.video.position)
     if m.pendingSeek = invalid and m.controls.visible then paintScrubber(m.position)
     refreshMarker()
@@ -513,6 +547,7 @@ end sub
 
 sub skipMarker()
     if m.activeMarker = invalid then return
+    if m.video = invalid then return
 
     target = Int(m.activeMarker.endAt / 1000)
     if m.duration > 0 and target > m.duration - 2 then target = m.duration - 2
@@ -582,6 +617,7 @@ sub hidePreview()
 end sub
 
 sub onReportTimer()
+    if m.controls.visible then paintClock()
     if m.paused then
         reportProgress("paused")
     else
@@ -590,6 +626,7 @@ sub onReportTimer()
 end sub
 
 sub togglePlayPause()
+    if m.video = invalid then return
     if m.paused then
         m.video.control = "resume"
     else
@@ -600,6 +637,7 @@ end sub
 sub restart()
     m.pendingSeek = invalid
     if m.isLive then return
+    if m.video = invalid then return
     m.video.seek = 0
     if m.paused then m.video.control = "resume"
 end sub
@@ -763,7 +801,7 @@ end sub
 
 sub beginRestart(message as String)
     m.restartAt = m.position
-    m.video.control = "stop"
+    if m.video <> invalid then m.video.control = "stop"
     m.reportTimer.control = "stop"
     hideControls()
     if message <> "" then setStatus(message)
@@ -779,11 +817,380 @@ sub restartStream(message as String)
 end sub
 
 '--------------------------------------------------------------------
-' Cast peek
+' Cast peek + live-program TMDB enrich
 '--------------------------------------------------------------------
+
+sub maybeEnrichLiveMeta()
+    if m.item = invalid then return
+    mediaType = valueOrEmpty(m.item.mediaType)
+    ' Live TV always; Cable (sport) only when the sidecar didn't already ship cast.
+    ' Skip sports-game titles — TMDB matches those poorly.
+    if mediaType <> "livetv" and mediaType <> "sport" then return
+    if m.item.cast <> invalid and GetInterface(m.item.cast, "ifArray") <> invalid then
+        if m.item.cast.count() > 0 then return
+    end if
+    cfg = m.top.config
+    if cfg = invalid or cfg.tmdbApiKey = invalid then return
+    key = valueOrEmpty(cfg.tmdbApiKey)
+    if key = "" or key = "REPLACE_WITH_TMDB_API_KEY" then return
+
+    title = valueOrEmpty(m.item.shortTitle)
+    if title = "" then title = valueOrEmpty(m.item.title)
+    if title = "" then return
+    if mediaType = "sport" then
+        low = LCase(title)
+        if Instr(1, low, " vs ") > 0 or Instr(1, low, " @ ") > 0 then return
+    end if
+
+    m.enrichTask = createObject("roSGNode", "PlexTask")
+    m.enrichTask.config = cfg
+    m.enrichTask.action = "tmdbEnrich"
+    m.enrichTask.item = m.item
+    m.enrichTask.observeField("response", "onLiveMetaEnriched")
+    m.enrichTask.control = "RUN"
+end sub
+
+'--------------------------------------------------------------------
+' Live / cable now-playing metadata
+'--------------------------------------------------------------------
+
+sub startLiveMetaTracking()
+    if not m.isLive or m.item = invalid then return
+    mediaType = valueOrEmpty(m.item.mediaType)
+    if mediaType <> "livetv" and mediaType <> "sport" then return
+
+    m.liveChannelName = valueOrEmpty(m.item.channelName)
+    if m.liveChannelName = "" then m.liveChannelName = channelNameFromLiveItem(m.item)
+
+    m.livePrograms = []
+    if m.item.programs <> invalid and GetInterface(m.item.programs, "ifArray") <> invalid then
+        m.livePrograms = m.item.programs
+    end if
+
+    endsAt = numberOf(m.item.endsAt)
+    canRefresh = liveScheduleRefreshable()
+    if endsAt <= 0 and m.livePrograms.count() = 0 and not canRefresh then return
+
+    m.liveMetaTimer.control = "start"
+    ' Catch launches that already crossed a program boundary (stale guide focus)
+    syncLiveProgramMeta(true)
+end sub
+
+function liveScheduleRefreshable() as Boolean
+    if m.item = invalid then return false
+    if valueOrEmpty(m.item.source) = "cable" and valueOrEmpty(m.item.feedId) <> "" then return true
+    if valueOrEmpty(m.item.mediaType) = "livetv" then return true
+    if valueOrEmpty(m.item.source) = "plex" then return true
+    return false
+end function
+
+sub onLiveMetaTick()
+    syncLiveProgramMeta(true)
+end sub
+
+sub syncLiveProgramMeta(allowFetch as Boolean)
+    if m.item = invalid or not m.isLive then return
+
+    now = CreateObject("roDateTime").AsSeconds()
+
+    ' Prefer whatever the schedule says is on now — covers program changes and
+    ' launches where the guide focus wasn't the live airing.
+    p = liveProgramOnNow(m.livePrograms, now)
+    if p <> invalid then
+        applyLiveProgram(p)
+        return
+    end if
+
+    endsAt = numberOf(m.item.endsAt)
+    if endsAt > 0 and now < endsAt then
+        ' No better listing yet; keep the painted airing until it ends
+        return
+    end if
+
+    ' Gap between airings: show the channel until the next listing starts
+    nextP = liveProgramAfter(m.livePrograms, now)
+    if nextP <> invalid then
+        applyLiveChannelPlaceholder(numberOf(nextP.beginsAt))
+        return
+    end if
+
+    if allowFetch and liveScheduleRefreshable() then
+        refreshLiveSchedule()
+    end if
+end sub
+
+function liveProgramOnNow(programs as Object, now as Integer) as Dynamic
+    if programs = invalid or GetInterface(programs, "ifArray") = invalid then return invalid
+    for each p in programs
+        if p <> invalid and p.placeholder <> true then
+            b = numberOf(p.beginsAt)
+            e = numberOf(p.endsAt)
+            if b > 0 and e > b and b <= now and e > now then return p
+        end if
+    end for
+    return invalid
+end function
+
+function liveProgramAfter(programs as Object, now as Integer) as Dynamic
+    if programs = invalid or GetInterface(programs, "ifArray") = invalid then return invalid
+    best = invalid
+    bestBegin = 0
+    for each p in programs
+        if p <> invalid and p.placeholder <> true then
+            b = numberOf(p.beginsAt)
+            e = numberOf(p.endsAt)
+            if b > now and e > b then
+                if best = invalid or b < bestBegin then
+                    best = p
+                    bestBegin = b
+                end if
+            end if
+        end if
+    end for
+    return best
+end function
+
+function channelNameFromLiveItem(item as Object) as String
+    if item = invalid then return ""
+    fullTitle = valueOrEmpty(item.title)
+    shortTitle = valueOrEmpty(item.shortTitle)
+    if fullTitle <> "" and shortTitle <> "" and fullTitle <> shortTitle then
+        if Instr(1, fullTitle, shortTitle) = 1 then
+            suffix = Mid(fullTitle, Len(shortTitle) + 1).Trim()
+            if Left(suffix, 1) = "·" then suffix = Mid(suffix, 2).Trim()
+            if suffix <> "" then return suffix
+        end if
+    end if
+    if shortTitle <> "" then return shortTitle
+    return fullTitle
+end function
+
+sub applyLiveProgram(p as Object)
+    if p = invalid or m.item = invalid then return
+
+    newBegin = numberOf(p.beginsAt)
+    newEnd = numberOf(p.endsAt)
+    newTitle = valueOrEmpty(p.title)
+    if newTitle = "" then newTitle = "Program"
+
+    ' Same airing already painted
+    if newBegin = numberOf(m.item.beginsAt) and newEnd = numberOf(m.item.endsAt) then
+        if newTitle = valueOrEmpty(m.item.shortTitle) then return
+    end if
+
+    channelName = m.liveChannelName
+    shortTitle = newTitle
+    title = shortTitle
+    if channelName <> "" and shortTitle <> channelName then
+        title = shortTitle + "  ·  " + channelName
+    else if channelName <> "" and shortTitle = "" then
+        title = channelName
+        shortTitle = channelName
+    end if
+
+    description = valueOrEmpty(p.summary)
+    episodeLabel = valueOrEmpty(p.episodeLabel)
+    if episodeLabel <> "" and description = "" then description = episodeLabel
+
+    art = valueOrEmpty(p.art)
+    if art = "" then art = valueOrEmpty(p.backdrop)
+    if art = "" then art = valueOrEmpty(p.poster)
+
+    m.item.shortTitle = shortTitle
+    m.item.title = title
+    m.item.description = description
+    m.item.beginsAt = newBegin
+    m.item.endsAt = newEnd
+    m.item.programKind = valueOrEmpty(p.kind)
+    m.item.year = valueOrEmpty(p.year)
+    m.item.contentRating = valueOrEmpty(p.contentRating)
+    m.item.rating = valueOrEmpty(p.rating)
+    if valueOrEmpty(p.guid) <> "" then m.item.guid = valueOrEmpty(p.guid)
+    if valueOrEmpty(p.showGuid) <> "" then m.item.showGuid = valueOrEmpty(p.showGuid)
+    if art <> "" then
+        m.item.hdPosterUrl = art
+        m.item.hdBackdropUrl = art
+    end if
+
+    cast = []
+    if p.cast <> invalid and GetInterface(p.cast, "ifArray") <> invalid then cast = p.cast
+    m.item.cast = cast
+    paintCastRow(cast)
+
+    paintMeta()
+    if m.video <> invalid and m.video.content <> invalid then
+        m.video.content.title = title
+    end if
+    maybeEnrichLiveMeta()
+end sub
+
+sub applyLiveChannelPlaceholder(untilAt as Integer)
+    if m.item = invalid then return
+    channelName = m.liveChannelName
+    if channelName = "" then channelName = "Live TV"
+
+    ' Avoid thrashing paint when we're already in the gap state
+    if valueOrEmpty(m.item.shortTitle) = channelName and numberOf(m.item.endsAt) = untilAt then return
+
+    m.item.shortTitle = channelName
+    m.item.title = channelName
+    m.item.description = ""
+    m.item.beginsAt = 0
+    m.item.endsAt = untilAt
+    m.item.programKind = ""
+    m.item.year = ""
+    m.item.contentRating = ""
+    m.item.rating = ""
+    m.item.cast = []
+    paintCastRow([])
+    paintMeta()
+    if m.video <> invalid and m.video.content <> invalid then
+        m.video.content.title = channelName
+    end if
+end sub
+
+sub refreshLiveSchedule()
+    if m.liveMetaRefreshing then return
+    cfg = m.top.config
+    if cfg = invalid or m.item = invalid then return
+
+    now = CreateObject("roDateTime").AsSeconds()
+    ' Don't hammer the guide/EPG if listings are thin
+    if m.liveMetaLastFetch > 0 and now - m.liveMetaLastFetch < 60 then return
+
+    source = valueOrEmpty(m.item.source)
+    feedId = valueOrEmpty(m.item.feedId)
+    mediaType = valueOrEmpty(m.item.mediaType)
+
+    m.liveMetaRefreshing = true
+    m.liveMetaLastFetch = now
+    m.liveMetaTask = createObject("roSGNode", "PlexTask")
+    m.liveMetaTask.config = cfg
+
+    if source = "cable" or (mediaType = "sport" and feedId <> "") then
+        m.liveMetaTask.action = "cableEpg"
+        m.liveMetaTask.observeField("response", "onCableScheduleRefreshed")
+        m.liveMetaTask.control = "RUN"
+        return
+    end if
+
+    m.liveMetaTask.action = "liveTvGrid"
+    m.liveMetaTask.item = {
+        dvrId: valueOrEmpty(m.item.dvrId),
+        epgId: valueOrEmpty(m.item.epgId),
+        startAt: now - 1800,
+        endAt: now + 4 * 3600,
+        fresh: (valueOrEmpty(m.item.dvrId) = "")
+    }
+    m.liveMetaTask.observeField("response", "onPlexScheduleRefreshed")
+    m.liveMetaTask.control = "RUN"
+end sub
+
+sub onCableScheduleRefreshed()
+    m.liveMetaRefreshing = false
+    if m.liveMetaTask = invalid or m.item = invalid then return
+    response = m.liveMetaTask.response
+    if response = invalid or response.ok <> true or response.byId = invalid then return
+
+    feedId = valueOrEmpty(m.item.feedId)
+    if feedId = "" or not response.byId.DoesExist(feedId) then return
+
+    programs = response.byId[feedId]
+    if programs = invalid or GetInterface(programs, "ifArray") = invalid then return
+
+    now = CreateObject("roDateTime").AsSeconds()
+    m.livePrograms = trimLivePrograms(programs, now)
+    m.item.programs = m.livePrograms
+    syncLiveProgramMeta(false)
+end sub
+
+sub onPlexScheduleRefreshed()
+    m.liveMetaRefreshing = false
+    if m.liveMetaTask = invalid or m.item = invalid then return
+    response = m.liveMetaTask.response
+    if response = invalid or response.ok <> true or response.channels = invalid then return
+
+    channelKey = valueOrEmpty(m.item.key)
+    channelId = valueOrEmpty(m.item.channelId)
+    tuneAlt = valueOrEmpty(m.item.tuneAlt)
+    matched = invalid
+    for each ch in response.channels
+        if ch <> invalid then
+            if channelKey <> "" and valueOrEmpty(ch.key) = channelKey then
+                matched = ch
+                exit for
+            end if
+            if channelId <> "" and (valueOrEmpty(ch.tuneId) = channelId or valueOrEmpty(ch.tuneAlt) = channelId) then
+                matched = ch
+                exit for
+            end if
+            if tuneAlt <> "" and (valueOrEmpty(ch.tuneAlt) = tuneAlt or valueOrEmpty(ch.tuneId) = tuneAlt) then
+                matched = ch
+                exit for
+            end if
+        end if
+    end for
+    if matched = invalid or matched.programs = invalid then return
+
+    now = CreateObject("roDateTime").AsSeconds()
+    m.livePrograms = trimLivePrograms(matched.programs, now)
+    m.item.programs = m.livePrograms
+    syncLiveProgramMeta(false)
+end sub
+
+function trimLivePrograms(programs as Object, fromAt as Integer) as Object
+    out = []
+    if programs = invalid or GetInterface(programs, "ifArray") = invalid then return out
+    for each p in programs
+        if p <> invalid and p.placeholder <> true then
+            e = numberOf(p.endsAt)
+            b = numberOf(p.beginsAt)
+            if e > fromAt and b > 0 and e > b then
+                out.push(p)
+                if out.count() >= 24 then return out
+            end if
+        end if
+    end for
+    return out
+end function
+
+sub onLiveMetaEnriched()
+    if m.enrichTask = invalid then return
+    response = m.enrichTask.response
+    if response = invalid or response.ok <> true or response.tmdb = invalid then return
+    if m.item = invalid then return
+
+    tmdb = response.tmdb
+    if valueOrEmpty(m.item.description) = "" and valueOrEmpty(tmdb.description) <> "" then
+        m.item.description = tmdb.description
+    end if
+    if valueOrEmpty(tmdb.year) <> "" then m.item.year = tmdb.year
+    if valueOrEmpty(tmdb.contentRating) <> "" then m.item.contentRating = tmdb.contentRating
+    if valueOrEmpty(tmdb.rating) <> "" then m.item.rating = tmdb.rating
+    if valueOrEmpty(tmdb.hdBackdropUrl) <> "" then m.item.hdBackdropUrl = tmdb.hdBackdropUrl
+    ' Prefer TMDB's vertical poster over landscape EPG stills — Continue Watching
+    ' shelves are portrait tiles, and EPG art alone shows as an empty placeholder
+    if valueOrEmpty(tmdb.hdPosterUrl) <> "" then m.item.hdPosterUrl = tmdb.hdPosterUrl
+    if tmdb.cast <> invalid and GetInterface(tmdb.cast, "ifArray") <> invalid then
+        if tmdb.cast.count() > 0 then
+            m.item.cast = tmdb.cast
+            paintCastRow(tmdb.cast)
+        end if
+    end if
+    paintMeta()
+end sub
 
 sub loadCast()
     if m.item = invalid then return
+
+    ' Cable EPG sidecar (TMDB) and similar direct plays can ship cast on the item
+    if m.item.cast <> invalid and GetInterface(m.item.cast, "ifArray") <> invalid then
+        if m.item.cast.count() > 0 then
+            paintCastRow(m.item.cast)
+            return
+        end if
+    end if
+
     ratingKey = valueOrEmpty(m.item.ratingKey)
     if ratingKey = "" then return
 
@@ -800,18 +1207,26 @@ sub onCastLoaded()
     if response = invalid or response.ok <> true then return
     cast = response.cast
     if cast = invalid or cast.count() = 0 then return
+    paintCastRow(cast)
+end sub
+
+sub paintCastRow(cast as Object)
+    while m.castRow.getChildCount() > 0
+        m.castRow.removeChildIndex(0)
+    end while
+    m.cast = []
+    m.castNodes = []
+
+    if cast = invalid or cast.count() = 0 then
+        m.castPanel.visible = false
+        return
+    end if
 
     maxShown = 7
     if cast.count() < maxShown then maxShown = cast.count()
     posterW = 94
     posterH = 141
     gap = 26
-
-    while m.castRow.getChildCount() > 0
-        m.castRow.removeChildIndex(0)
-    end while
-    m.cast = []
-    m.castNodes = []
 
     for i = 0 to maxShown - 1
         member = cast[i]
@@ -895,7 +1310,7 @@ sub openCastModal()
     ' needs to already know the modal owns the screen
     m.zone = "castModal"
     m.hideTimer.control = "stop"
-    if m.castResumeOnClose then m.video.control = "pause"
+    if m.castResumeOnClose = true and m.video <> invalid then m.video.control = "pause"
 
     m.castModalName.text = valueOrEmpty(member.title)
     role = valueOrEmpty(member.description)
@@ -966,7 +1381,7 @@ sub closeCastModal()
     m.castModal.visible = false
     m.castModalSpinner.control = "stop"
     m.castModalSpinner.visible = false
-    if m.castResumeOnClose then m.video.control = "resume"
+    if m.castResumeOnClose = true and m.video <> invalid then m.video.control = "resume"
     m.castResumeOnClose = false
     showControls("cast")
 end sub
@@ -994,10 +1409,21 @@ sub paintMeta()
         end if
     else
         bits = []
+        ' For cable the full title is often "Show · Channel"
+        if m.isSport or m.isLive then
+            fullTitle = valueOrEmpty(m.item.title)
+            if fullTitle <> "" and fullTitle <> headline and Instr(1, fullTitle, headline) = 1 then
+                suffix = Mid(fullTitle, Len(headline) + 1).Trim()
+                if Left(suffix, 1) = "·" then suffix = Mid(suffix, 2).Trim()
+                if suffix <> "" then bits.push(suffix)
+            end if
+        end if
         year = valueOrEmpty(m.item.year)
         if year <> "" then bits.push(year)
         contentRating = valueOrEmpty(m.item.contentRating)
         if contentRating <> "" then bits.push(contentRating)
+        rating = valueOrEmpty(m.item.rating)
+        if rating <> "" then bits.push(rating)
         context = joinWith(bits, "  ·  ")
     end if
 
@@ -1014,6 +1440,7 @@ sub paintMeta()
 end sub
 
 sub paintScrubber(atSeconds as Integer)
+    paintClock()
     if m.duration <= 0 or m.isLive then return
 
     pct = atSeconds / m.duration
@@ -1028,6 +1455,13 @@ sub paintScrubber(atSeconds as Integer)
     m.elapsedLabel.text = formatRuntime(atSeconds)
     m.remainingLabel.text = "-" + formatRuntime(remaining)
     m.endsAtLabel.text = endsAtText(remaining)
+end sub
+
+sub paintClock()
+    if m.clockLabel = invalid then return
+    now = CreateObject("roDateTime")
+    now.ToLocalTime()
+    m.clockLabel.text = clockTime(now.GetHours(), now.GetMinutes(), m.clock24)
 end sub
 
 ' "Ends at 10:45 PM" — the one number you actually want when deciding
@@ -1185,6 +1619,7 @@ sub showControls(zone as String)
     ' The preview belongs to an in-flight seek, so it does not follow the viewer
     ' into a zone that cannot seek — least of all the cast strip it covers
     if zone <> "scrubber" and zone <> "buttons" then hidePreview()
+    paintClock()
     paintScrubber(m.position)
     paintButtons()
     paintButtonFocus()
@@ -1257,6 +1692,10 @@ end sub
 
 sub onSeekCommit()
     if m.pendingSeek = invalid then return
+    if m.video = invalid then
+        m.pendingSeek = invalid
+        return
+    end if
     target = m.pendingSeek
     m.pendingSeek = invalid
     hidePreview()
@@ -1604,9 +2043,37 @@ sub stopAndClose()
     m.hideTimer.control = "stop"
     m.seekTimer.control = "stop"
     m.stallTimer.control = "stop"
+    m.liveMetaTimer.control = "stop"
+    rememberLiveContinueWatch()
     sendPlaybackActions([timelineAction("stopped"), releaseAction()])
-    if m.video <> invalid then m.video.control = "stop"
+    hardStopVideo()
     m.top.closed = true
+end sub
+
+' m.item tracks the current airing as the guide advances; content is the launch payload
+sub rememberLiveContinueWatch()
+    if m.item = invalid then return
+    profileId = ""
+    cfg = m.top.config
+    if cfg <> invalid and cfg.profileId <> invalid then profileId = valueOrEmpty(cfg.profileId)
+    SaveLiveContinueWatch(m.item, profileId)
+end sub
+
+' Tear the Video node out of the tree so the decoder actually releases.
+' control=stop alone is not enough for some sports HLS feeds.
+sub hardStopVideo()
+    if m.video = invalid then return
+    vid = m.video
+    ' Drop our handle first so any sync/async state callbacks from stop/remove
+    ' see invalid and bail instead of crashing on a dead component.
+    m.video = invalid
+    vid.unobserveField("state")
+    vid.unobserveField("position")
+    vid.unobserveField("bufferingStatus")
+    vid.control = "stop"
+    vid.content = invalid
+    parent = vid.getParent()
+    if parent <> invalid then parent.removeChild(vid)
 end sub
 
 '--------------------------------------------------------------------

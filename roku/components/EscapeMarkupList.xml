@@ -4,6 +4,7 @@
         <field id="escapeUp" type="boolean" alwaysNotify="true" />
         <field id="escapeLeft" type="boolean" alwaysNotify="true" />
         <field id="escapeBack" type="boolean" alwaysNotify="true" />
+        <field id="escapeOptions" type="boolean" alwaysNotify="true" />
     </interface>
     <script type="text/brightscript" uri="EscapeMarkupList.brs" />
 </component>

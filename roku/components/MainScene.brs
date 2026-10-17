@@ -22,17 +22,24 @@ sub init()
     m.castDetailScreen = invalid
     m.liveTvScreen = invalid
     m.searchScreen = invalid
+    m.profilePicker = invalid
+    m.bootSplashHost = m.top.findNode("bootSplash")
+    m.bootSplash = invalid
+    m.waitSpinner = m.top.findNode("waitSpinner")
+    m.waitSplash = m.top.findNode("waitSplash")
     m.section = "home"
     m.navExpanded = false
     m.activeLibraryId = ""
+    m.profileReady = false
+    m.launchSplashDone = false
 
-    m.sideNav.config = m.config
     m.sideNav.expanded = false
     m.sideNav.observeField("selected", "onNavSelected")
     m.sideNav.observeField("selectedLibrary", "onLibrarySelected")
     ' The nav can collapse itself (Back); keep the scrim and focus in sync when it does
     m.sideNav.observeField("expanded", "onNavExpandedChanged")
-    showHome()
+    m.sideNav.suppressed = true
+    showLaunchSplash()
 end sub
 
 ' The icon rail belongs to browse surfaces: detail pages and the player use
@@ -45,11 +52,116 @@ end sub
 
 ' Nothing draws over the splash mosaic, open menu or rail
 function splashShowing() as Boolean
+    if m.bootSplash <> invalid then return true
+    if m.profilePicker <> invalid then return true
+    if m.waitSpinner <> invalid and m.waitSpinner.visible = true then return true
     if m.homeScreen = invalid then return false
     return m.homeScreen.splashActive = true
 end function
 
+sub showLaunchSplash()
+    m.sideNav.suppressed = true
+    m.launchSplashDone = false
+    if m.bootSplashHost = invalid then
+        onLaunchSplashDone()
+        return
+    end if
+    while m.bootSplashHost.getChildCount() > 0
+        m.bootSplashHost.removeChildIndex(0)
+    end while
+    m.bootSplash = createObject("roSGNode", "SplashMosaic")
+    splashUrl = ""
+    if m.config.splashManifestUrl <> invalid then splashUrl = m.config.splashManifestUrl
+    if splashUrl <> "" then m.bootSplash.manifestUrl = splashUrl
+    m.bootSplash.active = true
+    m.bootSplashHost.appendChild(m.bootSplash)
+    m.bootSplashHost.visible = true
+    m.bootSplashHost.setFocus(true)
+    updateNavRail()
+
+    m.launchTimer = createObject("roSGNode", "Timer")
+    m.launchTimer.repeat = false
+    m.launchTimer.duration = 2.0
+    m.launchTimer.observeField("fire", "onLaunchSplashDone")
+    m.launchTimer.control = "start"
+end sub
+
+sub onLaunchSplashDone()
+    m.launchSplashDone = true
+    if m.launchTimer <> invalid then m.launchTimer.control = "stop"
+    hideLaunchSplash()
+    showProfilePicker()
+end sub
+
+sub hideLaunchSplash()
+    if m.bootSplash <> invalid then
+        m.bootSplash.active = false
+        m.bootSplash = invalid
+    end if
+    if m.bootSplashHost <> invalid then
+        while m.bootSplashHost.getChildCount() > 0
+            m.bootSplashHost.removeChildIndex(0)
+        end while
+        m.bootSplashHost.visible = false
+    end if
+end sub
+
+sub showWaitSpinner(on as Boolean)
+    if m.waitSpinner = invalid then return
+    m.waitSpinner.visible = on
+    if m.waitSplash <> invalid then
+        if on then
+            splashUrl = ""
+            if m.config.splashManifestUrl <> invalid then splashUrl = m.config.splashManifestUrl
+            if splashUrl <> "" then m.waitSplash.manifestUrl = splashUrl
+            m.waitSplash.active = true
+        else
+            m.waitSplash.active = false
+        end if
+    end if
+    updateNavRail()
+end sub
+
+sub showProfilePicker()
+    clearScreens()
+    showWaitSpinner(false)
+    ' Drop a parked Home so the next profile gets a fresh load
+    if m.homeScreen <> invalid then
+        m.screens.removeChild(m.homeScreen)
+        m.homeScreen = invalid
+    end if
+    m.profileReady = false
+    m.sideNav.suppressed = true
+    m.profilePicker = createObject("roSGNode", "ProfilePickerScreen")
+    m.profilePicker.config = m.config
+    m.profilePicker.observeField("selectedProfile", "onProfileSelected")
+    m.screens.appendChild(m.profilePicker)
+    m.profilePicker.setFocus(true)
+    updateNavRail()
+end sub
+
+sub onProfileSelected()
+    profile = m.profilePicker.selectedProfile
+    if profile = invalid then return
+    m.config = ApplyProfileToConfig(GetPlexConfig(), profile)
+    m.profileReady = true
+    if m.profilePicker <> invalid then
+        m.screens.removeChild(m.profilePicker)
+        m.profilePicker = invalid
+    end if
+    m.sideNav.suppressed = true
+    m.sideNav.config = m.config
+    m.sideNav.active = "home"
+    m.section = "home"
+    showWaitSpinner(true)
+    showHome(true)
+end sub
+
 sub onHomeSplashChange()
+    if m.homeScreen <> invalid and m.homeScreen.splashActive <> true then
+        showWaitSpinner(false)
+        m.sideNav.suppressed = false
+    end if
     updateNavRail()
 end sub
 
@@ -102,6 +214,7 @@ sub clearScreens()
     m.castDetailScreen = invalid
     m.liveTvScreen = invalid
     m.searchScreen = invalid
+    ' Profile picker is managed by showProfilePicker / onProfileSelected
     updateNavRail()
 end sub
 
@@ -109,6 +222,12 @@ sub onNavSelected()
     section = m.sideNav.selected
     if section = invalid or section = "" then return
     if section = "library" then return ' handled by onLibrarySelected
+
+    if section = "profiles" then
+        setNavExpanded(false)
+        showProfilePicker()
+        return
+    end if
 
     if section = m.section and sectionScreenExists(section) then
         setNavExpanded(false)
@@ -122,9 +241,12 @@ sub onNavSelected()
         showHome()
     else if section = "search" then
         showSearch()
-    else if section = "livetv" then
+    else if section = "livetv" or section = "cable" then
+        ' "cable" kept as an alias so older nav state still opens the unified guide
+        m.section = "livetv"
         showLiveTv()
     else if section = "sports" then
+        if not ProfileAllowsSports(m.config) then return
         showSports()
     end if
 end sub
@@ -134,7 +256,7 @@ end sub
 function sectionScreenExists(section as String) as Boolean
     if section = "home" then return m.homeScreen <> invalid
     if section = "search" then return m.searchScreen <> invalid
-    if section = "livetv" then return m.liveTvScreen <> invalid
+    if section = "livetv" or section = "cable" then return m.liveTvScreen <> invalid
     if section = "sports" then return m.sportsScreen <> invalid
     return false
 end function
@@ -157,7 +279,7 @@ sub onLibrarySelected(event as Object)
     showLibraryBrowse(lib)
 end sub
 
-sub showHome()
+sub showHome(quietLoad = false as Boolean)
     clearScreens()
     m.section = "home"
     m.sideNav.active = "home"
@@ -168,11 +290,13 @@ sub showHome()
         m.homeScreen.setFocus(true)
         m.homeScreen.refocus = true
         m.homeScreen.refresh = true
+        showWaitSpinner(false)
         updateNavRail()
         return
     end if
 
     m.homeScreen = createObject("roSGNode", "HomeScreen")
+    m.homeScreen.quietLoad = quietLoad
     m.homeScreen.config = m.config
     m.homeScreen.observeField("selectedItem", "onBrowseSelected")
     m.homeScreen.observeField("loadingMessage", "onSoftLoading")
@@ -297,6 +421,7 @@ sub onLiveTvSelected()
 end sub
 
 sub showSports()
+    if not ProfileAllowsSports(m.config) then return
     clearScreens()
     m.sideNav.active = "sports"
     m.sportsScreen = createObject("roSGNode", "SportsScreen")
@@ -334,14 +459,73 @@ sub onBrowseSelected(event as Object)
     ' Read the payload off the event: home, library hub and library grid all share this handler
     item = event.getData()
     if item = invalid then return
+    ' Live / Cable Continue Watching jumps straight back into the stream
+    if isLiveContinueItem(item) then
+        showVideo(item)
+        return
+    end if
     showDetail(item)
 end sub
+
+function isLiveContinueItem(item as Object) as Boolean
+    if item = invalid then return false
+    if item.isLiveContinue = true then return true
+    mediaType = asString(item.mediaType)
+    source = asString(item.source)
+    if mediaType = "livetv" then return true
+    if mediaType = "sport" and source = "cable" then return true
+    return false
+end function
 
 sub onSportsItemSelected()
     item = m.sportsScreen.selectedItem
     if item = invalid then return
+    streams = sportsStreamList(item)
+    ' One feed → play immediately; multiple → picker on the game page
+    if streams.count() = 1 then
+        showVideo(sportsPlayableFromStream(item, streams[0]))
+        return
+    end if
     showSportsDetail(item)
 end sub
+
+function sportsStreamList(item as Object) as Object
+    streams = []
+    if item = invalid then return streams
+    if item.streams <> invalid then
+        for each s in item.streams
+            if asString(s.streamUrl) <> "" then streams.push(s)
+        end for
+    end if
+    if streams.count() = 0 and asString(item.streamUrl) <> "" then
+        streams.push({
+            title: "Primary stream",
+            streamUrl: asString(item.streamUrl),
+            streamFormat: asString(item.streamFormat)
+        })
+    end if
+    return streams
+end function
+
+function sportsPlayableFromStream(item as Object, stream as Object) as Object
+    url = asString(stream.streamUrl)
+    format = asString(stream.streamFormat)
+    if format = "" then format = asString(item.streamFormat)
+    league = asString(item.description)
+    if league = "" and item.DoesExist("league") then league = asString(item.league)
+    return {
+        title: asString(item.title),
+        description: league,
+        mediaType: "sport",
+        key: url,
+        streamUrl: url,
+        streamFormat: format,
+        hdPosterUrl: item.hdPosterUrl,
+        ratingKey: "",
+        duration: 0,
+        viewOffset: 0
+    }
+end function
 
 sub showSportsDetail(item as Object)
     if m.sportsDetailScreen <> invalid then
@@ -624,6 +808,7 @@ end sub
 
 sub showVideo(item as Object)
     if m.videoScreen <> invalid then
+        forceStopVideoScreen(m.videoScreen)
         m.screens.removeChild(m.videoScreen)
         m.videoScreen = invalid
     end if
@@ -640,6 +825,23 @@ sub showVideo(item as Object)
     m.videoScreen.content = item
     m.videoScreen.setFocus(true)
     updateNavRail()
+end sub
+
+' Stop and detach the Video node before the screen leaves the tree so the
+' decoder releases (sports HLS can keep playing after a bare removeChild).
+sub forceStopVideoScreen(screen as Object)
+    if screen = invalid then return
+    vid = screen.findNode("video")
+    if vid = invalid then return
+    ' Drop observers before stop/remove so VideoScreen handlers don't run on a
+    ' node Mid-teardown (and so a second stop from onVideoClosed is quiet).
+    vid.unobserveField("state")
+    vid.unobserveField("position")
+    vid.unobserveField("bufferingStatus")
+    vid.control = "stop"
+    vid.content = invalid
+    parent = vid.getParent()
+    if parent <> invalid then parent.removeChild(vid)
 end sub
 
 sub onPlaybackReport(event as Object)
@@ -675,6 +877,7 @@ sub onVideoClosed()
     failure = ""
     if m.videoScreen <> invalid then
         failure = asString(m.videoScreen.failure)
+        forceStopVideoScreen(m.videoScreen)
         m.screens.removeChild(m.videoScreen)
         m.videoScreen = invalid
     end if
@@ -709,7 +912,7 @@ sub restoreSectionFocus()
     else if m.section = "search" and m.searchScreen <> invalid then
         m.searchScreen.setFocus(true)
         m.searchScreen.refocus = true
-    else if m.section = "livetv" and m.liveTvScreen <> invalid then
+    else if (m.section = "livetv" or m.section = "cable") and m.liveTvScreen <> invalid then
         m.liveTvScreen.setFocus(true)
         m.liveTvScreen.refocus = true
     else if m.section = "sports" and m.sportsScreen <> invalid then
@@ -748,6 +951,9 @@ function onKeyEvent(key as String, press as Boolean) as Boolean
         else if m.libraryAllScreen <> invalid then
             m.libraryAllScreen.close = true
             return true
+        else if m.profilePicker <> invalid then
+            m.top.exitApp = true
+            return true
         else if m.navExpanded then
             m.top.exitApp = true
             return true
@@ -760,7 +966,9 @@ function onKeyEvent(key as String, press as Boolean) as Boolean
             return true
         end if
     else if key = "left" and not m.navExpanded and m.videoScreen = invalid and m.detailScreen = invalid and m.castDetailScreen = invalid and m.multiviewScreen = invalid then
-        ' Allow Left → menu from home / libraries / sports / sports detail
+        ' Sports owns Left (pills move / list opens menu via openMenu)
+        if m.section = "sports" and m.sportsScreen <> invalid then return false
+        ' Allow Left → menu from home / libraries / sports detail
         setNavExpanded(true)
         if m.navExpanded then m.sideNav.setFocus(true)
         return true

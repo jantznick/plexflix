@@ -22,7 +22,21 @@ sub onContentSet()
     m.titleLabel.text = asString(item.title)
     league = asString(item.description)
     if league = "" and item.DoesExist("league") then league = asString(item.league)
-    m.metaLabel.text = league
+    meta = league
+    if item.DoesExist("scoreMatched") and item.scoreMatched = true then
+        scoreLine = asString(item.scoreLine)
+        scoreStatus = asString(item.scoreStatus)
+        bits = scoreLine
+        if scoreStatus <> "" and scoreStatus <> scoreLine then
+            if bits <> "" then bits = bits + "  ·  "
+            bits = bits + scoreStatus
+        end if
+        if bits <> "" then
+            if meta <> "" then meta = meta + "  ·  "
+            meta = meta + bits
+        end if
+    end if
+    m.metaLabel.text = meta
     showHint()
 
     art = asString(item.hdPosterUrl)
@@ -54,7 +68,7 @@ sub onContentSet()
         child.title = label
         quality = ""
         if stream.DoesExist("quality") then quality = asString(stream.quality)
-        setStreamCols(child, StrI(i + 1).Trim(), label, quality, "Play →")
+        setStreamCols(child, StrI(i + 1).Trim(), label, quality, "")
     end for
     m.streamList.content = root
     if m.streams.count() > 0 then
@@ -147,9 +161,9 @@ end sub
 sub showHint()
     m.summaryLabel.color = "0xC8C8D0"
     if m.top.multiviewEnabled = true then
-        m.summaryLabel.text = "OK a stream to play, * to add it to multiview, Play to watch your multiview. Back returns to the guide."
+        m.summaryLabel.text = "Add streams to multiview, or play one fullscreen."
     else
-        m.summaryLabel.text = "OK a stream to play. Remote Back returns to the guide."
+        m.summaryLabel.text = ""
     end if
 end sub
 

@@ -34,6 +34,23 @@ sub init()
 
     m.events = []
     m.currentIndex = 0
+    m.feedLoading = false
+    m.menuActions = []
+    m.menuReturnZone = "list"
+
+    m.menu = m.top.findNode("menu")
+    m.menuPanel = m.top.findNode("menuPanel")
+    m.menuAccent = m.top.findNode("menuAccent")
+    m.menuTitle = m.top.findNode("menuTitle")
+    m.menuSub = m.top.findNode("menuSub")
+    m.menuList = m.top.findNode("menuList")
+
+    ' Scores sidecar (optional). Failures leave the guide exactly as before.
+    m.scoresEnabled = false
+    m.scoresLoading = false
+    m.scoresVisible = false
+    m.scoreHeader = m.top.findNode("scoreHeader")
+    if m.scoreHeader <> invalid then m.scoreHeader.visible = false
 
     ' Games picked for multiview, kept across sport filters and the game page
     m.multi = []
@@ -48,6 +65,8 @@ sub init()
     m.guideList.observeField("escapeUp", "onGuideEscapeUp")
     m.guideList.observeField("escapeLeft", "onGuideEscapeLeft")
     m.guideList.observeField("escapeBack", "onGuideEscapeBack")
+    m.guideList.observeField("escapeOptions", "onGuideEscapeOptions")
+    m.menuList.observeField("itemSelected", "onMenuSelected")
 
     m.clockTimer = createObject("roSGNode", "Timer")
     m.clockTimer.repeat = true
@@ -55,6 +74,13 @@ sub init()
     m.clockTimer.observeField("fire", "updateClock")
     m.clockTimer.control = "start"
     updateClock()
+
+    m.scoresTimer = createObject("roSGNode", "Timer")
+    m.scoresTimer.repeat = true
+    m.scoresTimer.duration = 45
+    m.scoresTimer.observeField("fire", "onScoresTimer")
+    m.scoresTimer.control = "stop"
+
     showSkeleton()
 end sub
 
@@ -86,11 +112,16 @@ sub onConfigReady()
     if m.top.config = invalid then return
     url = m.top.config.multiviewUrl
     m.multiEnabled = (url <> invalid and url <> "")
+    scoresUrl = ""
+    if m.top.config.scoresUrl <> invalid then scoresUrl = m.top.config.scoresUrl.Trim()
+    m.scoresEnabled = (scoresUrl <> "")
     paintMultiTray()
     loadFeed()
 end sub
 
 sub loadFeed()
+    if m.feedLoading = true then return
+    m.feedLoading = true
     m.statusLabel.text = "Loading…"
     m.top.loadingMessage = "Loading sports feed…"
     m.task = createObject("roSGNode", "PlexTask")
@@ -102,6 +133,7 @@ end sub
 
 sub onFeedLoaded()
     response = m.task.response
+    m.feedLoading = false
     m.top.loadingMessage = ""
     if response = invalid or response.ok <> true then
         err = "Could not load sports feed"
@@ -119,14 +151,17 @@ sub onFeedLoaded()
     for each rowData in rows
         league = asString(rowData.title)
         if league = "" then league = "Live"
-        items = rowData.items
-        if items = invalid then items = []
-        if items.count() > 0 then
-            for each item in items
-                item.league = league
-                allItems.push(item)
-            end for
-            m.categories.push({ title: prettyCategory(league), items: items })
+        ' Entertainment / Cartoons live under Cable TV, not the sports guide
+        if not isCableCategory(league) then
+            items = rowData.items
+            if items = invalid then items = []
+            if items.count() > 0 then
+                for each item in items
+                    item.league = league
+                    allItems.push(item)
+                end for
+                m.categories.push({ title: prettyCategory(league), items: items })
+            end if
         end if
     end for
     ' "All" leads so the unfiltered guide is one press away from any sport
@@ -144,7 +179,14 @@ sub onFeedLoaded()
     buildPills()
     applyCategory(keep)
     if m.zone = "list" then m.guideList.setFocus(true)
+    ' Soft enrichment — never blocks or fails the feed itself
+    loadScores()
 end sub
+
+function isCableCategory(title as String) as Boolean
+    key = LCase(title)
+    return key = "entertainment" or key = "cartoons"
+end function
 
 ' Feed keys are shouty slugs ("AMERICAN-FOOTBALL"); "24/7 Channels" is already fine
 function prettyCategory(raw as String) as String
@@ -186,6 +228,12 @@ sub applyCategory(index as Integer)
         m.statusLabel.text = StrI(m.events.count()).Trim() + " events"
         m.guideList.jumpToItem = 0
         updateInfo(0)
+    end if
+    ' Replacing MarkupList content can yank focus off the pills; put it back
+    if m.zone = "pills" then
+        m.top.setFocus(true)
+    else if m.events.count() > 0 then
+        m.guideList.setFocus(true)
     end if
 end sub
 
@@ -256,8 +304,13 @@ sub scrollPillsIntoView()
 end sub
 
 sub focusPills()
-    if m.pills.count() < 2 then return
+    if m.pills.count() = 0 then
+        m.top.openMenu = true
+        return
+    end if
     m.zone = "pills"
+    ' Keep the event list from stealing Left (it treats Left as open-menu)
+    if m.guideList <> invalid then m.guideList.focusable = false
     m.top.setFocus(true)
     paintPills()
 end sub
@@ -265,7 +318,15 @@ end sub
 sub focusList()
     m.zone = "list"
     paintPills()
+    if m.guideList <> invalid then m.guideList.focusable = true
+    if m.events.count() = 0 then
+        m.top.setFocus(true)
+        return
+    end if
     m.guideList.setFocus(true)
+    if m.currentIndex >= 0 and m.currentIndex < m.events.count() then
+        m.guideList.jumpToItem = m.currentIndex
+    end if
 end sub
 
 sub setGuideCols(node as Object, c0 as String, c1 as String, c2 as String, c3 as String)
@@ -292,7 +353,166 @@ sub applySportsLine(node as Object, item as Object, league as String)
     streamsCol = StrI(n).Trim() + " streams"
     if n = 1 then streamsCol = "1 stream"
     if eventInMultiview(item) then streamsCol = streamsCol + "  ·  Multiview"
-    setGuideCols(node, lg, title, "", streamsCol)
+    scoreCol = sportsScoreCol(item)
+    setGuideCols(node, lg, title, scoreCol, streamsCol)
+end sub
+
+function sportsScoreCol(item as Object) as String
+    if item = invalid then return ""
+    if item.DoesExist("scoreMatched") and item.scoreMatched = true then
+        line = asString(item.scoreLine)
+        if Len(line) > 22 then line = Mid(line, 1, 22)
+        return line
+    end if
+    return ""
+end function
+
+function sportsScoreSummary(item as Object) as String
+    if item = invalid then return ""
+    if item.DoesExist("scoreMatched") <> true or item.scoreMatched <> true then return ""
+    line = asString(item.scoreLine)
+    status = asString(item.scoreStatus)
+    if line = "" then return status
+    if status = "" or status = line then return line
+    return line + "  ·  " + status
+end function
+
+function scoreKeyForItem(item as Object, index as Integer) as String
+    if item = invalid then return "i" + StrI(index).Trim()
+    key = asString(item.id)
+    if key = "" then key = asString(item.key)
+    if key = "" then key = "i" + StrI(index).Trim()
+    return key
+end function
+
+function scoresEnabled() as Boolean
+    return m.scoresEnabled = true
+end function
+
+sub setScoreHeaderVisible(show as Boolean)
+    m.scoresVisible = show
+    if m.scoreHeader <> invalid then m.scoreHeader.visible = show
+end sub
+
+sub clearItemScores(item as Object)
+    if item = invalid then return
+    item.scoreMatched = false
+    item.scoreLine = ""
+    item.scoreStatus = ""
+    item.scoreEventId = ""
+end sub
+
+sub loadScores()
+    if not scoresEnabled() then
+        setScoreHeaderVisible(false)
+        if m.scoresTimer <> invalid then m.scoresTimer.control = "stop"
+        return
+    end if
+    if m.scoresLoading = true then return
+    if m.categories.count() = 0 then return
+
+    ' "All" is always first and holds the shared item objects
+    source = m.categories[0].items
+    if source = invalid then source = []
+    payloadItems = []
+    for i = 0 to source.count() - 1
+        item = source[i]
+        if item <> invalid then
+            key = scoreKeyForItem(item, i)
+            item.scoreKey = key
+            payloadItems.push({
+                id: key,
+                title: asString(item.title),
+                league: asString(item.league)
+            })
+        end if
+    end for
+    if payloadItems.count() = 0 then return
+
+    m.scoresLoading = true
+    m.scoresTask = createObject("roSGNode", "PlexTask")
+    m.scoresTask.config = m.top.config
+    m.scoresTask.action = "resolveScores"
+    m.scoresTask.item = { items: payloadItems }
+    m.scoresTask.observeField("response", "onScoresLoaded")
+    m.scoresTask.control = "RUN"
+end sub
+
+sub onScoresLoaded()
+    response = invalid
+    if m.scoresTask <> invalid then response = m.scoresTask.response
+    m.scoresLoading = false
+
+    ' Soft fail: feed UI stays as-is; hide score chrome if we never matched
+    if response = invalid or response.ok <> true then
+        if m.scoresVisible <> true then setScoreHeaderVisible(false)
+        if m.scoresTimer <> invalid then m.scoresTimer.control = "start"
+        return
+    end if
+
+    byId = {}
+    results = response.results
+    if results = invalid then results = []
+    matchedCount = 0
+    for each row in results
+        if GetInterface(row, "ifAssociativeArray") <> invalid then
+            id = asString(row.id)
+            if id <> "" then byId[id] = row
+            if row.matched = true then matchedCount = matchedCount + 1
+        end if
+    end for
+
+    if m.categories.count() = 0 then return
+    source = m.categories[0].items
+    if source = invalid then return
+
+    for i = 0 to source.count() - 1
+        item = source[i]
+        if item <> invalid then
+            key = asString(item.scoreKey)
+            if key = "" then key = scoreKeyForItem(item, i)
+            row = invalid
+            if byId.DoesExist(key) then row = byId[key]
+            if row <> invalid and row.matched = true then
+                item.scoreMatched = true
+                item.scoreLine = asString(row.scoreLine)
+                status = asString(row.displayStatus)
+                if status = "" then status = asString(row.shortDetail)
+                item.scoreStatus = status
+                item.scoreEventId = asString(row.eventId)
+            else
+                clearItemScores(item)
+            end if
+        end if
+    end for
+
+    if matchedCount > 0 then
+        setScoreHeaderVisible(true)
+    else
+        setScoreHeaderVisible(false)
+    end if
+    refreshScoreRows()
+    if m.currentIndex >= 0 and m.currentIndex < m.events.count() then updateInfo(m.currentIndex)
+    if m.scoresTimer <> invalid then m.scoresTimer.control = "start"
+end sub
+
+sub onScoresTimer()
+    if m.feedLoading = true then return
+    if not scoresEnabled() then return
+    loadScores()
+end sub
+
+' Rebuild visible guide rows so col2 picks up fresh score lines
+sub refreshScoreRows()
+    root = m.guideList.content
+    if root = invalid then return
+    for i = 0 to m.events.count() - 1
+        if i < root.getChildCount() then
+            fresh = createObject("roSGNode", "ContentNode")
+            applySportsLine(fresh, m.events[i], asString(m.events[i].league))
+            root.replaceChild(fresh, i)
+        end if
+    end for
 end sub
 
 '--------------------------------------------------------------------
@@ -394,11 +614,113 @@ sub paintMultiTray()
     end for
     m.multiList.text = names
     if m.multi.count() = 0 then
-        m.multiHint.text = "Press * on a game to add it"
+        m.multiHint.text = "* opens options (add / refresh)"
     else if m.multi.count() = 1 then
-        m.multiHint.text = "Add one more game with *"
+        m.multiHint.text = "* to add another, or refresh"
     else
-        m.multiHint.text = "Press Play to watch together"
+        m.multiHint.text = "Play = watch · * = options"
+    end if
+end sub
+
+' ---------------------------------------------------------------------------
+' * (options) — refresh feed and Multiview actions (custom panel, like Live TV)
+' ---------------------------------------------------------------------------
+
+sub openFeedOptions()
+    if m.zone = "menu" then return
+
+    actions = []
+    if m.feedLoading = true then
+        actions.push({ label: "Refresh already in progress", act: "none" })
+    else
+        actions.push({ label: "Refresh feed", act: "refresh" })
+    end if
+    if m.multiEnabled = true and m.zone = "list" and m.events.count() > 0 then
+        if m.currentIndex >= 0 and m.currentIndex < m.events.count() then
+            item = m.events[m.currentIndex]
+            if eventInMultiview(item) then
+                actions.push({ label: "Remove from Multiview", act: "multi" })
+            else
+                actions.push({ label: "Add to Multiview", act: "multi" })
+            end if
+        end if
+        if m.multi.count() >= 2 then
+            actions.push({ label: "Watch Multiview", act: "watchMulti" })
+        end if
+    end if
+    actions.push({ label: "Close", act: "close" })
+
+    subText = "Reload the sports feed from the CDN"
+    if m.multiEnabled = true then subText = "Feed refresh and Multiview"
+    openActionMenu("Live Sports", subText, actions)
+end sub
+
+sub openActionMenu(title as String, subText as String, actions as Object)
+    m.menuReturnZone = m.zone
+    m.zone = "menu"
+    m.menuTitle.text = title
+    m.menuSub.text = subText
+    setMenuActions(actions)
+    m.menu.visible = true
+    m.menuList.jumpToItem = 0
+    m.menuList.setFocus(true)
+end sub
+
+sub setMenuActions(actions as Object)
+    m.menuActions = actions
+    root = createObject("roSGNode", "ContentNode")
+    for each action in actions
+        item = root.createChild("ContentNode")
+        item.title = "   " + action.label
+    end for
+    m.menuList.content = root
+    rows = actions.count()
+    if rows > 9 then rows = 9
+    h = 176 + rows * 72
+    y = Int((1080 - h) / 2)
+    m.menuPanel.height = h
+    m.menuPanel.translation = [560, y]
+    m.menuAccent.translation = [560, y]
+    m.menuTitle.translation = [608, y + 36]
+    m.menuSub.translation = [608, y + 92]
+    m.menuList.translation = [592, y + 152]
+end sub
+
+sub closeActionMenu()
+    m.menu.visible = false
+    m.zone = m.menuReturnZone
+    if m.zone = "list" and m.events.count() > 0 then
+        m.guideList.setFocus(true)
+        if m.currentIndex >= 0 and m.currentIndex < m.events.count() then
+            m.guideList.jumpToItem = m.currentIndex
+        end if
+    else
+        m.top.setFocus(true)
+        paintPills()
+    end if
+end sub
+
+sub onMenuSelected()
+    idx = m.menuList.itemSelected
+    if idx = invalid or idx < 0 or idx >= m.menuActions.count() then return
+    action = m.menuActions[idx]
+    if action.act = "none" then return
+    if action.act = "close" then
+        closeActionMenu()
+    else if action.act = "refresh" then
+        closeActionMenu()
+        if m.feedLoading = true then
+            m.statusLabel.text = "Refresh already in progress"
+        else
+            loadFeed()
+        end if
+    else if action.act = "multi" then
+        closeActionMenu()
+        toggleFocusedEvent()
+    else if action.act = "watchMulti" then
+        closeActionMenu()
+        message = requestMultiview()
+        if message <> "" then m.statusLabel.text = message
     end if
 end sub
 
@@ -435,6 +757,8 @@ sub updateInfo(idx as Integer)
     meta = asString(item.league)
     if meta = "" then meta = asString(item.description)
     if meta = "" then meta = "Live sports"
+    scoreBits = sportsScoreSummary(item)
+    if scoreBits <> "" then meta = meta + "  ·  " + scoreBits
     m.eventMeta.text = meta
     n = 0
     if item.DoesExist("streamCount") then n = item.streamCount
@@ -479,27 +803,53 @@ sub onGuideEscapeLeft()
     m.top.openMenu = true
 end sub
 
+' First Back from the event list jumps to the category pills; Back again
+' (while on the pills) opens the sidebar — same rhythm as Live TV tabs
 sub onGuideEscapeBack()
-    m.top.openMenu = true
+    focusPills()
+end sub
+
+sub onGuideEscapeOptions()
+    openFeedOptions()
 end sub
 
 sub onRefocus()
-    if m.top.refocus = true then
-        if m.zone = "pills" then
-            m.top.setFocus(true)
-        else
+    if m.top.refocus <> true then return
+    if m.zone = "menu" then
+        m.menu.visible = false
+        m.zone = m.menuReturnZone
+    end if
+    if m.zone = "pills" then
+        m.top.setFocus(true)
+        paintPills()
+    else
+        m.zone = "list"
+        paintPills()
+        if m.events.count() > 0 then
             m.guideList.setFocus(true)
+            if m.currentIndex >= 0 and m.currentIndex < m.events.count() then
+                m.guideList.jumpToItem = m.currentIndex
+            end if
+        else
+            m.top.setFocus(true)
         end if
     end if
 end sub
 
 function onKeyEvent(key as String, press as Boolean) as Boolean
     if not press then return false
+
+    if m.zone = "menu" then
+        if key = "back" or key = "options" then closeActionMenu()
+        return true
+    end if
+
+    if key = "options" then
+        openFeedOptions()
+        return true
+    end if
     if m.multiEnabled and m.zone = "list" then
-        if key = "options" then
-            toggleFocusedEvent()
-            return true
-        else if key = "play" then
+        if key = "play" then
             message = requestMultiview()
             if message <> "" then m.statusLabel.text = message
             return true
@@ -508,7 +858,7 @@ function onKeyEvent(key as String, press as Boolean) as Boolean
     if m.zone <> "pills" then return false
 
     ' Moving between sports filters at once, the way streaming apps' genre
-    ' tabs do; there is nothing to confirm
+    ' tabs do; there is nothing to confirm. Leftmost Left opens the sidebar.
     if key = "left" then
         if m.pillIndex = 0 then
             m.top.openMenu = true
@@ -519,9 +869,12 @@ function onKeyEvent(key as String, press as Boolean) as Boolean
     else if key = "right" then
         if m.pillIndex < m.pills.count() - 1 then applyCategory(m.pillIndex + 1)
         return true
-    else if key = "down" or key = "OK" or key = "back" then
-        if m.events.count() = 0 then return key <> "back"
+    else if key = "down" or key = "OK" then
+        if m.events.count() = 0 then return true
         focusList()
+        return true
+    else if key = "back" then
+        m.top.openMenu = true
         return true
     else if key = "up" then
         return true

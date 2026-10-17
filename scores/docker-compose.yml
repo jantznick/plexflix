@@ -1,0 +1,18 @@
+services:
+  scores:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: plexflix-scores
+    restart: unless-stopped
+    ports:
+      - "8096:8096"
+    environment:
+      HOST: "0.0.0.0"
+      PORT: "8096"
+      # While any big-four game is live
+      REFRESH_SECONDS: "30"
+      # When the slate is all pre/post
+      IDLE_REFRESH_SECONDS: "300"
+      # Optional shared secret; set the same value as scoresToken in PlexConfig later
+      SCORES_TOKEN: ""

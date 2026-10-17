@@ -44,10 +44,11 @@ def settings_from_env(env=os.environ):
     return {
         "ffmpeg": env.get("FFMPEG", "ffmpeg"),
         "encoder": env.get("ENCODER", "libx264"),
-        "fps": int(env.get("FPS", "30")),
-        "video_bitrate": env.get("VIDEO_BITRATE", "6M"),
+        # Defaults favour a CPU (x264) box; raise these when using va/qsv/nvenc
+        "fps": int(env.get("FPS", "20")),
+        "video_bitrate": env.get("VIDEO_BITRATE", "3M"),
         "font_file": env.get("FONT_FILE") or _default_font(),
-        "variant_height": int(env.get("VARIANT_HEIGHT", "720")),
+        "variant_height": int(env.get("VARIANT_HEIGHT", "480")),
         "data_dir": env.get("DATA_DIR") or _default_data_dir(),
         "idle_timeout": int(env.get("IDLE_TIMEOUT", "90")),
         "max_sessions": int(env.get("MAX_SESSIONS", "2")),
@@ -124,6 +125,24 @@ def make_handler(manager):
             if self.command == "GET" and self.path.endswith((".ts", ".m3u8")):
                 return
             print(f"[http] {self.address_string()} {fmt % args}", flush=True)
+
+        def handle(self):
+            # ffmpeg and the Roku both drop keep-alives; that is not an error
+            try:
+                super().handle()
+            except (ConnectionResetError, BrokenPipeError):
+                pass
+
+        def do_OPTIONS(self):
+            # The Roku channel probes with OPTIONS before POST/GET; answer it
+            # so the log is not full of 501s. The real request follows either way.
+            self.send_response(HTTPStatus.NO_CONTENT)
+            self.send_header("Allow", "GET, POST, PUT, DELETE, OPTIONS")
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.send_header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+            self.send_header("Access-Control-Allow-Headers", "Content-Type, X-Multiview-Token")
+            self.send_header("Content-Length", "0")
+            self.end_headers()
 
         def do_GET(self):
             if self.path == "/healthz":

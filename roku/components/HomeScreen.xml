@@ -9,6 +9,8 @@
         <!-- True while the full-screen splash mosaic is up; MainScene keeps the
              side nav (full and icon rail) off it -->
         <field id="splashActive" type="boolean" value="true" />
+        <!-- After profile pick: skip the mosaic and let MainScene show a spinner -->
+        <field id="quietLoad" type="boolean" value="false" />
         <!-- MainScene keeps Home alive while another section is up: parked, it
              stops polling and never takes focus -->
         <field id="suspended" type="boolean" value="false" onChange="onSuspendedChange" />

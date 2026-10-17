@@ -15,6 +15,7 @@
 
     <script type="text/brightscript" uri="SideNav.brs" />
     <script type="text/brightscript" uri="pkg:/source/Fonts.brs" />
+    <script type="text/brightscript" uri="pkg:/source/Profiles.brs" />
 
     <children>
         <!-- 72px wide: every browse screen keeps its content 96px in, so the

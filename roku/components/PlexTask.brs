@@ -70,6 +70,12 @@ sub exec()
         m.top.response = tuneLiveChannel(cfg, m.top.item)
     else if action = "sportsFeed" then
         m.top.response = fetchSportsFeed(cfg)
+    else if action = "resolveScores" then
+        m.top.response = resolveSportsScores(cfg, m.top.item)
+    else if action = "cableEpg" then
+        m.top.response = fetchCableEpg(cfg)
+    else if action = "tmdbEnrich" then
+        m.top.response = enrichItemFromTmdb(cfg, m.top.item)
     else if action = "streamUrl" then
         m.top.response = buildStreamUrl(cfg, m.top.item)
     else if action = "reportProgress" then
@@ -630,14 +636,21 @@ function metadataToItem(cfg as Object, meta as Object) as Object
     end if
 
     description = safeToStr(meta.summary)
+    tagline = safeToStr(meta.tagline)
     year = safeToStr(meta.year)
 
-    rating = ""
-    if meta.audienceRating <> invalid then
-        rating = safeToStr(meta.audienceRating)
-    else if meta.rating <> invalid then
-        rating = safeToStr(meta.rating)
-    end if
+    ' Prefer audience for the single "rating" chip; keep critic separate when both exist
+    criticRating = ""
+    audienceRating = ""
+    if meta.rating <> invalid then criticRating = safeToStr(meta.rating)
+    if meta.audienceRating <> invalid then audienceRating = safeToStr(meta.audienceRating)
+    rating = audienceRating
+    if rating = "" then rating = criticRating
+    ratingImage = safeToStr(meta.ratingImage)
+    audienceRatingImage = safeToStr(meta.audienceRatingImage)
+
+    genres = metaGenreLabels(meta)
+    primaryExtraKey = safeToStr(meta.primaryExtraKey)
 
     contentRating = safeToStr(meta.contentRating)
 
@@ -716,8 +729,15 @@ function metadataToItem(cfg as Object, meta as Object) as Object
         title: title,
         shortTitle: rawTitle,
         description: description,
+        tagline: tagline,
         year: year,
         rating: rating,
+        criticRating: criticRating,
+        audienceRating: audienceRating,
+        ratingImage: ratingImage,
+        audienceRatingImage: audienceRatingImage,
+        genres: genres,
+        primaryExtraKey: primaryExtraKey,
         contentRating: contentRating,
         mediaType: mediaType,
         ratingKey: ratingKey,
@@ -743,6 +763,24 @@ function metadataToItem(cfg as Object, meta as Object) as Object
         parentRatingKey: parentRatingKey,
         grandparentTitle: grandparentTitle
     }
+end function
+
+function metaGenreLabels(meta as Object) as Object
+    labels = []
+    if meta = invalid or meta.Genre = invalid then return labels
+    list = meta.Genre
+    if GetInterface(list, "ifArray") = invalid then list = [list]
+    for each g in list
+        tag = ""
+        if GetInterface(g, "ifAssociativeArray") <> invalid then
+            tag = safeToStr(g.tag)
+        else
+            tag = safeToStr(g)
+        end if
+        if tag <> "" then labels.push(tag)
+        if labels.count() >= 3 then exit for
+    end for
+    return labels
 end function
 
 function preferShowPosters(items as Object) as Object
@@ -822,37 +860,134 @@ function appendRowNodes(root as Object, title as String, items as Object) as Boo
         child.hdPosterUrl = item.hdPosterUrl
         ' Native ContentNode field — used by some SceneGraph widgets
         child.hdBackgroundImageUrl = item.hdBackdropUrl
-        isDiscover = false
-        if item.DoesExist("isDiscover") and item.isDiscover = true then isDiscover = true
-        child.addFields({
-            year: item.year,
-            rating: item.rating,
-            contentRating: item.contentRating,
-            mediaType: item.mediaType,
-            ratingKey: item.ratingKey,
-            key: item.key,
-            duration: item.duration,
-            viewOffset: item.viewOffset,
-            watched: watchedFlag(item),
-            unwatchedCount: unwatchedTotal(item),
-            viewedLeafCount: viewedLeaves(item),
-            leafCount: item.leafCount,
-            childCount: item.childCount,
-            grandparentRatingKey: item.grandparentRatingKey,
-            parentRatingKey: item.parentRatingKey,
-            grandparentTitle: item.grandparentTitle,
-            index: item.index,
-            shortTitle: item.shortTitle,
-            parentIndex: item.parentIndex,
-            isDiscover: isDiscover,
-            hdShowPosterUrl: item.hdShowPosterUrl,
-            ' Custom field — must be in addFields or RowList drops it
-            hdBackdropUrl: item.hdBackdropUrl,
-            showDescription: item.showDescription
-        })
+        addHomeItemFields(child, item)
     end for
     return true
 end function
+
+sub addHomeItemFields(child as Object, item as Object)
+    isDiscover = false
+    if item.DoesExist("isDiscover") and item.isDiscover = true then isDiscover = true
+    isLiveContinue = false
+    if item.DoesExist("isLiveContinue") and item.isLiveContinue = true then isLiveContinue = true
+    child.addFields({
+        year: item.year,
+        rating: item.rating,
+        contentRating: item.contentRating,
+        mediaType: item.mediaType,
+        ratingKey: item.ratingKey,
+        key: item.key,
+        duration: item.duration,
+        viewOffset: item.viewOffset,
+        watched: watchedFlag(item),
+        unwatchedCount: unwatchedTotal(item),
+        viewedLeafCount: viewedLeaves(item),
+        leafCount: item.leafCount,
+        childCount: item.childCount,
+        grandparentRatingKey: item.grandparentRatingKey,
+        parentRatingKey: item.parentRatingKey,
+        grandparentTitle: item.grandparentTitle,
+        index: item.index,
+        shortTitle: item.shortTitle,
+        parentIndex: item.parentIndex,
+        isDiscover: isDiscover,
+        hdShowPosterUrl: item.hdShowPosterUrl,
+        ' Custom field — must be in addFields or RowList drops it
+        hdBackdropUrl: item.hdBackdropUrl,
+        showDescription: item.showDescription,
+        isLiveContinue: isLiveContinue,
+        source: safeToStr(item.source),
+        channelId: safeToStr(item.channelId),
+        tuneAlt: safeToStr(item.tuneAlt),
+        dvrId: safeToStr(item.dvrId),
+        epgId: safeToStr(item.epgId),
+        feedId: safeToStr(item.feedId),
+        channelName: safeToStr(item.channelName),
+        streamUrl: safeToStr(item.streamUrl),
+        streamFormat: safeToStr(item.streamFormat),
+        beginsAt: intOrZero(item.beginsAt),
+        endsAt: intOrZero(item.endsAt),
+        guid: safeToStr(item.guid),
+        showGuid: safeToStr(item.showGuid)
+    })
+end sub
+
+function prependLiveContinueWatching(cfg as Object, items as Object) as Object
+    if items = invalid then items = []
+    profileId = ""
+    if cfg <> invalid and cfg.profileId <> invalid then profileId = safeToStr(cfg.profileId)
+    entry = LoadLiveContinueWatch(profileId)
+    liveItem = LiveContinueToHomeItem(entry)
+    if liveItem = invalid then return items
+
+    liveItem = ensureLiveContinuePoster(cfg, liveItem, entry)
+
+    out = [liveItem]
+    for each item in items
+        if item <> invalid then out.push(item)
+    end for
+    return out
+end function
+
+' Continue Watching uses portrait posters. Live EPG usually only has landscape
+' art (fine for the hero, empty-looking on a poster tile), so pull a TMDB
+' poster when we can and persist it for the next Home refresh.
+function ensureLiveContinuePoster(cfg as Object, item as Object, entry as Object) as Object
+    if item = invalid then return item
+    poster = safeToStr(item.hdPosterUrl)
+    backdrop = safeToStr(item.hdBackdropUrl)
+    needsPoster = (poster = "" or poster = backdrop or isWideLiveArtUrl(poster))
+    if not needsPoster then return item
+
+    title = safeToStr(item.shortTitle)
+    if title = "" then title = safeToStr(item.title)
+    sep = Instr(1, title, "·")
+    if sep > 1 then title = Left(title, sep - 1).Trim()
+    title = title.Trim()
+    if title = "" then
+        if poster = "" and backdrop <> "" then item.hdPosterUrl = backdrop
+        return item
+    end if
+
+    tmdbKey = ""
+    if cfg <> invalid and cfg.tmdbApiKey <> invalid then tmdbKey = safeToStr(cfg.tmdbApiKey)
+    if tmdbKey <> "" and tmdbKey <> "REPLACE_WITH_TMDB_API_KEY" then
+        kind = "tv"
+        if LCase(safeToStr(item.programKind)) = "movie" then kind = "movie"
+        tmdb = fetchTmdbTitle(tmdbKey, title, safeToStr(item.year), kind)
+        if tmdb <> invalid and safeToStr(tmdb.hdPosterUrl) <> "" then
+            item.hdPosterUrl = safeToStr(tmdb.hdPosterUrl)
+            if safeToStr(item.hdBackdropUrl) = "" and safeToStr(tmdb.hdBackdropUrl) <> "" then
+                item.hdBackdropUrl = safeToStr(tmdb.hdBackdropUrl)
+            end if
+            persistLiveContinuePoster(entry, item)
+            return item
+        end if
+    end if
+
+    if safeToStr(item.hdPosterUrl) = "" and backdrop <> "" then item.hdPosterUrl = backdrop
+    return item
+end function
+
+function isWideLiveArtUrl(url as String) as Boolean
+    if url = "" then return false
+    ' EPG stills go through width-only Plex transcodes or TMDB backdrops
+    if Instr(1, url, "/photo/:/transcode?width=") > 0 and Instr(1, url, "height=") = 0 then return true
+    if Instr(1, url, "image.tmdb.org/t/p/w1280") > 0 then return true
+    if Instr(1, url, "image.tmdb.org/t/p/w780") > 0 then return true
+    return false
+end function
+
+sub persistLiveContinuePoster(entry as Object, item as Object)
+    if entry = invalid or item = invalid then return
+    poster = safeToStr(item.hdPosterUrl)
+    if poster = "" then return
+    entry.hdPosterUrl = poster
+    if safeToStr(item.hdBackdropUrl) <> "" then entry.hdBackdropUrl = safeToStr(item.hdBackdropUrl)
+    profileId = ""
+    if entry.profileId <> invalid then profileId = safeToStr(entry.profileId)
+    writeLiveContinueJson(liveContinueRegistryKey(profileId), FormatJson(entry))
+end sub
 
 function appendRow(root as Object, title as String, items as Object) as Boolean
     ' Home shelves: enforce 15–30 + loop duplicates
@@ -891,23 +1026,33 @@ function buildHome(cfg as Object) as Object
     seenTitles = {}
     movieSectionKeys = []
     showSectionKeys = []
+    kidsMode = ProfileIsKids(cfg)
 
-    ' Continue Watching / On Deck — exempt from 15-min (always useful)
-    onDeck = plexGet(cfg, "/library/onDeck")
-    if onDeck.ok = true then
-        addUniqueRowLoose(root, seenTitles, "Continue Watching", enrichEpisodeShowDescriptions(cfg, preferShowPosters(collectMetadata(cfg, onDeck.json))))
-    end if
+    onDeck = { ok: false }
+    recent = { ok: false }
+    if not kidsMode then
+        ' Continue Watching / On Deck — exempt from 15-min (always useful)
+        onDeckItems = []
+        onDeck = plexGet(cfg, "/library/onDeck")
+        if onDeck.ok = true then
+            onDeckItems = enrichEpisodeShowDescriptions(cfg, preferShowPosters(collectMetadata(cfg, onDeck.json)))
+        end if
+        onDeckItems = prependLiveContinueWatching(cfg, onDeckItems)
+        if onDeckItems.count() > 0 then
+            addUniqueRowLoose(root, seenTitles, "Continue Watching", onDeckItems)
+        end if
 
-    ' Recently Added (global)
-    recent = plexGet(cfg, "/library/recentlyAdded")
-    if recent.ok = true then
-        addUniqueRow(root, seenTitles, "Recently Added", collectMetadata(cfg, recent.json))
-    end if
+        ' Recently Added (global)
+        recent = plexGet(cfg, "/library/recentlyAdded")
+        if recent.ok = true then
+            addUniqueRow(root, seenTitles, "Recently Added", collectMetadata(cfg, recent.json))
+        end if
 
-    ' Home hubs
-    hubs = plexGet(cfg, "/hubs/home?count=" + safeToStr(cfg.rowSize))
-    if hubs.ok = true and hubs.json <> invalid and hubs.json.MediaContainer <> invalid then
-        appendHubRows(root, seenTitles, hubs.json.MediaContainer.Hub, cfg)
+        ' Home hubs
+        hubs = plexGet(cfg, "/hubs/home?count=" + safeToStr(cfg.rowSize))
+        if hubs.ok = true and hubs.json <> invalid and hubs.json.MediaContainer <> invalid then
+            appendHubRows(root, seenTitles, hubs.json.MediaContainer.Hub, cfg)
+        end if
     end if
 
     ' Per-library hubs + collect section keys for genre shelves
@@ -921,20 +1066,24 @@ function buildHome(cfg as Object) as Object
                 if sectionType = "movie" or sectionType = "show" then
                     key = safeToStr(dir.key)
                     title = safeToStr(dir.title)
-                    if sectionType = "movie" then movieSectionKeys.push(key)
-                    if sectionType = "show" then showSectionKeys.push(key)
+                    if not ProfileAllowsLibraryTitle(cfg, title) then
+                        ' Kids profiles only see matching libraries
+                    else
+                        if sectionType = "movie" then movieSectionKeys.push(key)
+                        if sectionType = "show" then showSectionKeys.push(key)
 
-                    sectionHubs = plexGet(cfg, "/hubs/sections/" + key + "?count=" + safeToStr(cfg.rowSize))
-                    if sectionHubs.ok = true and sectionHubs.json <> invalid and sectionHubs.json.MediaContainer <> invalid then
-                        appendHubRows(root, seenTitles, sectionHubs.json.MediaContainer.Hub, cfg)
-                    end if
+                        sectionHubs = plexGet(cfg, "/hubs/sections/" + key + "?count=" + safeToStr(cfg.rowSize))
+                        if sectionHubs.ok = true and sectionHubs.json <> invalid and sectionHubs.json.MediaContainer <> invalid then
+                            appendHubRows(root, seenTitles, sectionHubs.json.MediaContainer.Hub, cfg)
+                        end if
 
-                    allItems = plexGet(cfg, "/library/sections/" + key + "/all?sort=addedAt:desc")
-                    if allItems.ok = true then
-                        label = title
-                        if sectionType = "movie" then label = title + " · Movies"
-                        if sectionType = "show" then label = title + " · TV"
-                        addUniqueRow(root, seenTitles, label, collectMetadata(cfg, allItems.json))
+                        allItems = plexGet(cfg, "/library/sections/" + key + "/all?sort=addedAt:desc")
+                        if allItems.ok = true then
+                            label = title
+                            if sectionType = "movie" then label = title + " · Movies"
+                            if sectionType = "show" then label = title + " · TV"
+                            addUniqueRow(root, seenTitles, label, collectMetadata(cfg, allItems.json))
+                        end if
                     end if
                 end if
             end for
@@ -944,8 +1093,10 @@ function buildHome(cfg as Object) as Object
     ' Netflix-style genre shelves from local libraries
     appendGenreRows(root, seenTitles, cfg, movieSectionKeys, showSectionKeys)
 
-    ' Discover / trending (may include titles not in library)
-    appendDiscoverRows(root, seenTitles, cfg)
+    ' Discover / trending (may include titles not in library) — adults only
+    if ProfileAllowsDiscover(cfg) then
+        appendDiscoverRows(root, seenTitles, cfg)
+    end if
 
     if root.getChildCount() = 0 then
         err = "No rows loaded from Plex."
@@ -1110,6 +1261,9 @@ end function
 function buildHomeMore(cfg as Object, exclude as Object) as Object
     if cfg.token = invalid or cfg.token = "" or cfg.token = "REPLACE_WITH_YOUR_PLEX_TOKEN" then
         return { ok: false, error: "Set your Plex token in roku/source/PlexConfig.brs" }
+    end if
+    if not ProfileAllowsDiscover(cfg) then
+        return { ok: false, error: "Discover disabled for this profile" }
     end if
 
     seenTitles = {}
@@ -1594,33 +1748,7 @@ sub addUniqueRowLoose(root as Object, seenTitles as Object, title as String, ite
         child.description = item.description
         child.hdPosterUrl = item.hdPosterUrl
         child.hdBackgroundImageUrl = item.hdBackdropUrl
-        isDiscover = false
-        if item.DoesExist("isDiscover") and item.isDiscover = true then isDiscover = true
-        child.addFields({
-            year: item.year,
-            rating: item.rating,
-            contentRating: item.contentRating,
-            mediaType: item.mediaType,
-            ratingKey: item.ratingKey,
-            key: item.key,
-            duration: item.duration,
-            viewOffset: item.viewOffset,
-            watched: watchedFlag(item),
-            unwatchedCount: unwatchedTotal(item),
-            viewedLeafCount: viewedLeaves(item),
-            leafCount: item.leafCount,
-            childCount: item.childCount,
-            grandparentRatingKey: item.grandparentRatingKey,
-            parentRatingKey: item.parentRatingKey,
-            grandparentTitle: item.grandparentTitle,
-            index: item.index,
-            shortTitle: item.shortTitle,
-            parentIndex: item.parentIndex,
-            isDiscover: isDiscover,
-            hdShowPosterUrl: item.hdShowPosterUrl,
-            hdBackdropUrl: item.hdBackdropUrl,
-            showDescription: item.showDescription
-        })
+        addHomeItemFields(child, item)
     end for
     seenTitles[key] = true
 end sub
@@ -2051,9 +2179,12 @@ function fetchExtras(cfg as Object, item as Object) as Object
     similarItems = []
     onDeckKey = ""
     onDeckSeasonKey = ""
+    trailer = invalid
+    reviews = []
+    primaryExtraKey = ""
 
     ' One request covers the header refresh, the cast and next-up
-    details = plexGet(cfg, "/library/metadata/" + ratingKey + "?includeOnDeck=1")
+    details = plexGet(cfg, "/library/metadata/" + ratingKey + "?includeOnDeck=1&includeExtras=1&includeReviews=1")
     if details.ok = true and details.json <> invalid and details.json.MediaContainer <> invalid then
         meta = details.json.MediaContainer.Metadata
         if meta <> invalid then
@@ -2070,12 +2201,25 @@ function fetchExtras(cfg as Object, item as Object) as Object
                     onDeckSeasonKey = safeToStr(upNext.parentRatingKey)
                 end if
             end if
+            primaryExtraKey = safeToStr(meta.primaryExtraKey)
             castItems = rolesToCast(cfg, meta)
             ' Episodes usually only list guest stars, so borrow the series cast
             if castItems.count() = 0 and safeToStr(meta.grandparentRatingKey) <> "" then
                 castItems = fetchShowCast(cfg, safeToStr(meta.grandparentRatingKey))
             end if
+            reviews = parseMetaReviews(meta)
+            trailer = pickPrimaryTrailer(cfg, meta)
         end if
+    end if
+
+    ' Dedicated extras endpoint when includeExtras didn't embed a trailer
+    if trailer = invalid then
+        trailer = fetchTrailerExtra(cfg, ratingKey, primaryExtraKey)
+    end if
+
+    ' Reviews sometimes only exist on the dedicated endpoint
+    if reviews.count() = 0 then
+        reviews = fetchMetadataReviews(cfg, ratingKey)
     end if
 
     similar = plexGet(cfg, "/library/metadata/" + ratingKey + "/similar")
@@ -2114,12 +2258,129 @@ function fetchExtras(cfg as Object, item as Object) as Object
         cast: castItems,
         similar: similarItems,
         detail: detail,
+        trailer: trailer,
+        reviews: reviews,
         onDeckKey: onDeckKey,
         onDeckSeasonKey: onDeckSeasonKey,
         tmdbId: tmdbId,
         tvdbId: tvdbId,
         imdbId: imdbId
     }
+end function
+
+function pickPrimaryTrailer(cfg as Object, meta as Object) as Object
+    if meta = invalid then return invalid
+
+    ' Embedded Extras from includeExtras=1
+    extras = meta.Extras
+    if extras <> invalid then
+        list = extras.Metadata
+        if list = invalid then list = extras
+        if GetInterface(list, "ifArray") = invalid then list = [list]
+        for each extra in list
+            mapped = metadataToItem(cfg, extra)
+            if mapped <> invalid and isTrailerItem(mapped, extra) then return mapped
+        end for
+    end if
+    return invalid
+end function
+
+function fetchTrailerExtra(cfg as Object, ratingKey as String, primaryExtraKey as String) as Object
+    if primaryExtraKey <> "" then
+        ' primaryExtraKey is a metadata path like /library/metadata/123
+        path = primaryExtraKey
+        if Left(path, 1) <> "/" then path = "/library/metadata/" + path
+        result = plexGet(cfg, path)
+        if result.ok = true then
+            mapped = collectMetadata(cfg, result.json)
+            if mapped.count() > 0 then return mapped[0]
+        end if
+    end if
+
+    if ratingKey = "" then return invalid
+    result = plexGet(cfg, "/library/metadata/" + ratingKey + "/extras")
+    if result.ok <> true then return invalid
+    mapped = collectMetadata(cfg, result.json)
+    for each extra in mapped
+        if isTrailerItem(extra, invalid) then return extra
+    end for
+    if mapped.count() > 0 then return mapped[0]
+    return invalid
+end function
+
+function isTrailerItem(item as Object, raw as Object) as Boolean
+    if item = invalid then return false
+    mt = LCase(safeToStr(item.mediaType))
+    if mt = "trailer" or mt = "clip" then
+        ' Prefer real trailers over other clip subtypes when we can tell
+        if raw <> invalid then
+            subtype = LCase(safeToStr(raw.subtype))
+            if subtype = "" then subtype = LCase(safeToStr(raw.extraType))
+            if subtype = "" then return true
+            return subtype = "trailer" or subtype = "primaryTrailer"
+        end if
+        return true
+    end if
+    if raw <> invalid then
+        subtype = LCase(safeToStr(raw.subtype))
+        if subtype = "" then subtype = LCase(safeToStr(raw.extraType))
+        if subtype = "trailer" or subtype = "primaryTrailer" then return true
+    end if
+    return false
+end function
+
+function parseMetaReviews(meta as Object) as Object
+    reviews = []
+    if meta = invalid or meta.Review = invalid then return reviews
+    list = meta.Review
+    if GetInterface(list, "ifArray") = invalid then list = [list]
+    for each rev in list
+        if GetInterface(rev, "ifAssociativeArray") <> invalid then
+            text = safeToStr(rev.text)
+            if text = "" then text = safeToStr(rev.tag)
+            if text <> "" then
+                source = safeToStr(rev.source)
+                if source = "" then source = safeToStr(rev.image)
+                ' image is often "rottentomatoes://image.review.fresh" — trim to a label
+                if Instr(1, source, "://") > 0 then
+                    parts = source.Tokenize("/")
+                    if parts.count() > 0 then source = parts[parts.count() - 1]
+                    source = source.Replace("image.review.", "")
+                    source = source.Replace("image.rating.", "")
+                    source = source.Replace("-", " ")
+                end if
+                author = safeToStr(rev.tag)
+                reviews.push({
+                    text: text,
+                    source: source,
+                    author: author
+                })
+                if reviews.count() >= 3 then exit for
+            end if
+        end if
+    end for
+    return reviews
+end function
+
+function fetchMetadataReviews(cfg as Object, ratingKey as String) as Object
+    if ratingKey = "" then return []
+    result = plexGet(cfg, "/library/metadata/" + ratingKey + "/reviews")
+    if result.ok <> true or result.json = invalid then return []
+    container = result.json.MediaContainer
+    if container = invalid then return []
+    ' Reviews endpoint may nest under Review or Metadata
+    if container.Review <> invalid then
+        return parseMetaReviews({ Review: container.Review })
+    end if
+    if container.Metadata <> invalid then
+        meta = container.Metadata
+        if GetInterface(meta, "ifArray") <> invalid then
+            if meta.count() = 0 then return []
+            meta = meta[0]
+        end if
+        return parseMetaReviews(meta)
+    end if
+    return []
 end function
 
 function fetchUnavailableDetail(cfg as Object, item as Object) as Object
@@ -2222,8 +2483,40 @@ function fetchUnavailableDetail(cfg as Object, item as Object) as Object
     }
 end function
 
+' Live TV (and other plays without pre-baked cast) — look up overview/art/cast
+' while the stream is already starting. Uses the same TMDB helpers as Discover.
+function enrichItemFromTmdb(cfg as Object, item as Object) as Object
+    if item = invalid then return { ok: false, error: "No item" }
+    tmdbKey = ""
+    if cfg <> invalid and cfg.tmdbApiKey <> invalid then tmdbKey = safeToStr(cfg.tmdbApiKey)
+    if tmdbKey = "" or tmdbKey = "REPLACE_WITH_TMDB_API_KEY" then
+        return { ok: false, skipped: true, error: "TMDB not configured (tmdbApiKey in PlexConfig.brs)" }
+    end if
+
+    title = safeToStr(item.shortTitle)
+    if title = "" then title = safeToStr(item.title)
+    ' "Show · Channel" → search the show only
+    sep = Instr(1, title, "·")
+    if sep > 1 then title = Left(title, sep - 1).Trim()
+    title = title.Trim()
+    if title = "" then return { ok: false, error: "No title to enrich" }
+
+    year = safeToStr(item.year)
+    kindHint = LCase(safeToStr(item.programKind))
+    mediaType = "tv"
+    if kindHint = "movie" then
+        mediaType = "movie"
+    else if kindHint = "episode" or kindHint = "show" or kindHint = "series" or kindHint = "tv" then
+        mediaType = "tv"
+    end if
+
+    tmdb = fetchTmdbTitle(tmdbKey, title, year, mediaType)
+    if tmdb = invalid then return { ok: false, error: "No TMDB match for " + title }
+    return { ok: true, tmdb: tmdb }
+end function
+
 function fetchTmdbTitle(apiKey as String, title as String, year as String, mediaType as String) as Object
-    isShow = (mediaType = "show" or mediaType = "tv" or mediaType = "series")
+    isShow = (mediaType = "show" or mediaType = "tv" or mediaType = "series" or mediaType = "episode")
     kind = "movie"
     if isShow then kind = "tv"
 
@@ -2337,6 +2630,7 @@ function fetchTmdbTitle(apiKey as String, title as String, year as String, media
                         ratingKey: "",
                         key: "",
                         personId: "",
+                        tmdbPersonId: safeToStr(c.id),
                         hdPosterUrl: thumb,
                         hdBackdropUrl: "",
                         duration: 0,
@@ -2507,7 +2801,8 @@ function fetchPinnedSources(cfg as Object) as Object
 
     for each dir in dirs
         sectionType = safeToStr(dir.type)
-        if sectionType = "movie" or sectionType = "show" then
+        ' movie/show plus extras like YouTube / clips / artist video libs
+        if sectionType = "movie" or sectionType = "show" or sectionType = "artist" or sectionType = "photo" or sectionType = "clip" then
             key = safeToStr(dir.key)
             sectionId = sectionIdFromKey(key)
             if sectionId <> "" then
@@ -2519,6 +2814,30 @@ function fetchPinnedSources(cfg as Object) as Object
                     title: safeToStr(dir.title),
                     mediaType: "library",
                     sectionType: sectionType,
+                    sectionId: sectionId,
+                    key: key,
+                    ratingKey: sectionId,
+                    description: safeToStr(dir.summary),
+                    hdPosterUrl: imageUrl(cfg, thumb, 360, 540),
+                    hdBackdropUrl: imageUrl(cfg, art, 1920, 1080),
+                    childCount: dir.count
+                })
+            end if
+        else if Instr(1, LCase(safeToStr(dir.title)), "youtube") > 0 then
+            ' Some YouTube agents use odd section types — still pin them
+            key = safeToStr(dir.key)
+            sectionId = sectionIdFromKey(key)
+            if sectionId <> "" then
+                thumb = ""
+                if dir.thumb <> invalid then thumb = safeToStr(dir.thumb)
+                art = ""
+                if dir.art <> invalid then art = safeToStr(dir.art)
+                st = sectionType
+                if st = "" then st = "movie"
+                items.push({
+                    title: safeToStr(dir.title),
+                    mediaType: "library",
+                    sectionType: st,
                     sectionId: sectionId,
                     key: key,
                     ratingKey: sectionId,
@@ -2935,7 +3254,12 @@ function fetchPersonDetail(cfg as Object, item as Object) as Object
     tmdbKey = ""
     if cfg.tmdbApiKey <> invalid then tmdbKey = safeToStr(cfg.tmdbApiKey)
     if tmdbKey <> "" and tmdbKey <> "REPLACE_WITH_TMDB_API_KEY" and name <> "" then
-        tmdb = fetchTmdbPerson(tmdbKey, name)
+        tmdbPersonId = safeToStr(item.tmdbPersonId)
+        if tmdbPersonId <> "" then
+            tmdb = fetchTmdbPersonById(tmdbKey, tmdbPersonId)
+        else
+            tmdb = fetchTmdbPerson(tmdbKey, name)
+        end if
         if tmdb <> invalid then
             if tmdb.bio <> "" then bio = tmdb.bio
             if tmdb.poster <> "" then poster = tmdb.poster
@@ -3000,6 +3324,11 @@ function fetchTmdbPerson(apiKey as String, name as String) as Object
     person = search.results[0]
     personId = safeToStr(person.id)
     if personId = "" then return invalid
+    return fetchTmdbPersonById(apiKey, personId, person)
+end function
+
+function fetchTmdbPersonById(apiKey as String, personId as String, hint = invalid as Dynamic) as Object
+    if personId = "" then return invalid
 
     detailUrl = "https://api.themoviedb.org/3/person/" + personId + "?api_key=" + apiKey
     detail = httpGetJson(detailUrl)
@@ -3032,7 +3361,8 @@ function fetchTmdbPerson(apiKey as String, name as String) as Object
         end if
         metaLine = joinBits(bits, "  ·  ")
     end if
-    if person.profile_path <> invalid and poster = "" then
+    person = hint
+    if person <> invalid and person.profile_path <> invalid and poster = "" then
         poster = "https://image.tmdb.org/t/p/w500" + safeToStr(person.profile_path)
     end if
 
@@ -4813,6 +5143,97 @@ function cancelRecording(cfg as Object, item as Object) as Object
     return plexCommand(cfg, "/media/subscriptions/" + requestEncode(id), "DELETE")
 end function
 
+function scoresBase(cfg as Object) as String
+    if cfg = invalid or cfg.scoresUrl = invalid then return ""
+    base = cfg.scoresUrl.Trim()
+    while Right(base, 1) = "/"
+        base = Left(base, Len(base) - 1)
+    end while
+    if base <> "" and Instr(1, base, "://") = 0 then base = "http://" + base
+    return base
+end function
+
+' Batch-resolve Live Sports titles against the home-server scores sidecar.
+' Failures are soft: SportsScreen leaves the guide unchanged when ok <> true.
+function resolveSportsScores(cfg as Object, payload as Object) as Object
+    base = scoresBase(cfg)
+    if base = "" then return { ok: false, skipped: true, error: "" }
+
+    items = []
+    if payload <> invalid and payload.items <> invalid then items = payload.items
+    if items = invalid or GetInterface(items, "ifArray") = invalid then items = []
+    if items.count() = 0 then return { ok: true, results: [], matched: 0, total: 0 }
+
+    bodyItems = []
+    for each entry in items
+        if GetInterface(entry, "ifAssociativeArray") <> invalid then
+            title = firstString(entry, ["title", "name"])
+            league = firstString(entry, ["league", "category", "sport"])
+            id = firstString(entry, ["id", "scoreKey", "key"])
+            if title <> "" then
+                bodyItems.push({ id: id, title: title, league: league })
+            end if
+        end if
+    end for
+    if bodyItems.count() = 0 then return { ok: true, results: [], matched: 0, total: 0 }
+
+    request = CreateObject("roUrlTransfer")
+    port = CreateObject("roMessagePort")
+    request.SetMessagePort(port)
+    request.SetUrl(base + "/v1/resolve")
+    request.SetRequest("POST")
+    request.RetainBodyOnError(true)
+    request.EnableEncodings(true)
+    request.AddHeader("Accept", "application/json")
+    request.AddHeader("Content-Type", "application/json")
+    if cfg.scoresToken <> invalid and cfg.scoresToken <> "" then
+        request.AddHeader("X-Scores-Token", cfg.scoresToken)
+        request.AddHeader("Authorization", "Bearer " + cfg.scoresToken)
+    end if
+    if Left(base, 8) = "https://" then
+        request.SetCertificatesFile("common:/certs/ca-bundle.crt")
+        request.InitClientCertificates()
+    end if
+
+    body = FormatJson({ items: bodyItems })
+    if not request.AsyncPostFromString(body) then
+        return { ok: false, error: "Could not reach scores server" }
+    end if
+
+    while true
+        msg = wait(12000, port)
+        if msg = invalid then
+            request.AsyncCancel()
+            return { ok: false, error: "Scores server timed out" }
+        end if
+        if type(msg) = "roUrlEvent" then
+            code = msg.GetResponseCode()
+            text = msg.GetString()
+            if text = invalid then text = ""
+            text = text.Trim()
+            parsed = invalid
+            if Left(text, 1) = "{" then parsed = ParseJson(text)
+            if code < 200 or code >= 300 then
+                err = "Scores HTTP " + safeToStr(code)
+                if parsed <> invalid and parsed.error <> invalid then err = safeToStr(parsed.error)
+                return { ok: false, error: err, code: code }
+            end if
+            if parsed = invalid then return { ok: false, error: "Scores response was not JSON" }
+            results = parsed.results
+            if results = invalid then results = []
+            matched = 0
+            if parsed.matched <> invalid then matched = parsed.matched
+            return {
+                ok: true,
+                results: results,
+                matched: matched,
+                total: results.count(),
+                updated: safeToStr(parsed.updated)
+            }
+        end if
+    end while
+end function
+
 function fetchSportsFeed(cfg as Object) as Object
     feedUrl = ""
     if cfg.sportsFeedUrl <> invalid then feedUrl = cfg.sportsFeedUrl
@@ -4854,6 +5275,87 @@ function fetchSportsFeed(cfg as Object) as Object
             return { ok: true, rows: normalizeSportsFeed(parsed) }
         end if
     end while
+end function
+
+' Sidecar listings for Cable TV — separate from the 5‑minute sports feed
+function fetchCableEpg(cfg as Object) as Object
+    epgUrl = ""
+    if cfg.cableEpgUrl <> invalid then epgUrl = cfg.cableEpgUrl
+    if epgUrl = "" then return { ok: true, byId: {}, skipped: true }
+
+    request = CreateObject("roUrlTransfer")
+    port = CreateObject("roMessagePort")
+    request.SetMessagePort(port)
+    request.SetUrl(epgUrl)
+    request.SetRequest("GET")
+    request.EnableEncodings(true)
+    request.RetainBodyOnError(true)
+    request.AddHeader("Accept", "application/json")
+    if Left(epgUrl, 8) = "https://" then
+        request.SetCertificatesFile("common:/certs/ca-bundle.crt")
+        request.InitClientCertificates()
+    end if
+
+    if not request.AsyncGetToString() then
+        return { ok: false, error: "Failed to start cable EPG request" }
+    end if
+
+    while true
+        msg = wait(25000, port)
+        if msg = invalid then
+            request.AsyncCancel()
+            return { ok: false, error: "Timed out loading cable EPG" }
+        end if
+        if type(msg) = "roUrlEvent" then
+            code = msg.GetResponseCode()
+            body = msg.GetString()
+            if code < 200 or code >= 300 then
+                return { ok: false, error: "Cable EPG HTTP " + safeToStr(code) }
+            end if
+            parsed = ParseJson(body)
+            if parsed = invalid then
+                return { ok: false, error: "Could not parse cable EPG JSON" }
+            end if
+            return { ok: true, byId: normalizeCableEpg(parsed), updated: safeToStr(parsed.updated) }
+        end if
+    end while
+end function
+
+function normalizeCableEpg(parsed as Object) as Object
+    byId = {}
+    if parsed = invalid then return byId
+    channels = invalid
+    if GetInterface(parsed, "ifAssociativeArray") <> invalid then
+        if parsed.channels <> invalid then channels = parsed.channels
+    end if
+    if channels = invalid then return byId
+
+    ' Shape A: { "timst-abc": { programs: [...] }, ... }
+    if GetInterface(channels, "ifAssociativeArray") <> invalid then
+        for each feedId in channels
+            entry = channels[feedId]
+            programs = []
+            if GetInterface(entry, "ifAssociativeArray") <> invalid then
+                programs = normalizeFeedPrograms(entry.programs)
+            else if GetInterface(entry, "ifArray") <> invalid then
+                programs = normalizeFeedPrograms(entry)
+            end if
+            if programs.count() > 0 then byId[feedId] = programs
+        end for
+        return byId
+    end if
+
+    ' Shape B: [ { id, programs }, ... ]
+    if GetInterface(channels, "ifArray") <> invalid then
+        for each entry in channels
+            if GetInterface(entry, "ifAssociativeArray") <> invalid then
+                feedId = firstString(entry, ["id", "channelId"])
+                programs = normalizeFeedPrograms(entry.programs)
+                if feedId <> "" and programs.count() > 0 then byId[feedId] = programs
+            end if
+        end for
+    end if
+    return byId
 end function
 
 function normalizeSportsFeed(parsed as Object) as Object
@@ -4925,6 +5427,7 @@ function mapSportsEntries(list as Object) as Object
                 primaryFormat = ""
                 if streams[0].streamFormat <> invalid then primaryFormat = streams[0].streamFormat
                 items.push({
+                    id: firstString(entry, ["id", "channelId"]),
                     title: title,
                     description: league,
                     mediaType: "sport",
@@ -4940,12 +5443,109 @@ function mapSportsEntries(list as Object) as Object
                     viewOffset: 0,
                     year: "",
                     rating: "",
-                    contentRating: ""
+                    contentRating: "",
+                    ' Cable TV EPG blocks from enrich_cable_epg.py (optional)
+                    programs: normalizeFeedPrograms(entry.programs)
                 })
             end if
         end if
     end for
     return items
+end function
+
+' Home-server EPG enrichment attaches programs[] with ISO or epoch times
+function normalizeFeedPrograms(raw as Dynamic) as Object
+    out = []
+    if raw = invalid or GetInterface(raw, "ifArray") = invalid then return out
+    for each p in raw
+        if GetInterface(p, "ifAssociativeArray") <> invalid then
+            beginsAt = feedProgramSeconds(p, ["beginsAt", "start", "startTime"])
+            endsAt = feedProgramSeconds(p, ["endsAt", "end", "endTime", "stop"])
+            title = firstString(p, ["title", "name"])
+            if title = "" then title = "Program"
+            if beginsAt > 0 and endsAt > beginsAt then
+                art = firstString(p, ["art", "backdrop", "poster", "icon", "image", "thumbnail"])
+                out.push({
+                    title: title,
+                    subtitle: firstString(p, ["subtitle", "subTitle", "episodeTitle"]),
+                    summary: firstString(p, ["description", "summary", "desc"]),
+                    beginsAt: beginsAt,
+                    endsAt: endsAt,
+                    episodeLabel: firstString(p, ["episodeLabel", "episode", "episodeNum"]),
+                    contentRating: firstString(p, ["contentRating"]),
+                    rating: firstString(p, ["rating", "voteAverage"]),
+                    year: firstString(p, ["year"]),
+                    art: art,
+                    poster: firstString(p, ["poster"]),
+                    backdrop: firstString(p, ["backdrop"]),
+                    tmdbId: firstString(p, ["tmdbId"]),
+                    tmdbType: firstString(p, ["tmdbType"]),
+                    cast: normalizeFeedCast(p.cast),
+                    placeholder: false
+                })
+            end if
+        end if
+    end for
+    return out
+end function
+
+function normalizeFeedCast(raw as Dynamic) as Object
+    out = []
+    if raw = invalid or GetInterface(raw, "ifArray") = invalid then return out
+    maxN = raw.count()
+    if maxN > 8 then maxN = 8
+    for i = 0 to maxN - 1
+        c = raw[i]
+        if GetInterface(c, "ifAssociativeArray") <> invalid then
+            name = firstString(c, ["title", "shortTitle", "name"])
+            if name <> "" then
+                out.push({
+                    title: name,
+                    shortTitle: name,
+                    description: firstString(c, ["description", "character", "role"]),
+                    mediaType: "actor",
+                    ratingKey: "",
+                    key: "",
+                    personId: "",
+                    hdPosterUrl: firstString(c, ["hdPosterUrl", "poster", "image", "thumb"]),
+                    hdBackdropUrl: "",
+                    year: "",
+                    rating: "",
+                    contentRating: ""
+                })
+            end if
+        end if
+    end for
+    return out
+end function
+
+function feedProgramSeconds(p as Object, keys as Object) as Integer
+    for each keyName in keys
+        if p.DoesExist(keyName) then
+            value = p[keyName]
+            if value = invalid then
+                ' skip
+            else if GetInterface(value, "ifInt") <> invalid or GetInterface(value, "ifLongInt") <> invalid then
+                n = value
+                ' Milliseconds mistaken for seconds
+                if n > 100000000000 then n = Int(n / 1000)
+                if n > 0 then return n
+            else
+                text = safeToStr(value).Trim()
+                if text = "" then
+                    ' skip
+                else if Len(text) >= 10 and Left(text, 1) <> "0" and Val(text) > 1000000000 then
+                    return Int(Val(text))
+                else
+                    dt = CreateObject("roDateTime")
+                    dt.FromISO8601String(text)
+                    secs = dt.AsSeconds()
+                    if secs > 0 then return secs
+                end if
+            end if
+        end if
+    end for
+    return 0
 end function
 
 function extractSportsStreams(entry as Object) as Object

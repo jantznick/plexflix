@@ -42,7 +42,22 @@ POSTER_W = 280
 POSTER_H = 420
 
 
+def _strip_inline_comment(val: str) -> str:
+    in_single = False
+    in_double = False
+    for i, ch in enumerate(val):
+        if ch == "'" and not in_double:
+            in_single = not in_single
+        elif ch == '"' and not in_single:
+            in_double = not in_double
+        elif ch == "#" and not in_single and not in_double:
+            if i == 0 or val[i - 1].isspace():
+                return val[:i]
+    return val
+
+
 def load_env_file(path: Path) -> None:
+    """Load KEY=VALUE pairs. --env-file wins over the shell; strips inline # comments."""
     if not path.is_file():
         raise SystemExit(f"env file not found: {path}")
     for raw in path.read_text(encoding="utf-8").splitlines():
@@ -51,8 +66,8 @@ def load_env_file(path: Path) -> None:
             continue
         key, val = line.split("=", 1)
         key = key.strip()
-        val = val.strip().strip('"').strip("'")
-        if key and key not in os.environ:
+        val = _strip_inline_comment(val).strip().strip('"').strip("'").strip("\r")
+        if key:
             os.environ[key] = val
 
 
