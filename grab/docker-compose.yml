@@ -5,9 +5,10 @@ services:
       dockerfile: grab/Dockerfile
     container_name: plexflix-grab
     restart: unless-stopped
-    ports:
-      # Non-arr / non-8080 port so it stays clear of the rest of the stack
-      - "8096:8096"
+    # Host networking avoids creating a new docker bridge network (busy
+    # homelabs often hit "all predefined address pools have been fully
+    # subnetted"). Matches our LAN-IP config for NZBGet/Plex/Roku.
+    network_mode: host
     environment:
       PORT: "8096"
       # Optional shared secret; same value as grabToken in PlexConfig.brs later
@@ -17,8 +18,7 @@ services:
       NZBFINDER_URL: "https://nzbfinder.ws"
       NZBFINDER_API_KEY: ""
 
-      # Everything else on the home server shares one LAN IP. Use that IP from
-      # inside this container too (not localhost, not docker DNS names).
+      # Host LAN IP for sibling services (or http://127.0.0.1:PORT with host net)
       # Example: http://192.168.1.50:6789
       NZBGET_URL: "http://192.168.1.50:6789"
       # Same ControlUsername / ControlPassword as the NZBGet web GUI login
