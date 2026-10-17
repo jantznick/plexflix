@@ -1,5 +1,7 @@
 import express from 'express';
+import fs from 'fs';
 import http from 'http';
+import path from 'path';
 import {
     decodeProxyPayload,
     encodeProxyPayload,
@@ -12,13 +14,18 @@ import {
     getCachedStream,
     getResolvedStream,
 } from './stream-session.js';
+import {
+    ensureRemuxSession,
+    getRemuxRoot,
+    touchRemuxSession,
+} from './audio-remux.js';
 
 const app = express();
 const port = process.env.PORT || 8787;
 const proxyHost = process.env.PROXY_HOST || '192.168.1.50:8787';
 const debug = process.env.PROXY_DEBUG === 'true';
 
-const PROXY_VERSION = 'embed-first-v23-master-rebase';
+const PROXY_VERSION = 'embed-first-v24-aac-remux';
 
 /** Path after the quality root (/1/high/mono.m3u8 → high/mono.m3u8). */
 function qualityPathSuffix(pathname) {
@@ -58,17 +65,6 @@ function masterVariantSuffixes(masterBody) {
     for (const line of String(masterBody || '').split('\n')) {
         const trimmed = line.trim();
         if (!trimmed || trimmed.startsWith('#')) {
-            continue;
-        }
-        if (/^https?:\/\//i.test(trimmed)) {
-            try {
-                const suffix = qualityPathSuffix(new URL(trimmed).pathname);
-                if (suffix) {
-                    suffixes.add(suffix);
-                }
-            } catch {
-                // Ignore bad absolute URIs.
-            }
             continue;
         }
         suffixes.add(trimmed.replace(/^\.\//, ''));
@@ -189,10 +185,56 @@ console.log(`  - Chromium mode: ${process.env.PROXY_HEADLESS === 'true' ? 'headl
 console.log(`  - Rewriting segment URLs to host: ${proxyHost}`);
 console.log('  - /proxy d=1 (TimStreams): HTTP first, Chromium fallback for segments; WebP-TS unwrap');
 console.log('  - /proxy otherwise: Puppeteer embed-first (Streamed)');
+console.log('  - /remux/{payload}: ffmpeg video-copy + AAC-LC (Roku HE-AAC workaround)');
 
 app.get('/', (req, res) => {
     res.send('Proxy server is running (embed-first stream resolve)');
 });
+
+// Remux live HLS (HE-AAC → AAC-LC). Same payload as /proxy/{b64}.
+// Serve the playlist inline (absolute segment URLs) — Roku HLS is flaky on 302.
+app.get('/remux/*b64Payload', async (req, res) => {
+    const b64Payload = extractB64Payload(req.params.b64Payload);
+    if (!b64Payload) {
+        res.status(400).send('Missing remux payload');
+        return;
+    }
+    console.log(`---\n[${new Date().toISOString()}] Remux request`);
+    console.log(`  - Payload length: ${b64Payload.length}`);
+    try {
+        const session = await ensureRemuxSession(b64Payload);
+        const playlistPath = path.join(session.dir, 'index.m3u8');
+        const playlist = fs.readFileSync(playlistPath, 'utf8');
+        const base = `http://${proxyHost}/remux-live/${session.id}/`;
+        const rewritten = playlist.split('\n').map((line) => {
+            const trimmed = line.trim();
+            if (trimmed.length > 0 && !trimmed.startsWith('#') && !/^https?:\/\//i.test(trimmed)) {
+                return base + trimmed.replace(/^\.\//, '');
+            }
+            return line;
+        }).join('\n');
+        console.log(`  - Serving remux playlist (${session.id})`);
+        res.setHeader('Access-Control-Allow-Origin', '*');
+        res.setHeader('Content-Type', 'application/vnd.apple.mpegurl');
+        res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+        res.send(rewritten);
+    } catch (error) {
+        console.error(`  - Remux failed: ${error.message}`);
+        if (!res.headersSent) {
+            res.status(502).send(`Remux failed: ${error.message}`);
+        }
+    }
+});
+
+app.use('/remux-live', (req, res, next) => {
+    const id = String(req.path || '').split('/').filter(Boolean)[0] || '';
+    if (id) {
+        touchRemuxSession(id);
+    }
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+    next();
+}, express.static(getRemuxRoot()));
 
 function isManifestUrl(url) {
     return url.endsWith('.m3u8') || url.includes('.m3u8?');
@@ -566,3 +608,5 @@ app.get('/proxy/*b64Payload', async (req, res) => {
 http.createServer(app).listen(port, () => {
     console.log(`Advanced HLS Proxy server listening at http://localhost:${port}`);
 });
+
+// SIGINT/SIGTERM cleanup (including remux ffmpeg) lives in browser-fetch.js.

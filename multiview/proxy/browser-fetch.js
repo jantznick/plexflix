@@ -571,6 +571,12 @@ export async function shutdownBrowserFetch() {
         idleTimer = null;
     }
     await resetBrowserSessions();
+    try {
+        const { shutdownAudioRemux } = await import('./audio-remux.js');
+        await shutdownAudioRemux();
+    } catch {
+        // Remux module optional during partial boots.
+    }
 }
 
 for (const signal of ['SIGINT', 'SIGTERM']) {

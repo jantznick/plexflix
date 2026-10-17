@@ -106,6 +106,10 @@ sub init()
     m.liveMetaRefreshing = false
     m.liveMetaLastFetch = 0
 
+    ' HE-AAC → AAC-LC remux retry via :8787 /remux/ (Matchora etc.)
+    m.remuxRetried = false
+    m.directPlayUrl = ""
+
     m.clock24 = (CreateObject("roDeviceInfo").GetClockFormat() = "24h")
 
     ' Belt-and-suspenders with focusable="false" in XML: some firmware still
@@ -138,6 +142,8 @@ sub onContentSet()
     if directUrl = "" and mediaType = "sport" then directUrl = valueOrEmpty(item.key)
     m.isLive = (mediaType = "livetv" or (directUrl <> "" and Left(directUrl, 4) = "http"))
     m.isSport = (mediaType = "sport")
+    m.remuxRetried = false
+    m.directPlayUrl = ""
 
     paintMeta()
     setStatus("Preparing " + valueOrEmpty(item.title) + "...")
@@ -196,6 +202,7 @@ end sub
 
 sub playDirect(url as String, item as Object)
     if m.video = invalid then return
+    m.directPlayUrl = url
     logPlayback("direct url " + url)
     contentNode = createObject("roSGNode", "ContentNode")
     contentNode.url = url
@@ -333,6 +340,9 @@ sub onVideoState()
     else if state = "error" then
         m.reportTimer.control = "stop"
         m.stallTimer.control = "stop"
+        ' Matchora / some IPTV feeds ship HE-AAC; Roku rejects it while browsers
+        ' play fine. Retry once through the proxy's AAC-LC remux path.
+        if tryRemuxAfterAacError() then return
         sendPlaybackActions([releaseAction()])
         failStream("Playback failed")
     else if state = "finished" then
@@ -494,6 +504,43 @@ function videoErrorDetail() as String
 
     if bits.count() = 0 then return ""
     return joinWith(bits, " · ")
+end function
+
+' True when firmware rejected HE-AAC / bad AAC and we can retry via /remux/.
+function tryRemuxAfterAacError() as Boolean
+    if m.remuxRetried = true then return false
+
+    detail = LCase(videoErrorDetail())
+    if detail = "" then return false
+    if Instr(1, detail, "unsupported aac") = 0 and Instr(1, detail, "aac stream") = 0 then
+        return false
+    end if
+
+    url = ""
+    if m.video <> invalid and m.video.content <> invalid then
+        url = valueOrEmpty(m.video.content.url)
+    end if
+    if url = "" then url = valueOrEmpty(m.directPlayUrl)
+
+    remuxUrl = proxyUrlToRemux(url)
+    if remuxUrl = "" then return false
+
+    m.remuxRetried = true
+    logPlayback("AAC unsupported — retrying via remux")
+    setStatus("Re-encoding audio for Roku...")
+    if m.video <> invalid then m.video.control = "stop"
+    playDirect(remuxUrl, m.top.content)
+    return true
+end function
+
+' http://host:8787/proxy/{payload} → http://host:8787/remux/{payload}
+function proxyUrlToRemux(url as String) as String
+    if url = "" then return ""
+    if Instr(1, url, "/remux/") > 0 then return ""
+    marker = "/proxy/"
+    idx = Instr(1, url, marker)
+    if idx = 0 then return ""
+    return Left(url, idx - 1) + "/remux/" + Mid(url, idx + Len(marker))
 end function
 
 ' Tagged so it can be picked out of the debug console on port 8085
