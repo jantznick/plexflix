@@ -504,6 +504,36 @@ function intOrZero(value as Dynamic) as Integer
     return 0
 end function
 
+' ParseJson often boxes whole numbers as Float. Str(1408.0) can become "1408.0",
+' which breaks TMDB URLs (/tv/1408.0) and season-key matching against Plex "1".
+function tmdbNumStr(value as Dynamic) as String
+    if value = invalid then return ""
+    valueType = type(value)
+    if valueType = "String" or valueType = "roString" then
+        s = value.Trim()
+        if s = "" then return ""
+        ' "2.0" / "2.00" → "2"
+        dot = Instr(1, s, ".")
+        if dot > 1 then s = Left(s, dot - 1)
+        if s = "" then return ""
+        n = Int(Val(s))
+        if n = 0 and s <> "0" then return ""
+        return StrI(n).Trim()
+    end if
+    n = intOrZero(value)
+    if n = 0 then
+        ' Preserve real zero (specials); reject non-numeric empties already handled
+        if valueType = "Integer" or valueType = "roInt" or valueType = "roInteger" or valueType = "LongInteger" then
+            return "0"
+        end if
+        if valueType = "Float" or valueType = "Double" or valueType = "roFloat" or valueType = "roDouble" then
+            if value = 0 or value = 0.0 then return "0"
+        end if
+        return ""
+    end if
+    return StrI(n).Trim()
+end function
+
 function imageUrl(cfg as Object, path as Dynamic, width = 420 as Integer, height = 630 as Integer) as String
     if path = invalid or path = "" then return ""
     pathStr = safeToStr(path)
@@ -1884,15 +1914,30 @@ function fetchShowSeasons(cfg as Object, item as Object) as Object
     showPosterUrl = safeToStr(item.hdPosterUrl)
     if showPosterUrl = "" then showPosterUrl = safeToStr(item.hdShowPosterUrl)
 
-    tmdbId = safeToStr(item.tmdbId)
-    if tmdbId = "" then tmdbId = safeToStr(item.showTmdbId)
-    if tmdbId = "" and showKey <> "" then tmdbId = resolveShowTmdbId(cfg, showKey)
-    if tmdbId = "" and showTitle <> "" then tmdbId = searchTmdbShowId(cfg, showTitle, showYear)
+    tmdbId = tmdbNumStr(item.tmdbId)
+    if tmdbId = "" then tmdbId = tmdbNumStr(item.showTmdbId)
+    if tmdbId = "" and showKey <> "" then tmdbId = tmdbNumStr(resolveShowTmdbId(cfg, showKey))
+    if tmdbId = "" and showTitle <> "" then tmdbId = tmdbNumStr(searchTmdbShowId(cfg, showTitle, showYear))
 
     if showPosterUrl = "" and showKey <> "" then showPosterUrl = resolveShowPosterUrl(cfg, showKey)
 
     guide = []
-    if tmdbId <> "" then guide = fetchTmdbShowSeasons(cfg, tmdbId)
+    numberOfSeasons = 0
+    if tmdbId <> "" then
+        showData = fetchTmdbShowData(cfg, tmdbId)
+        if showData <> invalid then
+            if showData.seasons <> invalid then guide = showData.seasons
+            if showData.number_of_seasons <> invalid then numberOfSeasons = intOrZero(showData.number_of_seasons)
+        end if
+    end if
+
+    ' If the seasons array failed to parse but TMDB reported a count, synthesize 1..N
+    if guide.count() = 0 and numberOfSeasons > 0 then
+        guide = []
+        for n = 1 to numberOfSeasons
+            guide.push({ season_number: n, episode_count: 1, name: "Season " + StrI(n).Trim() })
+        end for
+    end if
 
     merged = mergeShowSeasons(owned, guide, showKey, showTitle, showYear, showPosterUrl, tmdbId)
     return { ok: true, items: merged, showTmdbId: tmdbId }
@@ -1911,8 +1956,8 @@ function fetchSeasonEpisodes(cfg as Object, item as Object) as Object
         if ownedResult.ok = true then owned = collectMetadata(cfg, ownedResult.json)
     end if
 
-    seasonNum = safeToStr(item.index)
-    if seasonNum = "" then seasonNum = safeToStr(item.parentIndex)
+    seasonNum = tmdbNumStr(item.index)
+    if seasonNum = "" then seasonNum = tmdbNumStr(item.parentIndex)
     showKey = safeToStr(item.showRatingKey)
     if showKey = "" then showKey = safeToStr(item.grandparentRatingKey)
     showTitle = safeToStr(item.showTitle)
@@ -1920,9 +1965,9 @@ function fetchSeasonEpisodes(cfg as Object, item as Object) as Object
     showYear = safeToStr(item.showYear)
     showPosterUrl = safeToStr(item.showPosterUrl)
 
-    tmdbId = safeToStr(item.showTmdbId)
-    if tmdbId = "" and showKey <> "" then tmdbId = resolveShowTmdbId(cfg, showKey)
-    if tmdbId = "" and showTitle <> "" then tmdbId = searchTmdbShowId(cfg, showTitle, showYear)
+    tmdbId = tmdbNumStr(item.showTmdbId)
+    if tmdbId = "" and showKey <> "" then tmdbId = tmdbNumStr(resolveShowTmdbId(cfg, showKey))
+    if tmdbId = "" and showTitle <> "" then tmdbId = tmdbNumStr(searchTmdbShowId(cfg, showTitle, showYear))
 
     ' Prefer the show's Plex poster for missing tiles — TMDB episode stills are
     ' often tiny/grainy in the episode rail.
@@ -2054,17 +2099,22 @@ function searchTmdbShowId(cfg as Object, title as String, year as String) as Str
         end if
     end if
     if search = invalid or search.results = invalid or search.results.count() = 0 then return ""
-    return safeToStr(search.results[0].id)
+    return tmdbNumStr(search.results[0].id)
+end function
+
+function fetchTmdbShowData(cfg as Object, tmdbId as String) as Object
+    apiKey = ""
+    if cfg.tmdbApiKey <> invalid then apiKey = safeToStr(cfg.tmdbApiKey)
+    if apiKey = "" or apiKey = "REPLACE_WITH_TMDB_API_KEY" then return invalid
+    tmdbId = tmdbNumStr(tmdbId)
+    if tmdbId = "" then return invalid
+
+    url = "https://api.themoviedb.org/3/tv/" + tmdbId + "?api_key=" + apiKey
+    return httpGetJson(url)
 end function
 
 function fetchTmdbShowSeasons(cfg as Object, tmdbId as String) as Object
-    apiKey = ""
-    if cfg.tmdbApiKey <> invalid then apiKey = safeToStr(cfg.tmdbApiKey)
-    if apiKey = "" or apiKey = "REPLACE_WITH_TMDB_API_KEY" then return []
-    if tmdbId = "" then return []
-
-    url = "https://api.themoviedb.org/3/tv/" + tmdbId + "?api_key=" + apiKey
-    data = httpGetJson(url)
+    data = fetchTmdbShowData(cfg, tmdbId)
     if data = invalid or data.seasons = invalid then return []
     return data.seasons
 end function
@@ -2073,6 +2123,8 @@ function fetchTmdbSeasonGuide(cfg as Object, tmdbId as String, seasonNum as Stri
     apiKey = ""
     if cfg.tmdbApiKey <> invalid then apiKey = safeToStr(cfg.tmdbApiKey)
     if apiKey = "" or apiKey = "REPLACE_WITH_TMDB_API_KEY" then return []
+    tmdbId = tmdbNumStr(tmdbId)
+    seasonNum = tmdbNumStr(seasonNum)
     if tmdbId = "" or seasonNum = "" then return []
 
     url = "https://api.themoviedb.org/3/tv/" + tmdbId + "/season/" + seasonNum + "?api_key=" + apiKey
@@ -2084,10 +2136,11 @@ end function
 function mergeShowSeasons(owned as Object, guide as Object, showKey as String, showTitle as String, showYear as String, showPosterUrl as String, tmdbId as String) as Object
     if owned = invalid then owned = []
     if guide = invalid then guide = []
+    tmdbId = tmdbNumStr(tmdbId)
 
     ownedMap = {}
     for each season in owned
-        key = safeToStr(season.index)
+        key = tmdbNumStr(season.index)
         if key <> "" then ownedMap[key] = season
     end for
 
@@ -2097,18 +2150,18 @@ function mergeShowSeasons(owned as Object, guide as Object, showKey as String, s
     if guide.count() > 0 then
         for each g in guide
             seasonNum = ""
-            if g.season_number <> invalid then seasonNum = safeToStr(g.season_number)
+            if g.season_number <> invalid then seasonNum = tmdbNumStr(g.season_number)
             if seasonNum = "" then
                 ' skip
             else
-                epCount = 0
-                if g.episode_count <> invalid then epCount = g.episode_count
+                epCount = intOrZero(g.episode_count)
                 ' Skip TMDB Specials (0) unless Plex already has that season
                 if seasonNum = "0" and ownedMap.DoesExist("0") <> true then
                     ' skip
                 else if ownedMap.DoesExist(seasonNum) then
                     season = ownedMap[seasonNum]
                     season.missing = false
+                    season.index = seasonNum
                     season.showRatingKey = showKey
                     season.showTitle = showTitle
                     season.showYear = showYear
@@ -2150,9 +2203,10 @@ function mergeShowSeasons(owned as Object, guide as Object, showKey as String, s
     end if
 
     for each season in owned
-        key = safeToStr(season.index)
+        key = tmdbNumStr(season.index)
         if key <> "" and used.DoesExist(key) <> true then
             season.missing = false
+            season.index = key
             season.showRatingKey = showKey
             season.showTitle = showTitle
             season.showYear = showYear
@@ -2201,10 +2255,12 @@ end function
 function mergeSeasonEpisodes(owned as Object, guide as Object, seasonNum as String, tmdbId as String, showKey as String, showTitle as String, showPosterUrl as String) as Object
     if owned = invalid then owned = []
     if guide = invalid then guide = []
+    seasonNum = tmdbNumStr(seasonNum)
+    tmdbId = tmdbNumStr(tmdbId)
 
     ownedMap = {}
     for each ep in owned
-        key = safeToStr(ep.index)
+        key = tmdbNumStr(ep.index)
         if key <> "" then ownedMap[key] = ep
     end for
 
@@ -2214,11 +2270,13 @@ function mergeSeasonEpisodes(owned as Object, guide as Object, seasonNum as Stri
     if guide.count() > 0 then
         for each g in guide
             epNum = ""
-            if g.episode_number <> invalid then epNum = safeToStr(g.episode_number)
+            if g.episode_number <> invalid then epNum = tmdbNumStr(g.episode_number)
             if epNum <> "" then
                 if ownedMap.DoesExist(epNum) then
                     ep = ownedMap[epNum]
                     ep.missing = false
+                    ep.index = epNum
+                    ep.parentIndex = seasonNum
                     if tmdbId <> "" then ep.tmdbId = tmdbId
                     if showKey <> "" then ep.showRatingKey = showKey
                     merged.push(ep)
@@ -2259,9 +2317,11 @@ function mergeSeasonEpisodes(owned as Object, guide as Object, seasonNum as Stri
     end if
 
     for each ep in owned
-        key = safeToStr(ep.index)
+        key = tmdbNumStr(ep.index)
         if key <> "" and used.DoesExist(key) <> true then
             ep.missing = false
+            ep.index = key
+            if seasonNum <> "" then ep.parentIndex = seasonNum
             if tmdbId <> "" then ep.tmdbId = tmdbId
             if showKey <> "" then ep.showRatingKey = showKey
             merged.push(ep)
