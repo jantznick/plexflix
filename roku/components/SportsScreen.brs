@@ -231,12 +231,12 @@ sub applyCategory(index as Integer)
     m.guideList.content = root
     m.currentIndex = 0
     if m.events.count() = 0 then
-        m.statusLabel.text = "No live sports — check sportsFeedUrl"
+        m.statusLabel.text = "No live streams — check sportsFeedUrl"
         m.eventTitle.text = "No events"
         m.eventMeta.text = ""
         m.eventSummary.text = ""
     else
-        m.statusLabel.text = StrI(m.events.count()).Trim() + " events"
+        m.statusLabel.text = StrI(m.events.count()).Trim() + " streams"
         m.guideList.jumpToItem = 0
         updateInfo(0)
     end if
