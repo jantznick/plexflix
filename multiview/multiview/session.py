@@ -57,9 +57,8 @@ class Session:
         self._relay = relay
         self._mosaic_factory = mosaic_factory
 
-        # Incremental build: only the stream in layout slot 0 is decoded.
-        # FF/RW on the Roku rotates `order`, so the live game follows slot 0
-        # rather than staying glued to feed index 0 while placeholders shuffle.
+        # Incremental: decode the feeds currently in the first LIVE_SLOTS.
+        # FF/RW rotates `order`, so which games are live follows those slots.
         self.feeds = [Feed(i, spec, live=False) for i, spec in enumerate(feeds)]
         self.order = list(range(len(feeds)))
         self._sync_live_flags()
@@ -70,6 +69,7 @@ class Session:
         self.restarts = 0
         self.created_at = clock()
         self.last_seen = clock()
+        self.paused = False
 
         self._lock = threading.RLock()
         self._stop = threading.Event()
@@ -103,7 +103,7 @@ class Session:
     def touch(self):
         self.last_seen = self._clock()
 
-    def reconfigure(self, layout=None, order=None):
+    def reconfigure(self, layout=None, order=None, paused=None):
         with self._lock:
             if layout is not None and layout not in LAYOUTS:
                 raise ValueError(f"layout must be one of {', '.join(LAYOUTS)}")
@@ -122,13 +122,25 @@ class Session:
                 self.order = list(order)
                 self._sync_live_flags()
                 changed = True
+            if paused is not None:
+                want = bool(paused)
+                if want != self.paused:
+                    self.paused = want
+                    changed = True
+            mosaic = None
             if changed:
-                # ffmpeg filtergraph is static — restart with the new layout
-                self._next_start = self._clock()
                 mosaic = self._mosaic
                 self._mosaic = None
-            else:
-                mosaic = None
+                if self.paused:
+                    # Fullscreen promote: free ffmpeg/proxy so the LAN player can use :8787
+                    self._next_start = float("inf")
+                    self.state = "paused"
+                    self._log("paused for fullscreen promote")
+                else:
+                    self._next_start = self._clock()
+                    if self.state in ("paused", "running", "error"):
+                        self.state = "starting"
+                        self.error = ""
         if mosaic is not None:
             try:
                 mosaic.stop()
@@ -136,9 +148,10 @@ class Session:
                 pass
 
     def _sync_live_flags(self):
-        primary = self.order[0] if self.order else 0
+        slots = max(1, int(self.settings.get("live_slots", 2)))
+        live = set(self.order[: min(slots, len(self.order))])
         for feed in self.feeds:
-            feed.live = feed.index == primary
+            feed.live = feed.index in live
 
     def snapshot(self):
         with self._lock:
@@ -150,6 +163,8 @@ class Session:
                     status = "placeholder"
                 elif self.state == "running":
                     status = "live"
+                elif self.state == "paused":
+                    status = "paused"
                 else:
                     status = "starting"
                 tiles.append(dict(
@@ -171,6 +186,8 @@ class Session:
                 "order": list(self.order),
                 "generation": self.generation,
                 "restarts": self.restarts,
+                "paused": self.paused,
+                "liveSlots": max(1, int(self.settings.get("live_slots", 2))),
                 "playlistUrl": f"/sessions/{self.id}/master.m3u8",
                 "tiles": tiles,
             }
@@ -180,7 +197,7 @@ class Session:
             live = [f for f in self.feeds if f.live]
             held = [f for f in self.feeds if not f.live]
             if held:
-                self._log(f"decoding feed 1; placeholder on {len(held)} tile(s)")
+                self._log(f"decoding {len(live)} feed(s); placeholder on {len(held)} tile(s)")
             if live:
                 targets = [rewrite_to_local_proxy(f.url) for f in live]
                 self._log(f"warming {len(targets)} feed(s) through vendored proxy")
@@ -198,6 +215,8 @@ class Session:
             self._shutdown()
 
     def _tick(self):
+        if self.paused:
+            return
         now = self._clock()
         self._stitch()
         mosaic = self._mosaic

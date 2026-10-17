@@ -16,6 +16,7 @@ sub exec()
         body = {}
         if item.layout <> invalid then body.layout = item.layout
         if item.order <> invalid then body.order = item.order
+        if item.paused <> invalid then body.paused = item.paused
         m.top.response = multiviewRequest(cfg, "PUT", "/sessions/" + item.id, FormatJson(body))
     else if action = "delete" then
         m.top.response = multiviewRequest(cfg, "DELETE", "/sessions/" + item.id, "")

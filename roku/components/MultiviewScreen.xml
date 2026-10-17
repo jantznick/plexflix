@@ -31,6 +31,8 @@
         <Timer id="stallTimer" duration="30" repeat="false" />
         <!-- Coalesce FF/RW taps so two quick presses become one order PUT -->
         <Timer id="rotateTimer" duration="0.35" repeat="false" />
+        <!-- Brief gap after mosaic pause so the LAN proxy/decoder are free -->
+        <Timer id="promoteTimer" duration="0.4" repeat="false" />
 
         <Rectangle width="1920" height="1080" color="0x000000" />
 

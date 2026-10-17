@@ -101,16 +101,17 @@ class _FakeMosaic:
 
 
 class SessionReconfigureTests(unittest.TestCase):
-    def _session(self):
+    def _session(self, count=2, live_slots=2):
+        streams = [
+            {"url": f"http://example/{i}.m3u8", "title": chr(ord("A") + i)}
+            for i in range(count)
+        ]
         return Session(
             "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
-            [
-                {"url": "http://example/a.m3u8", "title": "A"},
-                {"url": "http://example/b.m3u8", "title": "B"},
-            ],
+            streams,
             "grid",
             "/tmp",
-            {},
+            {"live_slots": live_slots},
             relay=_FakeRelay(),
             mosaic_factory=_FakeMosaic,
         )
@@ -124,19 +125,31 @@ class SessionReconfigureTests(unittest.TestCase):
         self.assertEqual(snap["tiles"][0]["stream"], 1)
         self.assertEqual(snap["tiles"][0]["title"], "B")
 
-    def test_live_decode_follows_slot_zero_after_rotate(self):
-        session = self._session()
+    def test_live_slots_follow_order_prefix(self):
+        session = self._session(count=3, live_slots=2)
+        self.assertTrue(session.feeds[0].live)
+        self.assertTrue(session.feeds[1].live)
+        self.assertFalse(session.feeds[2].live)
+        session._mosaic = _FakeMosaic()
+        session.reconfigure(order=[2, 0, 1])
+        self.assertTrue(session.feeds[2].live)
         self.assertTrue(session.feeds[0].live)
         self.assertFalse(session.feeds[1].live)
-        session._mosaic = _FakeMosaic()
-        session.reconfigure(order=[1, 0])
-        self.assertFalse(session.feeds[0].live)
-        self.assertTrue(session.feeds[1].live)
         snap = session.snapshot()
-        self.assertEqual(snap["tiles"][0]["stream"], 1)
-        self.assertEqual(snap["tiles"][1]["stream"], 0)
-        self.assertEqual(snap["tiles"][1]["status"], "placeholder")
-        self.assertTrue(session.feeds[snap["tiles"][0]["stream"]].live)
+        self.assertEqual(snap["tiles"][0]["stream"], 2)
+        self.assertEqual(snap["tiles"][2]["status"], "placeholder")
+
+    def test_pause_stops_mosaic_for_fullscreen_promote(self):
+        session = self._session()
+        session._mosaic = _FakeMosaic()
+        session.state = "running"
+        session.reconfigure(paused=True)
+        self.assertTrue(session.paused)
+        self.assertEqual(session.state, "paused")
+        self.assertIsNone(session._mosaic)
+        session.reconfigure(paused=False)
+        self.assertFalse(session.paused)
+        self.assertEqual(session.state, "starting")
 
 
 if __name__ == "__main__":
