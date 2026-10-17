@@ -537,21 +537,28 @@ function grabJobKeys() as Object
     return keys
 end function
 
+function pageGrabJob() as Object
+    if m.grabJobs = invalid then return invalid
+    if m.grabJobs.DoesExist("page") <> true then return invalid
+    job = m.grabJobs["page"]
+    if job = invalid or job.active <> true then return invalid
+    return job
+end function
+
 sub paintFocusSoftStatus()
     if m.softStatus = invalid then return
 
     ' Page-level unavailable grab always owns the status line on that screen
     if m.isUnavailable = true then
-        pageJob = invalid
-        if m.grabJobs <> invalid and m.grabJobs.DoesExist("page") then pageJob = m.grabJobs["page"]
-        if pageJob <> invalid and pageJob.active = true then
+        pageJob = pageGrabJob()
+        if pageJob <> invalid then
             m.softStatus.text = asString(pageJob.line)
             return
         end if
     end if
 
     key = asString(m.focusGrabKey)
-    if key <> "" and m.grabJobs <> invalid and m.grabJobs.DoesExist(key) then
+    if key <> "" and key <> "page" and m.grabJobs <> invalid and m.grabJobs.DoesExist(key) then
         job = m.grabJobs[key]
         if job <> invalid and job.active = true then
             m.softStatus.text = asString(job.line)
@@ -560,7 +567,7 @@ sub paintFocusSoftStatus()
     end if
 
     ' No active grab for the focused ep — missing hint or clear
-    if key <> "" then
+    if key <> "" and key <> "page" then
         ep = focusedEpisodeNode()
         if ep <> invalid and ep.DoesExist("missing") and ep.missing = true then
             if grabIsConfigured() then
@@ -587,9 +594,23 @@ end function
 sub setGrabJobLine(job as Object, line as String)
     if job = invalid then return
     job.line = line
-    if asString(job.key) = asString(m.focusGrabKey) or (job.key = "page" and m.isUnavailable = true) then
-        if m.softStatus <> invalid then m.softStatus.text = line
+    key = asString(job.key)
+    showLine = false
+    if key = "page" and m.isUnavailable = true then
+        showLine = true
+    else if key <> "" and key = asString(m.focusGrabKey) then
+        showLine = true
     end if
+    if showLine = true and m.softStatus <> invalid then m.softStatus.text = line
+end sub
+
+' Detail/lookup copy must never bury an in-flight Grab Now status line
+sub setSoftStatusHint(text as String)
+    if m.isUnavailable = true and pageGrabJob() <> invalid then
+        paintFocusSoftStatus()
+        return
+    end if
+    if m.softStatus <> invalid then m.softStatus.text = text
 end sub
 
 function unavailableMessage(item as Object) as String
@@ -604,11 +625,14 @@ function unavailableMessage(item as Object) as String
 end function
 
 sub loadUnavailableDetail(item as Object)
-    pageJob = invalid
-    if m.grabJobs <> invalid and m.grabJobs.DoesExist("page") then pageJob = m.grabJobs["page"]
-    awaitingPage = (pageJob <> invalid and pageJob.active = true and pageJob.awaitingPlex = true)
-    if awaitingPage <> true then
-        if m.softStatus <> invalid then m.softStatus.text = "Looking up details & similar titles…"
+    pageJob = pageGrabJob()
+    ' Never replace an active grab line with the lookup spinner
+    if pageJob = invalid then
+        setSoftStatusHint("Looking up details & similar titles…")
+    else if pageJob.awaitingPlex = true then
+        ' Keep the Ready/waiting copy; poll path owns the text
+    else
+        paintFocusSoftStatus()
     end if
     m.extrasTask = createObject("roSGNode", "PlexTask")
     m.extrasTask.config = m.top.config
@@ -620,17 +644,16 @@ end sub
 
 sub onUnavailableLoaded()
     response = m.extrasTask.response
-    pageJob = invalid
-    if m.grabJobs <> invalid and m.grabJobs.DoesExist("page") then pageJob = m.grabJobs["page"]
+    pageJob = pageGrabJob()
     if pageJob <> invalid then pageJob.findBusy = false
 
     ' Post-grab page flip: keep rechecking until Plex has the title
-    if pageJob <> invalid and pageJob.active = true and pageJob.awaitingPlex = true then
+    if pageJob <> invalid and pageJob.awaitingPlex = true then
         if response <> invalid and response.ok = true and response.localItem <> invalid then
             localItem = response.localItem
             if response.onWatchlist = true then localItem.onWatchlist = true
             finishGrabJob("page")
-            if m.softStatus <> invalid then m.softStatus.text = "Ready — opening…"
+            setSoftStatusHint("Ready — opening…")
             m.top.content = localItem
             return
         end if
@@ -638,14 +661,22 @@ sub onUnavailableLoaded()
         return
     end if
 
-    if m.softStatus <> invalid then m.softStatus.text = ""
-    if response = invalid or response.ok <> true then
-        if m.softStatus <> invalid then m.softStatus.text = "Couldn't load extra details — try similar picks below if any"
-        return
+    ' If a grab started while this lookup was in flight, keep its status
+    if pageGrabJob() <> invalid then
+        paintFocusSoftStatus()
+        if response = invalid or response.ok <> true then return
+        ' Fall through to refresh similar/cast under the grab line
+    else
+        setSoftStatusHint("")
+        if response = invalid or response.ok <> true then
+            setSoftStatusHint("Couldn't load extra details — try similar picks below if any")
+            return
+        end if
     end if
 
     ' Same plex:// guid already in the local library — promote to a normal Play page
-    if response.localItem <> invalid then
+    ' (skip while a grab is running — don't tear down the job UI mid-download)
+    if response.localItem <> invalid and pageGrabJob() = invalid then
         localItem = response.localItem
         if response.onWatchlist = true then localItem.onWatchlist = true
         m.top.content = localItem
@@ -704,19 +735,14 @@ sub onUnavailableLoaded()
     m.relatedRows.content = m.relatedContent
     if similarItems.count() > 0 or castItems.count() > 0 then
         m.relatedPanel.visible = true
-        if m.softStatus <> invalid then
-            if similarItems.count() > 0 then
-                m.softStatus.text = "Similar titles already in your library"
-            else
-                m.softStatus.text = ""
-            end if
+        if similarItems.count() > 0 then
+            setSoftStatusHint("Similar titles already in your library")
+        else
+            setSoftStatusHint("")
         end if
-    else if m.softStatus <> invalid then
-        m.softStatus.text = "No close matches in your library yet"
+    else
+        setSoftStatusHint("No close matches in your library yet")
     end if
-
-    ' Don't clobber an in-flight page grab status with the similar-titles hint
-    if pageJob <> invalid and pageJob.active = true then paintFocusSoftStatus()
 
     m.focusIndex = 0
     rebuildActionRow()
@@ -1857,8 +1883,9 @@ sub applyGrabJobStatusToKey(key as String, remote as Object)
     if job = invalid or remote = invalid then return
 
     status = LCase(asString(remote.status))
+    ' ParseJson often boxes numbers as Float — never pass that to StrI
     percent = 0
-    if remote.DoesExist("percent") and remote.percent <> invalid then percent = remote.percent
+    if remote.DoesExist("percent") then percent = asInteger(remote.percent)
     message = asString(remote.message)
     if message = "" then message = asString(remote.stage)
     job.status = status
@@ -1890,8 +1917,8 @@ sub applyGrabJobStatusToKey(key as String, remote as Object)
 
     line = "Grabbing"
     if status <> "" then line = UCase(Left(status, 1)) + Mid(status, 2)
-    if percent > 0 then line = line + " " + StrI(percent).Trim() + "%"
-    if message <> "" and message <> status then line = line + " — " + message
+    if percent > 0 then line = line + " " + asString(percent) + "%"
+    if message <> "" and LCase(message) <> status then line = line + " — " + message
     setGrabJobLine(job, line)
 end sub
 
