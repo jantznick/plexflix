@@ -1,0 +1,104 @@
+diff --git a/proxy/advanced-proxy.js b/proxy/advanced-proxy.js
+index aab2e78..a243c40 100644
+--- a/proxy/advanced-proxy.js
++++ b/proxy/advanced-proxy.js
+@@ -26,7 +26,7 @@ const port = process.env.PORT || 8787;
+ const proxyHost = process.env.PROXY_HOST || '192.168.1.50:8787';
+ const debug = process.env.PROXY_DEBUG === 'true';
+ 
+-const PROXY_VERSION = 'embed-first-v26-remux-ext';
++const PROXY_VERSION = 'embed-first-v27-remux-ts-suffix';
+ 
+ function isLoopbackClient(req) {
+     const ip = String(req.ip || req.socket?.remoteAddress || '');
+@@ -166,15 +166,17 @@ function unwrapDisguisedSegment(body) {
+ /**
+  * Express 5 named wildcard (`*b64Payload`) may return a string or path-segment array.
+  * Standard base64 payloads can contain `/`, so re-join segments.
++ * Remux/ffmpeg may append .ts/.m3u8 so the HLS demuxer accepts proxied URLs —
++ * strip those fake extensions before base64 decode.
+  */
+ function extractB64Payload(param) {
++    let raw = '';
+     if (Array.isArray(param)) {
+-        return param.join('/');
++        raw = param.join('/');
++    } else if (typeof param === 'string') {
++        raw = param.replace(/^\//, '');
+     }
+-    if (typeof param === 'string') {
+-        return param.replace(/^\//, '');
+-    }
+-    return '';
++    return raw.replace(/\.(ts|m3u8|m4s|aac|mp4)$/i, '');
+ }
+ 
+ function previewBody(body, maxLines = 6) {
+@@ -539,11 +541,14 @@ app.get('/proxy/*b64Payload', async (req, res) => {
+             const loopback = isLoopbackClient(req);
+             // ffmpeg remux: loopback host + omit bulky feed headers so segment
+             // URLs stay under HLS demuxer limits (LAN PROXY_HOST is unreachable
+-            // from inside the container anyway).
++            // from inside the container anyway). Append .ts so ffmpeg's HLS
++            // demuxer accepts the path (-allowed_extensions ALL is unreliable
++            // across distro ffmpeg builds).
+             const rewriteHeaders = loopback ? {} : ctx.extraHeaders;
++            const mediaSuffix = loopback ? '.ts' : '';
+             console.log(
+                 `  - Rewriting manifest segment URLs through /proxy (${segmentHost}`
+-                + `${loopback ? ', remux-loopback' : ''})...`
++                + `${loopback ? ', remux-loopback+ts' : ''})...`
+             );
+ 
+             // Master playlists must rewrite relative to the live master URL, not
+@@ -571,7 +576,7 @@ app.get('/proxy/*b64Payload', async (req, res) => {
+                             rewriteHeaders,
+                             embedUrl,
+                             ctx.directOk
+-                        )}`;
++                        )}${mediaSuffix}`;
+                         rewrittenLines.push(line.replace(uriMatch[1], proxiedKeyUrl));
+                         continue;
+                     }
+@@ -590,7 +595,7 @@ app.get('/proxy/*b64Payload', async (req, res) => {
+                         rewriteHeaders,
+                         embedUrl,
+                         ctx.directOk
+-                    )}`);
++                    )}${mediaSuffix}`);
+                     segmentCount++;
+                     continue;
+                 }
+diff --git a/proxy/audio-remux.js b/proxy/audio-remux.js
+index 0b05d35..e072b0b 100644
+--- a/proxy/audio-remux.js
++++ b/proxy/audio-remux.js
+@@ -123,7 +123,9 @@ export async function ensureRemuxSession(b64Payload) {
+     fs.rmSync(dir, { recursive: true, force: true });
+     fs.mkdirSync(dir, { recursive: true });
+ 
+-    const inputUrl = `${LOOPBACK}/proxy/${b64Payload}`;
++    // .m3u8 suffix (stripped by the proxy) so the HLS demuxer treats input as
++    // a playlist; loopback segment rewrites append .ts for the same reason.
++    const inputUrl = `${LOOPBACK}/proxy/${b64Payload}.m3u8`;
+     const playlistPath = path.join(dir, 'index.m3u8');
+     const segmentPattern = path.join(dir, 'seg%05d.ts');
+ 
+@@ -131,15 +133,14 @@ export async function ensureRemuxSession(b64Payload) {
+         '-hide_banner',
+         '-loglevel', 'warning',
+         '-nostdin',
+-        // Proxied segment URLs have no .ts suffix; HLS demuxer rejects them
+-        // unless allowed_extensions is ALL ("not in allowed_segment_extensions").
+         '-protocol_whitelist', 'file,http,https,tcp,tls,crypto',
+-        '-allowed_extensions', 'ALL',
+         '-fflags', '+genpts+discardcorrupt',
+         '-reconnect', '1',
+         '-reconnect_streamed', '1',
+         '-reconnect_delay_max', '5',
+         '-rw_timeout', '15000000',
++        '-f', 'hls',
++        '-allowed_extensions', 'ALL',
+         '-i', inputUrl,
+         '-map', '0:v:0',
+         '-map', '0:a:0?',
