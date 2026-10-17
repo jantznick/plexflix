@@ -212,10 +212,11 @@ sub playDirect(url as String, item as Object)
     contentNode.streamFormat = directStreamFormat(url, valueOrEmpty(item.streamFormat))
     logPlayback("streamFormat " + contentNode.streamFormat)
     cfg = m.top.config
+    isPlexUrl = false
     if m.isLive and cfg <> invalid and valueOrEmpty(cfg.baseUrl) <> "" and Left(url, Len(cfg.baseUrl)) = cfg.baseUrl then
+        isPlexUrl = true
         ' Plex ties a transcode session to the client that started it, and
         ' segment requests carry no query string of their own
-        contentNode.live = true
         contentNode.HttpHeaders = [
             "X-Plex-Token:" + valueOrEmpty(cfg.token),
             "X-Plex-Client-Identifier:" + valueOrEmpty(cfg.clientId),
@@ -223,6 +224,14 @@ sub playDirect(url as String, item as Object)
             "X-Plex-Platform:Roku",
             "X-Plex-Device:Roku"
         ]
+    end if
+    ' Sports/cable HLS often ships a multi-hour EVENT/DVR window. Without live
+    ' + a huge playStart, Roku joins at segment 0 (broadcast start). Official
+    ' guidance: seek ~999999 and let the player clamp to the live edge.
+    if m.isSport or m.isLive or isPlexUrl then
+        contentNode.live = true
+        contentNode.playStart = 999999
+        logPlayback("live edge seek playStart=999999")
     end if
     m.video.content = contentNode
     m.video.control = "play"

@@ -72,6 +72,8 @@ sub exec()
         m.top.response = tuneLiveChannel(cfg, m.top.item)
     else if action = "sportsFeed" then
         m.top.response = fetchSportsFeed(cfg)
+    else if action = "refreshSportsStream" then
+        m.top.response = refreshSportsStream(cfg, m.top.item)
     else if action = "resolveScores" then
         m.top.response = resolveSportsScores(cfg, m.top.item)
     else if action = "cableEpg" then
@@ -5500,6 +5502,103 @@ function resolveSportsScores(cfg as Object, payload as Object) as Object
             }
         end if
     end while
+end function
+
+' Re-read the sports/cable feed and return a fresh streamUrl for promote.
+' item: { eventId?, eventTitle?, streamLabel?, url? } — falls back to item.url.
+function refreshSportsStream(cfg as Object, item as Object) as Object
+    staleUrl = ""
+    eventId = ""
+    eventTitle = ""
+    streamLabel = ""
+    if item <> invalid then
+        if item.url <> invalid then staleUrl = safeToStr(item.url)
+        if item.streamUrl <> invalid and staleUrl = "" then staleUrl = safeToStr(item.streamUrl)
+        if item.eventId <> invalid then eventId = safeToStr(item.eventId)
+        if item.eventTitle <> invalid then eventTitle = safeToStr(item.eventTitle)
+        if eventTitle = "" and item.title <> invalid then eventTitle = safeToStr(item.title)
+        if item.streamLabel <> invalid then streamLabel = safeToStr(item.streamLabel)
+    end if
+
+    feed = fetchSportsFeed(cfg)
+    if feed = invalid or feed.ok <> true then
+        return {
+            ok: false,
+            error: "Could not refresh sports feed",
+            streamUrl: staleUrl,
+            streamFormat: "",
+            stale: true
+        }
+    end if
+
+    matched = findSportsStreamInRows(feed.rows, eventId, eventTitle, streamLabel)
+    if matched = invalid or safeToStr(matched.streamUrl) = "" then
+        return {
+            ok: false,
+            error: "Stream not found in fresh feed",
+            streamUrl: staleUrl,
+            streamFormat: "",
+            stale: true
+        }
+    end if
+
+    return {
+        ok: true,
+        streamUrl: matched.streamUrl,
+        streamFormat: safeToStr(matched.streamFormat),
+        title: safeToStr(matched.eventTitle),
+        stale: false
+    }
+end function
+
+function findSportsStreamInRows(rows as Object, eventId as String, eventTitle as String, streamLabel as String) as Object
+    if rows = invalid then return invalid
+    wantId = LCase(eventId)
+    wantTitle = LCase(eventTitle)
+    wantLabel = LCase(streamLabel)
+    titleFallback = invalid
+
+    for each rowData in rows
+        items = invalid
+        if rowData <> invalid then items = rowData.items
+        if items <> invalid then
+            for each ev in items
+                if ev <> invalid then
+                    idMatch = (wantId <> "" and LCase(safeToStr(ev.id)) = wantId)
+                    titleMatch = (wantTitle <> "" and LCase(safeToStr(ev.title)) = wantTitle)
+                    if idMatch or titleMatch then
+                        streams = ev.streams
+                        if streams = invalid then streams = []
+                        if streams.count() = 0 and safeToStr(ev.streamUrl) <> "" then
+                            streams = [{ title: "Stream 1", streamUrl: ev.streamUrl, streamFormat: ev.streamFormat }]
+                        end if
+
+                        chosen = invalid
+                        if wantLabel <> "" then
+                            for each s in streams
+                                if LCase(safeToStr(s.title)) = wantLabel then
+                                    chosen = s
+                                    exit for
+                                end if
+                            end for
+                        end if
+                        if chosen = invalid and streams.count() > 0 then chosen = streams[0]
+
+                        if chosen <> invalid and safeToStr(chosen.streamUrl) <> "" then
+                            result = {
+                                streamUrl: safeToStr(chosen.streamUrl),
+                                streamFormat: safeToStr(chosen.streamFormat),
+                                eventTitle: safeToStr(ev.title)
+                            }
+                            if idMatch then return result
+                            if titleFallback = invalid then titleFallback = result
+                        end if
+                    end if
+                end if
+            end for
+        end if
+    end for
+    return titleFallback
 end function
 
 function fetchSportsFeed(cfg as Object) as Object
