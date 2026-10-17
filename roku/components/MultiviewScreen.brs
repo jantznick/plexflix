@@ -748,7 +748,12 @@ sub showOverlay()
     m.hintBar.visible = true
     layout = ""
     if m.session <> invalid then layout = layoutName(asString(m.session.layout))
-    m.layoutLabel.text = layout
+    ' Instant Replay — * / Options opens the TV settings on many Rokus while Video plays
+    if layout <> "" then
+        m.layoutLabel.text = layout + "   ·   Instant Replay to switch"
+    else
+        m.layoutLabel.text = ""
+    end if
     paintFocus()
     m.hideTimer.control = "stop"
     m.hideTimer.control = "start"
@@ -857,7 +862,12 @@ function onKeyEvent(key as String, press as Boolean) as Boolean
         moveFocus(key)
     else if key = "OK" or key = "play" then
         promoteFocused()
+    else if key = "instantreplay" or key = "replay" then
+        ' * / Options is stolen by the Roku system settings overlay while a
+        ' Video node is on screen — Instant Replay always reaches the channel.
+        cycleLayout()
     else if key = "options" then
+        ' Still try * when the OS doesn't intercept it (some sticks / remotes)
         cycleLayout()
     else if key = "fastforward" then
         rotateFeeds(1)
