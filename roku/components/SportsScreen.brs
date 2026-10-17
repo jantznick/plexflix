@@ -570,6 +570,14 @@ function toggleMultiview(pick as Object) as String
     return message
 end function
 
+function clearMultiview() as String
+    if m.multi.count() = 0 then return "Multiview is already empty"
+    m.multi = []
+    paintMultiTray()
+    refreshMultiviewRows()
+    return "Cleared multiview"
+end function
+
 sub toggleFocusedEvent()
     if m.currentIndex >= m.events.count() then return
     item = m.events[m.currentIndex]
@@ -648,6 +656,9 @@ sub openFeedOptions()
             actions.push({ label: "Watch Multiview", act: "watchMulti" })
         end if
     end if
+    if m.multiEnabled = true and m.multi.count() > 0 then
+        actions.push({ label: "Clear Multiview", act: "clearMulti" })
+    end if
     actions.push({ label: "Close", act: "close" })
 
     subText = "Reload the sports feed from the CDN"
@@ -721,6 +732,10 @@ sub onMenuSelected()
         closeActionMenu()
         message = requestMultiview()
         if message <> "" then m.statusLabel.text = message
+    else if action.act = "clearMulti" then
+        closeActionMenu()
+        message = clearMultiview()
+        if message <> "" then m.statusLabel.text = message
     end if
 end sub
 
@@ -728,7 +743,7 @@ end sub
 function requestMultiview() as String
     if not m.multiEnabled then return ""
     if m.multi.count() < 2 then return "Pick at least 2 games with * first"
-    m.top.multiviewRequested = { streams: m.multi, layout: "grid" }
+    m.top.multiviewRequested = { streams: m.multi, layout: "pip" }
     return ""
 end function
 
