@@ -553,18 +553,12 @@ sub promoteFocused()
 
     format = asString(stream.streamFormat)
     if format = "" then format = "hls"
-    eventTitle = asString(stream.eventTitle)
-    if eventTitle = "" then eventTitle = asString(stream.title)
     m.pendingPromote = {
         title: asString(stream.title),
-        eventTitle: eventTitle,
-        eventId: asString(stream.eventId),
-        streamLabel: asString(stream.streamLabel),
         description: asString(stream.league),
         mediaType: "sport",
         key: url,
         streamUrl: url,
-        url: url,
         streamFormat: format,
         hdPosterUrl: asString(stream.hdPosterUrl),
         ratingKey: "",
@@ -575,7 +569,7 @@ sub promoteFocused()
 
     ' Don't block on the pause PUT — that left us stuck on "Opening game..."
     ' when the response shape didn't match. Free the decoder, ask the server
-    ' to drop the mosaic in the background, then refresh the feed URL and play.
+    ' to drop the mosaic in the background, then open the player.
     m.promoted = true
     m.switching = false
     m.settleTimer.control = "stop"
@@ -599,42 +593,8 @@ end sub
 
 sub onPromoteReady()
     item = m.pendingPromote
-    if item = invalid or m.closing then
-        m.pendingPromote = invalid
-        return
-    end if
-    ' Re-fetch the sports feed so we don't replay a hours-old signed URL
-    ' (EVENT playlists that start at broadcast tip-off).
-    setStatus("Refreshing stream...")
-    m.refreshTask = createObject("roSGNode", "PlexTask")
-    m.refreshTask.config = m.top.config
-    m.refreshTask.action = "refreshSportsStream"
-    m.refreshTask.item = item
-    m.refreshTask.observeField("response", "onPromoteStreamRefreshed")
-    m.refreshTask.control = "RUN"
-end sub
-
-sub onPromoteStreamRefreshed()
-    item = m.pendingPromote
     m.pendingPromote = invalid
     if item = invalid or m.closing then return
-    response = invalid
-    if m.refreshTask <> invalid then response = m.refreshTask.response
-    url = asString(item.streamUrl)
-    format = asString(item.streamFormat)
-    if response <> invalid and asString(response.streamUrl) <> "" then
-        url = asString(response.streamUrl)
-        if asString(response.streamFormat) <> "" then format = asString(response.streamFormat)
-        if response.stale = true then
-            print "[plexflix:multiview] promote using stale URL (feed refresh missed)"
-        else
-            print "[plexflix:multiview] promote refreshed URL " + Left(url, 96)
-        end if
-    end if
-    if format = "" then format = "hls"
-    item.key = url
-    item.streamUrl = url
-    item.streamFormat = format
     clearStatus()
     m.top.playRequested = item
 end sub

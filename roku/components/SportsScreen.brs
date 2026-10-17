@@ -633,9 +633,6 @@ sub toggleFocusedEvent()
     message = toggleMultiview({
         url: eventStreamUrl(item),
         title: asString(item.title),
-        eventTitle: asString(item.title),
-        eventId: asString(item.id),
-        streamLabel: "",
         league: asString(item.league),
         streamFormat: asString(item.streamFormat),
         hdPosterUrl: asString(item.hdPosterUrl)

@@ -201,9 +201,6 @@ sub toggleFocusedStream()
     m.top.multiviewToggle = {
         url: asString(stream.streamUrl),
         title: title,
-        eventTitle: asString(m.titleLabel.text),
-        eventId: asString(m.eventItem.id),
-        streamLabel: asString(stream.title),
         league: m.metaLabel.text,
         streamFormat: format,
         hdPosterUrl: asString(m.eventItem.hdPosterUrl)
