@@ -1,186 +1,186 @@
-"""A real session, with real ffmpeg ingests and a real GStreamer compositor,
-fed from local HLS files so no network is involved.
-"""
+"""Mosaic command shaping and a smoke encode when ffmpeg is available."""
 
 import os
 import shutil
 import subprocess
 import tempfile
-import time
 import unittest
 
-from multiview import compositor as compositor_module
-from multiview import ingest as ingest_module
+from multiview.mosaic import build_command
 from multiview.session import Session
 
-HAVE_TOOLS = shutil.which("ffmpeg") is not None and compositor_module.available()
+HAVE_FFMPEG = shutil.which("ffmpeg") is not None
 
 
-def wait_for(predicate, timeout, step=0.25):
-    deadline = time.monotonic() + timeout
-    while time.monotonic() < deadline:
-        if predicate():
-            return True
-        time.sleep(step)
-    return False
+class MosaicCommandTests(unittest.TestCase):
+    def test_live_feed_and_placeholder_are_overlaid_on_canvas(self):
+        feeds = [
+            {"live": True, "url": "http://127.0.0.1:9/r/x.m3u8", "title": "A"},
+            {"live": False, "url": "", "title": "B"},
+        ]
+        placements = [
+            (0, {"x": 0, "y": 270, "w": 960, "h": 540}, 0),
+            (1, {"x": 960, "y": 270, "w": 960, "h": 540}, 1),
+        ]
+        cmd = build_command("ffmpeg", feeds, placements, "/tmp/mosaic-out", {
+            "fps": 20, "video_bitrate": "2M", "font_file": "",
+        })
+        joined = " ".join(cmd)
+        self.assertIn("filter_complex", joined)
+        self.assertIn("overlay=0:270", joined)
+        self.assertIn("overlay=960:270", joined)
+        self.assertIn("http://127.0.0.1:9/r/x.m3u8", joined)
+        self.assertIn("color=c=0x1c1c1e", joined)
+        self.assertIn("var_stream_map", joined)
+        self.assertIn("name:a0", joined)
+        self.assertIn("name:a1", joined)
+        self.assertIn("anullsrc", joined)
+        self.assertTrue(cmd[-1].endswith("%v.m3u8"))
 
 
-def make_feed(path, audio=True, seconds=120):
-    os.makedirs(os.path.dirname(path), exist_ok=True)
-    cmd = ["ffmpeg", "-hide_banner", "-loglevel", "error",
-           "-f", "lavfi", "-i", "testsrc2=s=640x360:r=30"]
-    if audio:
-        cmd += ["-f", "lavfi", "-i", "sine=f=330:r=48000", "-c:a", "aac"]
-    cmd += ["-t", str(seconds), "-c:v", "libx264", "-preset", "ultrafast", "-g", "60",
-            "-f", "hls", "-hls_time", "2", "-hls_list_size", "0", path]
-    subprocess.run(cmd, check=True)
-
-
-@unittest.skipUnless(compositor_module.available(), "needs GStreamer (python3-gi)")
-class PushTests(unittest.TestCase):
-    def test_repeated_frames_are_pushed_as_separate_buffers(self):
-        # A frozen frame or slate is pushed many times; each push must be its
-        # own buffer, or retiming it rewrites one the pipeline still holds
-        comp = compositor_module.Compositor("/tmp", 1, {"fps": 30})
-        comp.frame_ns = 1000
-        pushed = []
-
-        class Src:
-            def emit(self, signal, buf):
-                pushed.append(buf)
-
-        comp._video_src = [Src()]
-        frame = bytes(ingest_module.FRAME_BYTES)
-        for n in range(3):
-            comp.push_video(0, frame, n)
-        self.assertEqual([buf.pts for buf in pushed], [0, 1000, 2000])
-
-
-@unittest.skipUnless(HAVE_TOOLS, "needs ffmpeg and GStreamer (python3-gi)")
-class SessionTests(unittest.TestCase):
-    @classmethod
-    def setUpClass(cls):
-        cls.tmp = tempfile.mkdtemp(prefix="multiview-test-")
-        cls.feed = os.path.join(cls.tmp, "feed", "index.m3u8")
-        cls.silent = os.path.join(cls.tmp, "silent", "index.m3u8")
-        make_feed(cls.feed)
-        make_feed(cls.silent, audio=False)
-
-    @classmethod
-    def tearDownClass(cls):
-        shutil.rmtree(cls.tmp, ignore_errors=True)
-
-    def setUp(self):
-        self.saved = {name: getattr(ingest_module, name) for name in ("FREEZE_SECONDS", "RESTART_AFTER")}
-        ingest_module.FREEZE_SECONDS = 1.5
-        ingest_module.RESTART_AFTER = 3
-        self.root = tempfile.mkdtemp(prefix="sessions-", dir=self.tmp)
-        self.settings = {"ffmpeg": "ffmpeg", "encoder": "libx264", "fps": 30, "video_bitrate": "2M",
-                         "font_file": "", "allow_local_inputs": True}
-        self.sessions = []
-
-    def tearDown(self):
-        for session in self.sessions:
-            session.stop()
-        for name, value in self.saved.items():
-            setattr(ingest_module, name, value)
-
-    def make_session(self, urls, layout="grid"):
-        streams = [{"url": url, "title": f"Game {i + 1}"} for i, url in enumerate(urls)]
-        session = Session("0" * 8 + "-0000-0000-0000-" + "0" * 12, streams, layout, self.root, self.settings)
-        self.sessions.append(session)
-        return session
-
-    def copy_feed(self, name):
-        target = os.path.join(self.tmp, name)
-        shutil.copytree(os.path.dirname(self.feed), target)
-        return os.path.join(target, "index.m3u8")
-
-    def read(self, session, name):
+@unittest.skipUnless(HAVE_FFMPEG, "needs ffmpeg")
+class MosaicEncodeTests(unittest.TestCase):
+    def test_placeholder_only_writes_hls_segments(self):
+        # Finite lavfi graph (same shape as mosaic, smaller) — proves var_stream_map
+        # names v/a0/a1 without waiting on a live 1080p encode.
+        tmp = tempfile.mkdtemp(prefix="mosaic-")
         try:
-            with open(os.path.join(session.dir, name), encoding="utf-8") as handle:
-                return handle.read()
-        except FileNotFoundError:
-            return ""
+            out = os.path.join(tmp, "out")
+            os.makedirs(out)
+            cmd = [
+                "ffmpeg", "-hide_banner", "-nostdin", "-loglevel", "error", "-y",
+                "-f", "lavfi", "-i", "color=c=black:s=640x360:r=10",
+                "-f", "lavfi", "-i", "color=c=0x1c1c1e:s=320x180:r=10",
+                "-f", "lavfi", "-i", "color=c=0x1c1c1e:s=320x180:r=10",
+                "-f", "lavfi", "-i", "anullsrc=channel_layout=stereo:sample_rate=48000",
+                "-t", "3",
+                "-filter_complex",
+                "[1:v]format=yuv420p[t0];[2:v]format=yuv420p[t1];"
+                "[0:v][t0]overlay=0:90:shortest=1[o0];[o0][t1]overlay=320:90:shortest=1[vout];"
+                "[3:a]asplit=2[s0][s1];"
+                "[s0]aformat=sample_rates=48000:channel_layouts=stereo[a0];"
+                "[s1]aformat=sample_rates=48000:channel_layouts=stereo[a1]",
+                "-map", "[vout]", "-map", "[a0]", "-map", "[a1]",
+                "-c:v", "libx264", "-preset", "ultrafast", "-c:a", "aac", "-b:a", "64k",
+                "-shortest",
+                "-f", "hls", "-hls_time", "1", "-hls_list_size", "0",
+                "-var_stream_map",
+                "v:0,agroup:aud,name:v a:0,agroup:aud,default:yes,name:a0 a:1,agroup:aud,name:a1",
+                "-hls_segment_filename", os.path.join(out, "%v_%05d.ts"),
+                os.path.join(out, "%v.m3u8"),
+            ]
+            subprocess.run(cmd, check=True, timeout=30)
+            for name in ("v.m3u8", "a0.m3u8", "a1.m3u8"):
+                path = os.path.join(out, name)
+                self.assertTrue(os.path.isfile(path), name)
+                with open(path, encoding="utf-8") as handle:
+                    self.assertIn("#EXTINF", handle.read())
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
 
-    def statuses(self, session):
-        return [t["status"] for t in session.snapshot()["tiles"]]
 
-    def segment_count(self, session):
-        return self.read(session, "v.m3u8").count("#EXTINF")
+class SessionWarmTests(unittest.TestCase):
+    def test_session_requires_relay(self):
+        with self.assertRaises(ValueError):
+            Session("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+                    [{"url": "http://example/a.m3u8"}, {"url": "http://example/b.m3u8"}],
+                    "grid", "/tmp", {}, relay=None)
 
-    def last_sequence(self, session):
-        for line in self.read(session, "v.m3u8").splitlines():
-            if line.startswith("#EXT-X-MEDIA-SEQUENCE:"):
-                return int(line.split(":")[1]) + self.segment_count(session)
-        return 0
 
-    def test_one_feed_dying_leaves_the_others_and_the_output_alone(self):
-        broken = self.copy_feed("broken")
-        session = self.make_session([self.feed, broken])
-        session.start()
-        self.assertTrue(wait_for(lambda: session.state == "running", 40), session.snapshot())
-        self.assertTrue(wait_for(lambda: self.statuses(session) == ["live", "live"], 20), session.snapshot())
-        self.assertIn('URI="a1.m3u8"', self.read(session, "master.m3u8"))
+class _FakeRelay:
+    def __init__(self, fail_urls=None):
+        self.fail_urls = set(fail_urls or [])
+        self.port = 9
 
-        os.rename(os.path.dirname(broken), os.path.dirname(broken) + ".off")
-        session.feeds[1].ingest._kill()
-        self.assertTrue(wait_for(lambda: self.statuses(session) == ["live", "reconnecting"], 15),
-                        session.snapshot())
-        before = self.last_sequence(session)
-        time.sleep(6)
-        self.assertGreater(self.last_sequence(session), before, "output stopped while a feed was down")
-        self.assertEqual(session.generation, 1)
-        self.assertEqual(session.snapshot()["tiles"][0]["status"], "live")
-        self.assertEqual(session.state, "running")
+    def warm(self, urls):
+        return {url: url not in self.fail_urls for url in urls}
 
-        os.rename(os.path.dirname(broken) + ".off", os.path.dirname(broken))
-        self.assertTrue(wait_for(lambda: self.statuses(session) == ["live", "live"], 30), session.snapshot())
-        self.assertEqual(session.generation, 1)
-        self.assertNotIn("#EXT-X-DISCONTINUITY\n", self.read(session, "v.m3u8"))
+    def url_for(self, upstream_url):
+        return f"http://127.0.0.1:{self.port}/r/fake.m3u8"
 
-    def test_layout_and_order_changes_apply_without_a_restart(self):
-        session = self.make_session([self.feed, self.feed, self.feed])
-        session.start()
-        self.assertTrue(wait_for(lambda: session.state == "running", 40), session.snapshot())
-        session.reconfigure(layout="spotlight", order=[2, 0, 1])
+
+class _FakeMosaic:
+    def __init__(self, *args, **kwargs):
+        self.specs = args[1] if len(args) > 1 else kwargs.get("feeds")
+        self.started = False
+
+    def start(self):
+        self.started = True
+
+    def stop(self):
+        return None
+
+    def poll_error(self):
+        return None
+
+
+class SessionReconfigureTests(unittest.TestCase):
+    def _session(self, count=2):
+        streams = [
+            {"url": f"http://example/{i}.m3u8", "title": chr(ord("A") + i)}
+            for i in range(count)
+        ]
+        return Session(
+            "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+            streams,
+            "grid",
+            "/tmp",
+            {},
+            relay=_FakeRelay(),
+            mosaic_factory=_FakeMosaic,
+        )
+
+    def test_reconfigure_accepts_float_order_from_roku_json(self):
+        session = self._session()
+        session._mosaic = _FakeMosaic()
+        session.reconfigure(order=[1.0, 0.0])
+        self.assertEqual(session.order, [1, 0])
         snap = session.snapshot()
-        self.assertEqual([t["stream"] for t in snap["tiles"]], [2, 0, 1])
-        self.assertEqual((snap["tiles"][0]["w"], snap["tiles"][0]["h"]), (1440, 810))
-        self.assertEqual(session._compositor.pad_rect(2), {"x": 0, "y": 135, "w": 1440, "h": 810})
-        before = self.last_sequence(session)
-        self.assertTrue(wait_for(lambda: self.last_sequence(session) > before + 1, 15))
-        self.assertEqual(session.generation, 1)
-        self.assertEqual(session.state, "running")
+        self.assertEqual(snap["tiles"][0]["stream"], 1)
+        self.assertEqual(snap["tiles"][0]["title"], "B")
 
-    def test_feed_without_audio_still_plays(self):
-        session = self.make_session([self.feed, self.silent])
-        session.start()
-        self.assertTrue(wait_for(lambda: self.statuses(session) == ["live", "live"], 40), session.snapshot())
-        self.assertFalse(session.feeds[1].ingest.has_audio)
-        self.assertTrue(wait_for(lambda: self.read(session, "a1.m3u8").count("#EXTINF") >= 2, 20))
+    def test_feeds_slice_is_decoded_order_only_moves_tiles(self):
+        # feeds[:2] are live; rotating order does not change which feeds decode
+        session = self._session(count=3)
+        self.assertTrue(session.feeds[0].live)
+        self.assertTrue(session.feeds[1].live)
+        self.assertFalse(session.feeds[2].live)
+        session._mosaic = _FakeMosaic()
+        session.reconfigure(order=[2, 0, 1])
+        self.assertTrue(session.feeds[0].live)
+        self.assertTrue(session.feeds[1].live)
+        self.assertFalse(session.feeds[2].live)
+        snap = session.snapshot()
+        self.assertEqual(snap["tiles"][0]["stream"], 2)
+        self.assertEqual(snap["tiles"][0]["status"], "placeholder")
+        self.assertEqual(snap["tiles"][1]["stream"], 0)
+        self.assertEqual(snap["tiles"][2]["stream"], 1)
 
-    def test_failed_pipeline_is_rebuilt_as_a_discontinuity(self):
-        session = self.make_session([self.feed, self.feed])
-        session.start()
-        self.assertTrue(wait_for(lambda: session.state == "running", 40), session.snapshot())
-        session._pump_error = "simulated pipeline failure"
-        self.assertTrue(wait_for(lambda: session.generation == 2, 10))
-        self.assertTrue(wait_for(lambda: "gen-2/" in self.read(session, "v.m3u8"), 20))
-        self.assertIn("#EXT-X-DISCONTINUITY\n", self.read(session, "v.m3u8"))
-        self.assertIn("gen-2/", self.read(session, "a1.m3u8"))
-        self.assertTrue(wait_for(lambda: session.state == "running", 20))
-        self.assertEqual(self.statuses(session), ["live", "live"])
+    def test_pause_stops_mosaic_for_fullscreen_promote(self):
+        session = self._session()
+        session._mosaic = _FakeMosaic()
+        session.state = "running"
+        session.reconfigure(paused=True)
+        self.assertTrue(session.paused)
+        self.assertEqual(session.state, "paused")
+        self.assertIsNone(session._mosaic)
+        session.reconfigure(paused=False)
+        self.assertFalse(session.paused)
+        self.assertEqual(session.state, "starting")
 
-    def test_stop_cleans_up(self):
-        session = self.make_session([self.feed, self.feed])
-        session.start()
-        self.assertTrue(wait_for(lambda: session.state == "running", 40))
-        procs = [f.ingest._proc for f in session.feeds]
-        session.stop()
-        self.sessions.remove(session)
-        self.assertFalse(os.path.exists(session.dir))
-        self.assertTrue(all(p is None or p.poll() is not None for p in procs))
+    def test_warm_failure_slates_that_feed_so_mosaic_still_starts(self):
+        bad = "http://example/1.m3u8"
+        session = self._session(count=2)
+        session._relay = _FakeRelay(fail_urls={bad})
+        session._mosaic_factory = _FakeMosaic
+        session._start_mosaic()
+        self.assertEqual(session._mosaic_live, {0})
+        self.assertTrue(session._mosaic.started)
+        self.assertTrue(session._mosaic.specs[0]["live"])
+        self.assertFalse(session._mosaic.specs[1]["live"])
+        snap = session.snapshot()
+        self.assertEqual(snap["tiles"][0]["status"], "starting")
+        self.assertEqual(snap["tiles"][1]["status"], "placeholder")
 
 
 if __name__ == "__main__":

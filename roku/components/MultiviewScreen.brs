@@ -17,6 +17,10 @@ sub init()
     m.retryTimer.observeField("fire", "onRetry")
     m.stallTimer = m.top.findNode("stallTimer")
     m.stallTimer.observeField("fire", "onStall")
+    m.rotateTimer = m.top.findNode("rotateTimer")
+    m.rotateTimer.observeField("fire", "onRotateDebounced")
+    m.promoteTimer = m.top.findNode("promoteTimer")
+    m.promoteTimer.observeField("fire", "onPromoteReady")
 
     m.streams = []
     m.session = invalid
@@ -36,9 +40,13 @@ sub init()
     m.shownOnce = false
     m.focusAfterSwitch = invalid
     m.switchMessage = ""
-    m.requestedLayout = "grid"
+    m.requestedLayout = "pip"
+    m.pendingOrder = invalid
+    m.switchGen = -1
+    m.pendingPromote = invalid
 
     m.video.focusable = false
+    m.video.enableUI = false
     m.video.observeField("state", "onVideoState")
     m.video.observeField("availableAudioTracks", "onAudioTracks")
     m.top.observeField("focusedChild", "onFocusedChild")
@@ -52,7 +60,7 @@ sub onContentSet()
     content = m.top.content
     if content = invalid or content.streams = invalid then return
     m.streams = content.streams
-    m.requestedLayout = "grid"
+    m.requestedLayout = "pip"
     if content.layout <> invalid and content.layout <> "" then m.requestedLayout = content.layout
     createSession()
 end sub
@@ -63,7 +71,7 @@ sub createSession()
     for each stream in m.streams
         streams.push({ url: asString(stream.url), title: asString(stream.title) })
     end for
-    setStatus("Starting multiview with " + StrI(streams.count()).Trim() + " games...")
+    setStatus("Starting multiview with " + StrI(streams.count()).Trim() + " streams...")
 
     m.createTask = createObject("roSGNode", "MultiviewTask")
     m.createTask.config = m.top.config
@@ -111,7 +119,9 @@ sub onPolled()
             if response.code = 404 and not m.recreated then
                 m.recreated = true
                 stopVideo()
+                m.session = invalid
                 m.sessionId = ""
+                m.top.sessionId = ""
                 createSession()
             end if
         end if
@@ -127,17 +137,25 @@ sub adoptSession(session as Object)
     m.sessionId = asString(session.id)
     m.top.sessionId = m.sessionId
 
+    if m.switching then
+        tryFinishSwitch(session)
+        return
+    end if
+
     if session.state = "error" and not m.playing then
         showError(asString(session.error))
         return
     end if
 
-    if not m.switching then
-        m.tiles = session.tiles
-        if m.tiles = invalid then m.tiles = []
-        if m.focus >= m.tiles.count() then m.focus = 0
-        paintTiles()
+    if session.state = "paused" then
+        ' Fullscreen owns the decoder; mosaic stays down until resume
+        return
     end if
+
+    m.tiles = session.tiles
+    if m.tiles = invalid then m.tiles = []
+    if m.focus >= m.tiles.count() then m.focus = 0
+    paintTiles()
 
     if session.state = "running" then
         if m.pollTimer.duration <> 5 then
@@ -150,14 +168,15 @@ sub adoptSession(session as Object)
     end if
 end sub
 
-' "· 2 of 3 games ready" while the server is still bringing feeds up
+' "· 2 of 3 streams ready" while the server is still bringing feeds up
 function readySuffix() as String
     if m.tiles.count() = 0 then return "..."
     ready = 0
     for each tile in m.tiles
-        if tile.status <> "starting" then ready = ready + 1
+        ' placeholder tiles are intentionally not decoding
+        if tile.status <> "starting" and tile.status <> "reconnecting" then ready = ready + 1
     end for
-    return "...  " + StrI(ready).Trim() + " of " + StrI(m.tiles.count()).Trim() + " games ready"
+    return "...  " + StrI(ready).Trim() + " of " + StrI(m.tiles.count()).Trim() + " streams ready"
 end function
 
 '--------------------------------------------------------------------
@@ -165,7 +184,12 @@ end function
 '--------------------------------------------------------------------
 
 sub startPlayback()
-    if m.session = invalid then return
+    if m.promoted or m.closing then return
+    if m.session = invalid or m.sessionId = "" then return
+    if asString(m.session.id) <> m.sessionId then return
+    if asString(m.session.state) <> "running" then return
+    ensureVideoNode()
+    if m.video = invalid then return
     base = ""
     cfg = m.top.config
     if cfg <> invalid and cfg.multiviewUrl <> invalid then base = cfg.multiviewUrl.Trim()
@@ -178,23 +202,69 @@ sub startPlayback()
     node.url = base + asString(m.session.playlistUrl)
     node.streamFormat = "hls"
     node.title = "Multiview"
-    node.live = true
+    ' Do not mark live: Roku routes FF/RW to trickplay for live ContentNodes
+    ' and MultiviewScreen almost never sees those keys. Same as sports direct play.
     m.video.content = node
     m.video.control = "play"
     m.playing = true
-    if not m.switching then setStatus("Loading games...")
+    if not m.switching then setStatus("Loading streams...")
     restartStallTimer()
     ensureFocus()
 end sub
 
+' Soft stop — keeps the Video node. Prefer releaseVideo() before handing the
+' decoder to VideoScreen (control=stop alone is not enough for sports HLS).
 sub stopVideo()
     m.stallTimer.control = "stop"
     m.retryTimer.control = "stop"
-    m.video.control = "stop"
+    if m.video <> invalid then m.video.control = "stop"
     m.playing = false
 end sub
 
+' Tear the Video node out so the decoder actually releases for fullscreen.
+sub releaseVideo()
+    m.stallTimer.control = "stop"
+    m.retryTimer.control = "stop"
+    m.playing = false
+    if m.video = invalid then return
+    vid = m.video
+    m.video = invalid
+    vid.unobserveField("state")
+    vid.unobserveField("availableAudioTracks")
+    vid.control = "stop"
+    vid.content = invalid
+    parent = vid.getParent()
+    if parent <> invalid then parent.removeChild(vid)
+end sub
+
+sub ensureVideoNode()
+    if m.video <> invalid then return
+    vid = createObject("roSGNode", "Video")
+    vid.id = "video"
+    vid.width = 1920
+    vid.height = 1080
+    vid.enableUI = false
+    vid.focusable = false
+    vid.notificationInterval = 1
+    ' Keep overlays above the picture: insert under tileLayer
+    insertAt = m.top.getChildCount()
+    tileLayer = m.top.findNode("tileLayer")
+    if tileLayer <> invalid then
+        for i = 0 to m.top.getChildCount() - 1
+            if m.top.getChild(i).isSameNode(tileLayer) then
+                insertAt = i
+                exit for
+            end if
+        end for
+    end if
+    m.top.insertChild(vid, insertAt)
+    m.video = vid
+    m.video.observeField("state", "onVideoState")
+    m.video.observeField("availableAudioTracks", "onAudioTracks")
+end sub
+
 sub onVideoState()
+    if m.video = invalid or m.promoted or m.closing then return
     state = m.video.state
     print "[plexflix:multiview] state=" + state
     if state = "playing" or state = "paused" or state = "buffering" then ensureFocus()
@@ -211,9 +281,7 @@ sub onVideoState()
         if not m.switching and m.notice = "" then setStatus("Buffering...")
         restartStallTimer()
     else if state = "error" or state = "finished" then
-        ' A live mosaic never legitimately ends, and the server keeps it going
-        ' through feed trouble, so a stop here is worth retrying quietly
-        if m.promoted or m.closing then return
+        ' A live mosaic never legitimately ends; retry quietly
         print "[plexflix:multiview] " + state + " " + asString(m.video.errorMsg)
         m.playing = false
         m.stallTimer.control = "stop"
@@ -236,7 +304,8 @@ sub restartStallTimer()
 end sub
 
 sub onStall()
-    if m.video.state = "playing" or m.promoted or m.closing then return
+    if m.promoted or m.closing then return
+    if m.video <> invalid and m.video.state = "playing" then return
     stopVideo()
     setStatus("Multiview stalled, reconnecting...")
     m.retryTimer.control = "start"
@@ -249,6 +318,7 @@ end sub
 ' The server names its audio renditions "Tile 1".."Tile N" by slot. Matched
 ' by name first, since nothing promises the firmware keeps playlist order
 sub applyAudio()
+    if m.video = invalid then return
     tracks = m.video.availableAudioTracks
     if tracks = invalid or tracks.count() = 0 or m.tiles.count() = 0 then return
 
@@ -292,24 +362,70 @@ sub cycleLayout()
     requestUpdate({ layout: nextLayout }, "Switching to " + layoutName(nextLayout) + "...")
 end sub
 
-' Moves the focused game into the first slot: the big tile in Spotlight and
-' Picture in picture, top left in Grid
-sub makeMain()
-    if m.session = invalid or m.session.order = invalid or m.focus = 0 then return
-    order = m.session.order
-    focused = order[m.focus]
-    reordered = [focused]
-    for each stream in order
-        if stream <> focused then reordered.push(stream)
-    end for
+' Rotate which stream sits in each layout slot. FF/RW call this; taps within
+' ~350ms coalesce into one PUT so two quick presses skip ahead by two.
+sub rotateFeeds(delta as Integer)
+    if m.session = invalid or m.session.order = invalid then return
+    if m.session.order.count() < 2 then return
+
+    base = m.pendingOrder
+    if base = invalid then
+        base = []
+        for each stream in m.session.order
+            base.push(Int(stream))
+        end for
+    end if
+    m.pendingOrder = rotatedOrder(base, delta)
     m.focusAfterSwitch = 0
-    requestUpdate({ order: reordered }, "Moving " + tileTitle(m.focus) + " to the main spot...")
+    print "[plexflix:multiview] rotate delta=" + StrI(delta).Trim() + " pending -> " + FormatJson(m.pendingOrder)
+
+    ' While a mosaic restart is already in flight, just queue; onSettled flushes
+    if m.switching then return
+    m.rotateTimer.control = "stop"
+    m.rotateTimer.duration = 0.35
+    m.rotateTimer.control = "start"
+end sub
+
+function rotatedOrder(order as Object, delta as Integer) as Object
+    n = order.count()
+    out = []
+    if n = 0 then return out
+    steps = delta
+    while steps < 0
+        steps = steps + n
+    end while
+    steps = steps MOD n
+    for i = 0 to n - 1
+        out.push(Int(order[(i + steps) MOD n]))
+    end for
+    return out
+end function
+
+sub onRotateDebounced()
+    if m.closing or m.pendingOrder = invalid then return
+    if m.switching then return
+    order = m.pendingOrder
+    m.pendingOrder = invalid
+    if m.session = invalid or m.session.order = invalid then return
+    if order.count() <> m.session.order.count() then return
+    unchanged = true
+    for i = 0 to order.count() - 1
+        if order[i] <> Int(m.session.order[i]) then
+            unchanged = false
+            exit for
+        end if
+    end for
+    if unchanged then return
+    requestUpdate({ order: order }, "Switching streams...")
 end sub
 
 sub requestUpdate(payload as Object, message as String)
     if m.switching or m.sessionId = "" then return
     payload.id = m.sessionId
     m.switchMessage = message
+    m.switching = true
+    hideOverlay()
+    if message <> "" then setStatus(message)
     m.updateTask = createObject("roSGNode", "MultiviewTask")
     m.updateTask.config = m.top.config
     m.updateTask.action = "update"
@@ -320,43 +436,94 @@ end sub
 
 sub onUpdated()
     if m.closing then return
+    ' OK→fullscreen owns the screen; ignore late layout/order PUT responses
+    if m.promoted or m.pendingPromote <> invalid then
+        m.switching = false
+        return
+    end if
     response = m.updateTask.response
     if response = invalid or response.ok <> true then
         err = "Couldn't change the layout"
         if response <> invalid and response.error <> invalid then err = response.error
         m.focusAfterSwitch = invalid
+        m.switching = false
+        m.switchGen = -1
         showNotice(err)
         return
     end if
 
     m.session = response.session
-    m.switching = true
+
     hideOverlay()
     m.tileLayer.visible = false
-    setStatus(m.switchMessage)
-    ' The server applies it on its next frame, but the new arrangement still
-    ' has to travel through the player's live buffer before it is on screen
+    if m.switchMessage <> "" then setStatus(m.switchMessage)
+    ' Stop reading the old mosaic; poll waits for a newer generation then reloads
+    stopVideo()
+    m.switchGen = -1
+    if response.session <> invalid and response.session.generation <> invalid then
+        m.switchGen = Int(response.session.generation)
+    end if
     m.settleTimer.control = "stop"
-    m.settleTimer.duration = 7
+    m.settleTimer.duration = 25
     m.settleTimer.control = "start"
+    tryFinishSwitch(response.session)
 end sub
 
-sub onSettled()
+sub tryFinishSwitch(session as Object)
+    if not m.switching or session = invalid then return
+    if asString(session.state) = "error" then
+        finishSwitch(session, asString(session.error))
+        return
+    end if
+    gen = -1
+    if session.generation <> invalid then gen = Int(session.generation)
+    ' New mosaic is up when generation advances past the one we saw on PUT
+    if asString(session.state) = "running" and gen > m.switchGen then
+        finishSwitch(session, "")
+    end if
+end sub
+
+sub finishSwitch(session as Object, err as String)
+    m.settleTimer.control = "stop"
     m.switching = false
+    m.switchGen = -1
     if m.focusAfterSwitch <> invalid then
         m.focus = m.focusAfterSwitch
         m.focusAfterSwitch = invalid
     end if
-    if m.session <> invalid then
-        m.tiles = m.session.tiles
+    if session <> invalid then
+        m.session = session
+        m.tiles = session.tiles
         if m.tiles = invalid then m.tiles = []
         if m.focus >= m.tiles.count() then m.focus = 0
     end if
     m.tileLayer.visible = true
     paintTiles()
-    if m.video.state = "playing" then clearStatus()
+    if err <> "" then
+        showNotice(err)
+    else if not m.promoted then
+        startPlayback()
+        setStatus("Loading streams...")
+    end if
     applyAudio()
+    if m.pendingOrder <> invalid then
+        onRotateDebounced()
+        return
+    end if
     showOverlay()
+end sub
+
+sub onSettled()
+    ' Failsafe if the new generation never reports running
+    if not m.switching then return
+    print "[plexflix:multiview] switch settle timeout gen=" + StrI(m.switchGen).Trim()
+    if m.session <> invalid then
+        finishSwitch(m.session, "")
+    else
+        m.switching = false
+        m.switchGen = -1
+        setStatus("Loading streams...")
+    end if
 end sub
 
 function layoutName(layout as String) as String
@@ -371,40 +538,87 @@ end function
 '--------------------------------------------------------------------
 
 sub promoteFocused()
+    if m.promoted or m.pendingPromote <> invalid then return
     if m.focus >= m.tiles.count() then return
     tile = m.tiles[m.focus]
-    index = tile.stream
-    if index = invalid or index < 0 or index >= m.streams.count() then return
+    if tile = invalid or tile.stream = invalid then return
+    index = Int(tile.stream)
+    if index < 0 or index >= m.streams.count() then return
     stream = m.streams[index]
-
-    ' Only one decoder: this has to be stopped before the player starts
-    stopVideo()
-    m.promoted = true
-    hideOverlay()
-    clearStatus()
+    ' Normal sports path: LAN roku-feed proxy, same as SportsDetail.
     url = asString(stream.url)
-    m.top.playRequested = {
+    if url = "" then return
+
+    format = asString(stream.streamFormat)
+    if format = "" then format = "hls"
+    m.pendingPromote = {
         title: asString(stream.title),
         description: asString(stream.league),
         mediaType: "sport",
         key: url,
         streamUrl: url,
-        streamFormat: asString(stream.streamFormat),
+        streamFormat: format,
         hdPosterUrl: asString(stream.hdPosterUrl),
         ratingKey: "",
         duration: 0,
         viewOffset: 0
     }
+    print "[plexflix:multiview] promote stream=" + StrI(index).Trim() + " " + url
+
+    ' Don't block on the pause PUT — that left us stuck on "Opening game..."
+    ' when the response shape didn't match. Free the decoder, ask the server
+    ' to drop the mosaic in the background, then open the player.
+    m.promoted = true
+    m.switching = false
+    m.settleTimer.control = "stop"
+    m.pendingOrder = invalid
+    hideOverlay()
+    releaseVideo()
+    setStatus("Opening game...")
+    firePause(true)
+    m.promoteTimer.control = "stop"
+    m.promoteTimer.control = "start"
+end sub
+
+sub firePause(paused as Boolean)
+    if m.sessionId = "" then return
+    task = createObject("roSGNode", "MultiviewTask")
+    task.config = m.top.config
+    task.action = "update"
+    task.item = { id: m.sessionId, paused: paused }
+    task.control = "RUN"
+end sub
+
+sub onPromoteReady()
+    item = m.pendingPromote
+    m.pendingPromote = invalid
+    if item = invalid or m.closing then return
+    clearStatus()
+    m.top.playRequested = item
 end sub
 
 sub onResume()
     if m.top.resume <> true then return
     m.promoted = false
+    m.playing = false
+    m.pendingPromote = invalid
+    ensureVideoNode()
     ensureFocus()
-    if m.session <> invalid and m.session.state = "running" then
-        startPlayback()
-    else
+    ' While the fullscreen player was up the mosaic session can be reaped
+    ' (idle) or still only "starting". Don't point Video at a stale playlistUrl.
+    if m.sessionId = "" or m.session = invalid then
         setStatus("Starting multiview" + readySuffix())
+        if m.sessionId = "" and not m.recreated then createSession()
+        return
+    end if
+    setStatus("Loading streams...")
+    m.pollTimer.duration = 2
+    m.pollTimer.control = "start"
+    ' Restart the mosaic after fullscreen; playback resumes when state=running
+    if not m.switching then
+        requestUpdate({ paused: false }, "Loading streams...")
+    else
+        onPollTimer()
     end if
 end sub
 
@@ -532,7 +746,9 @@ sub showOverlay()
     if m.switching or m.promoted then return
     m.overlayVisible = true
     m.hintBar.visible = true
-    if m.session <> invalid then m.layoutLabel.text = "Multiview  ·  " + layoutName(asString(m.session.layout))
+    layout = ""
+    if m.session <> invalid then layout = layoutName(asString(m.session.layout))
+    m.layoutLabel.text = layout
     paintFocus()
     m.hideTimer.control = "stop"
     m.hideTimer.control = "start"
@@ -549,7 +765,7 @@ sub onHideTimer()
     hideOverlay()
     if m.notice <> "" then
         m.notice = ""
-        if m.video.state = "playing" and not m.switching then clearStatus()
+        if m.video <> invalid and m.video.state = "playing" and not m.switching then clearStatus()
     end if
 end sub
 
@@ -617,22 +833,36 @@ end function
 
 function onKeyEvent(key as String, press as Boolean) as Boolean
     if not press then return false
+    print "[plexflix:multiview] key=" + key
+    ensureFocus()
 
     if key = "back" then
         closeScreen()
         return true
     end if
 
-    if m.session = invalid or m.tiles.count() = 0 or m.switching then return true
+    if m.session = invalid or m.tiles.count() = 0 then return true
+
+    ' FF/RW still land while a mosaic restart settles so rapid taps queue
+    if m.switching then
+        if key = "fastforward" then
+            rotateFeeds(1)
+        else if key = "rewind" then
+            rotateFeeds(-1)
+        end if
+        return true
+    end if
 
     if key = "up" or key = "down" or key = "left" or key = "right" then
         moveFocus(key)
-    else if key = "OK" then
+    else if key = "OK" or key = "play" then
         promoteFocused()
     else if key = "options" then
         cycleLayout()
-    else if key = "fastforward" or key = "rewind" then
-        makeMain()
+    else if key = "fastforward" then
+        rotateFeeds(1)
+    else if key = "rewind" then
+        rotateFeeds(-1)
     else
         showOverlay()
     end if
@@ -641,12 +871,17 @@ function onKeyEvent(key as String, press as Boolean) as Boolean
 end function
 
 sub onFocusedChild()
+    if m.video = invalid then return
     child = m.top.focusedChild
-    if child <> invalid and child.isSameNode(m.video) then ensureFocus()
+    if child = invalid then return
+    if child.isSameNode(m.video) then ensureFocus()
 end sub
 
 sub ensureFocus()
+    if m.video = invalid then return
     m.video.focusable = false
+    ' Always re-assert: hasFocus() is false while Video holds focus, and that
+    ' is exactly when FF/RW never reach onKeyEvent
     m.top.setFocus(true)
 end sub
 
@@ -664,7 +899,11 @@ sub closeScreen()
     m.pollTimer.control = "stop"
     m.hideTimer.control = "stop"
     m.settleTimer.control = "stop"
-    stopVideo()
+    m.rotateTimer.control = "stop"
+    m.promoteTimer.control = "stop"
+    m.pendingOrder = invalid
+    m.pendingPromote = invalid
+    releaseVideo()
     m.top.closed = true
 end sub
 

@@ -148,24 +148,32 @@ sub onFeedLoaded()
 
     allItems = []
     m.categories = []
+    cableCategories = []
     for each rowData in rows
         league = asString(rowData.title)
         if league = "" then league = "Live"
-        ' Entertainment / Cartoons live under Cable TV, not the sports guide
-        if not isCableCategory(league) then
-            items = rowData.items
-            if items = invalid then items = []
-            if items.count() > 0 then
-                for each item in items
-                    item.league = league
-                    allItems.push(item)
-                end for
-                m.categories.push({ title: prettyCategory(league), items: items })
+        items = rowData.items
+        if items = invalid then items = []
+        if items.count() > 0 then
+            for each item in items
+                item.league = league
+                ' Same IPTV nets as Live TV cable — pickable here for multiview
+                if isCableCategory(league) then item.source = "cable"
+                allItems.push(item)
+            end for
+            cat = { title: prettyCategory(league), items: items, cable: isCableCategory(league) }
+            if cat.cable then
+                cableCategories.push(cat)
+            else
+                m.categories.push(cat)
             end if
         end if
     end for
-    ' "All" leads so the unfiltered guide is one press away from any sport
-    m.categories.unshift({ title: "All", items: allItems })
+    ' "All" first, sports pills, then Entertainment / Cartoons at the end
+    m.categories.unshift({ title: "All", items: allItems, cable: false })
+    for each cat in cableCategories
+        m.categories.push(cat)
+    end for
 
     ' A reload keeps the sport you were looking at when it still exists
     keep = 0
@@ -188,8 +196,11 @@ function isCableCategory(title as String) as Boolean
     return key = "entertainment" or key = "cartoons"
 end function
 
-' Feed keys are shouty slugs ("AMERICAN-FOOTBALL"); "24/7 Channels" is already fine
+' Feed keys are shouty slugs ("AMERICAN-FOOTBALL"); cable slugs are lowercase
 function prettyCategory(raw as String) as String
+    if isCableCategory(raw) then
+        return UCase(Left(raw, 1)) + LCase(Mid(raw, 2))
+    end if
     if raw <> UCase(raw) then return raw
     words = raw.Replace("-", " ").Replace("_", " ").Split(" ")
     out = ""
@@ -220,12 +231,12 @@ sub applyCategory(index as Integer)
     m.guideList.content = root
     m.currentIndex = 0
     if m.events.count() = 0 then
-        m.statusLabel.text = "No live sports — check sportsFeedUrl"
+        m.statusLabel.text = "No live streams — check sportsFeedUrl"
         m.eventTitle.text = "No events"
         m.eventMeta.text = ""
         m.eventSummary.text = ""
     else
-        m.statusLabel.text = StrI(m.events.count()).Trim() + " events"
+        m.statusLabel.text = StrI(m.events.count()).Trim() + " streams"
         m.guideList.jumpToItem = 0
         updateInfo(0)
     end if
@@ -353,7 +364,11 @@ sub applySportsLine(node as Object, item as Object, league as String)
     streamsCol = StrI(n).Trim() + " streams"
     if n = 1 then streamsCol = "1 stream"
     if eventInMultiview(item) then streamsCol = streamsCol + "  ·  Multiview"
-    scoreCol = sportsScoreCol(item)
+    if isCableCategory(league) or asString(item.source) = "cable" then
+        scoreCol = cableNowPlaying(item)
+    else
+        scoreCol = sportsScoreCol(item)
+    end if
     setGuideCols(node, lg, title, scoreCol, streamsCol)
 end sub
 
@@ -364,6 +379,26 @@ function sportsScoreCol(item as Object) as String
         if Len(line) > 22 then line = Mid(line, 1, 22)
         return line
     end if
+    return ""
+end function
+
+' Current EPG title for cable rows (score column is unused for those)
+function cableNowPlaying(item as Object) as String
+    if item = invalid or item.programs = invalid then return ""
+    now = CreateObject("roDateTime").AsSeconds()
+    for each p in item.programs
+        if p <> invalid then
+            beginsAt = 0
+            endsAt = 0
+            if p.beginsAt <> invalid then beginsAt = Int(p.beginsAt)
+            if p.endsAt <> invalid then endsAt = Int(p.endsAt)
+            if beginsAt > 0 and endsAt > beginsAt and now >= beginsAt and now < endsAt then
+                line = asString(p.title)
+                if Len(line) > 22 then line = Mid(line, 1, 22)
+                return line
+            end if
+        end if
+    end for
     return ""
 end function
 
@@ -418,13 +453,18 @@ sub loadScores()
     for i = 0 to source.count() - 1
         item = source[i]
         if item <> invalid then
-            key = scoreKeyForItem(item, i)
-            item.scoreKey = key
-            payloadItems.push({
-                id: key,
-                title: asString(item.title),
-                league: asString(item.league)
-            })
+            ' Cable IPTV has no scores — skip so resolveScores stays sports-only
+            if isCableCategory(asString(item.league)) or asString(item.source) = "cable" then
+                clearItemScores(item)
+            else
+                key = scoreKeyForItem(item, i)
+                item.scoreKey = key
+                payloadItems.push({
+                    id: key,
+                    title: asString(item.title),
+                    league: asString(item.league)
+                })
+            end if
         end if
     end for
     if payloadItems.count() = 0 then return
@@ -560,7 +600,7 @@ function toggleMultiview(pick as Object) as String
         m.multi.delete(index)
         message = "Removed " + title + " from multiview"
     else if m.multi.count() >= multiviewMax() then
-        return "Multiview holds " + StrI(multiviewMax()).Trim() + " games. Remove one first."
+        return "Multiview holds " + StrI(multiviewMax()).Trim() + " streams. Remove one first."
     else
         m.multi.push(pick)
         message = "Added " + title + " to multiview (" + StrI(m.multi.count()).Trim() + " of " + StrI(multiviewMax()).Trim() + ")"
@@ -568,6 +608,14 @@ function toggleMultiview(pick as Object) as String
     paintMultiTray()
     refreshMultiviewRows()
     return message
+end function
+
+function clearMultiview() as String
+    if m.multi.count() = 0 then return "Multiview is already empty"
+    m.multi = []
+    paintMultiTray()
+    refreshMultiviewRows()
+    return "Cleared multiview"
 end function
 
 sub toggleFocusedEvent()
@@ -648,6 +696,9 @@ sub openFeedOptions()
             actions.push({ label: "Watch Multiview", act: "watchMulti" })
         end if
     end if
+    if m.multiEnabled = true and m.multi.count() > 0 then
+        actions.push({ label: "Clear Multiview", act: "clearMulti" })
+    end if
     actions.push({ label: "Close", act: "close" })
 
     subText = "Reload the sports feed from the CDN"
@@ -721,14 +772,18 @@ sub onMenuSelected()
         closeActionMenu()
         message = requestMultiview()
         if message <> "" then m.statusLabel.text = message
+    else if action.act = "clearMulti" then
+        closeActionMenu()
+        message = clearMultiview()
+        if message <> "" then m.statusLabel.text = message
     end if
 end sub
 
 ' Called from here or, through MainScene, from the game page
 function requestMultiview() as String
     if not m.multiEnabled then return ""
-    if m.multi.count() < 2 then return "Pick at least 2 games with * first"
-    m.top.multiviewRequested = { streams: m.multi, layout: "grid" }
+    if m.multi.count() < 2 then return "Pick at least 2 streams with * first"
+    m.top.multiviewRequested = { streams: m.multi, layout: "pip" }
     return ""
 end function
 
@@ -757,8 +812,13 @@ sub updateInfo(idx as Integer)
     meta = asString(item.league)
     if meta = "" then meta = asString(item.description)
     if meta = "" then meta = "Live sports"
-    scoreBits = sportsScoreSummary(item)
-    if scoreBits <> "" then meta = meta + "  ·  " + scoreBits
+    if isCableCategory(asString(item.league)) or asString(item.source) = "cable" then
+        nowPlaying = cableNowPlaying(item)
+        if nowPlaying <> "" then meta = meta + "  ·  " + nowPlaying
+    else
+        scoreBits = sportsScoreSummary(item)
+        if scoreBits <> "" then meta = meta + "  ·  " + scoreBits
+    end if
     m.eventMeta.text = meta
     n = 0
     if item.DoesExist("streamCount") then n = item.streamCount

@@ -103,10 +103,10 @@ class StitchedPlaylist:
 
 
 def master_playlist(audio_count, bandwidth):
-    """Video rendition plus one alternate audio rendition per tile.
+    """Mosaic video plus one alternate audio rendition per tile slot.
 
-    Audio is named by slot rather than by game: a reorder changes which game
-    sits in a slot, and this file is written once for the whole session.
+    Names are "Tile 1".."Tile N" so the Roku can switch sound with focus
+    without restarting the video stream.
     """
     lines = ["#EXTM3U", "#EXT-X-VERSION:3", "#EXT-X-INDEPENDENT-SEGMENTS"]
     for i in range(audio_count):

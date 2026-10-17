@@ -67,6 +67,7 @@ class StitchTests(unittest.TestCase):
     def test_master_lists_one_audio_rendition_per_tile(self):
         text = master_playlist(3, 6384000)
         self.assertEqual(text.count("TYPE=AUDIO"), 3)
+        self.assertIn('NAME="Tile 1"', text)
         self.assertIn('URI="a2.m3u8"', text)
         self.assertEqual(text.count("DEFAULT=YES"), 1)
         self.assertTrue(text.rstrip().endswith("v.m3u8"))

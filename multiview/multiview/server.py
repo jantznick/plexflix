@@ -5,7 +5,7 @@
     PUT    /sessions/<id>       {"layout"?, "order"?}  applied live
     DELETE /sessions/<id>
     GET    /sessions/<id>/master.m3u8 (and the playlists/segments under it)
-    GET    /healthz             also counts how relay fetches went (direct vs proxy)
+    GET    /healthz             also whether the vendored in-container proxy is up
 """
 
 import json
@@ -18,7 +18,6 @@ import uuid
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-from . import compositor
 from .relay import Relay
 from .session import Session
 
@@ -173,7 +172,7 @@ def make_handler(manager):
             if not isinstance(streams, list) or not all(isinstance(s, dict) and s.get("url") for s in streams):
                 return self._json(HTTPStatus.BAD_REQUEST, {"error": "streams must be a list of {url, title}"})
             try:
-                session = manager.create(streams, body.get("layout") or "grid")
+                session = manager.create(streams, body.get("layout") or "pip")
             except ValueError as exc:
                 return self._json(HTTPStatus.BAD_REQUEST, {"error": str(exc)})
             return self._json(HTTPStatus.CREATED, session.snapshot())
@@ -186,7 +185,11 @@ def make_handler(manager):
             if body is None:
                 return
             try:
-                session.reconfigure(layout=body.get("layout"), order=body.get("order"))
+                session.reconfigure(
+                    layout=body.get("layout"),
+                    order=body.get("order"),
+                    paused=body.get("paused"),
+                )
             except ValueError as exc:
                 return self._json(HTTPStatus.BAD_REQUEST, {"error": str(exc)})
             session.touch()
@@ -264,7 +267,6 @@ def make_handler(manager):
 
 def main():
     settings = settings_from_env()
-    _, encoder = compositor.encoder_description(settings)
     relay = Relay(variant_height=settings["variant_height"]).serve()
     manager = SessionManager(settings, relay=relay)
     server = ThreadingHTTPServer(("0.0.0.0", settings["port"]), make_handler(manager))
@@ -276,7 +278,7 @@ def main():
             manager.reap()
 
     threading.Thread(target=reaper, daemon=True).start()
-    print(f"[manager] multiview listening on :{settings['port']} (encoder: {encoder})", flush=True)
+    print(f"[manager] multiview listening on :{settings['port']} (ffmpeg mosaic)", flush=True)
     try:
         server.serve_forever()
     except KeyboardInterrupt:

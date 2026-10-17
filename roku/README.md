@@ -274,25 +274,22 @@ the tile rectangles the server reports.
 
 On the server, every feed is decoded by its own ffmpeg into raw 720p frames,
 and a GStreamer pipeline tiles whatever frames it has, encodes, and writes
-the HLS output. The feeds are fetched the way roku-feed's proxy fetches them
-(same referer, cookies and headers, straight from the CDN, PNG-wrapped GOAT
-segments unwrapped), not through it: the proxy is only asked for manifests
-that need its Chromium session (`d=0` payloads) and for anything a direct
-fetch fails on. `GET /healthz` counts how fetches went, so you can see how
-much still lands on the proxy.
+the HLS output. Multiview vendors roku-feed's `advanced-proxy` (same JS under
+`multiview/proxy` + `multiview/src`) and runs it on `127.0.0.1:18787` inside the
+container. Feed `/proxy/...` URLs are rewritten to that instance — identical
+fetch / Chromium / GOAT+WebP unwrap path, not a separate Python reimplementation.
 
 ### Server (home server, Docker Compose)
 
 ```bash
 cd multiview
 # pick ENCODER (x264 / va / qsv / nvenc) and uncomment the matching GPU block
-# in docker-compose.yml first. Compose uses network_mode: host so the container
-# can reach the roku-feed proxy on this machine's LAN IP (e.g. :8787).
+# in docker-compose.yml first. Compose uses network_mode: host (listens on
+# :8095 on the host; vendored proxy on 127.0.0.1:18787).
 docker compose up -d --build
 docker compose logs -f
 curl http://localhost:8095/healthz
-# After a failed session, relay.manifest_failed / segment_failed here means the
-# container could not fetch the sports feeds (direct CDN or the local proxy).
+# healthz.relay.proxy_up should be true; feed traffic goes through the vendored proxy.
 ```
 
 Then set `multiviewUrl` in `PlexConfig.brs` to `http://<server-ip>:8095` and

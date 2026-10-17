@@ -1,18 +1,13 @@
-"""A loopback HLS relay that fetches feeds the way roku-feed's proxy does.
+"""Caching front for the vendored roku-feed advanced-proxy.
 
-Every playlist and segment the ingest ffmpegs read goes through here. The
-relay talks to the CDNs itself, with the referer and headers the proxy would
-use, so the proxy only does what nothing else can: manifests that need its
-Chromium session (d=0 payloads), and anything that fails when fetched
-directly. Hosts that keep refusing direct fetches go to the proxy first for a
-while, rather than paying for a failed attempt on every segment.
-
-Top-level feeds are resolved to a single media playlist before ffmpeg sees
-them. Masters with separate AUDIO renditions are a bad fit for a simple
-`-map 0:v:0` / `-map 0:a:0` ingest; the media playlist is what it wants.
+entrypoint.sh runs advanced-proxy on 127.0.0.1:18787 (exact proxy JS). This
+module memoizes manifests/segments so playlist polls do not re-open Puppeteer
+or re-fetch multi‑MB segments on every tick. Fetch + unwrap still happen in
+the Node proxy.
 """
 
 import collections
+import re
 import secrets
 import threading
 import time
@@ -22,21 +17,32 @@ import urllib.request
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-from .feedurl import (
-    Upstream, encode_proxy_payload, manifest_headers, parse_feed_url, proxy_base,
-    rewrite_manifest, segment_headers, unwrap_goat,
-)
-from .hls import choose_variant, parse_master
+_PROXY_PATH = re.compile(r"/proxy/(.+)$")
+_PROXY_URL = re.compile(r"https?://[^/\s\"']+/proxy/[A-Za-z0-9+/=_%.-]+")
 
-MANIFEST_TIMEOUT = 10
-SEGMENT_TIMEOUT = 20
-# The proxy's Chromium capture can take a while on a cold embed page
-PROXY_MANIFEST_TIMEOUT = 30
-DIRECT_FAILURES_BEFORE_PROXY_FIRST = 3
-PROXY_FIRST_SECONDS = 300
-MAX_BODY = 64 * 1024 * 1024
+# Live playlists are ~5–7s target duration. Keep Chromium off the hot path:
+# serve fresh for a few seconds, then stale immediately while a background
+# refresh runs (ffmpeg polls many times a second).
+MANIFEST_TTL = 4.0
+MANIFEST_STALE_TTL = 45
+SEGMENT_TTL = 120
+SEGMENT_CACHE_MAX = 96
+PREFETCH_SEGMENTS = 3
 TOKEN_TTL = 3600
-_MEDIA_EXTENSIONS = (".ts", ".m4s", ".mp4", ".aac", ".m4a", ".vtt", ".key")
+UPSTREAM_TIMEOUT = 90  # Chromium cold start can take ~45s per embed
+
+
+def local_proxy_base():
+    import os
+    port = os.environ.get("MULTIVIEW_PROXY_PORT", "18787")
+    return os.environ.get("MULTIVIEW_PROXY_URL", f"http://127.0.0.1:{port}").rstrip("/")
+
+
+def rewrite_to_local_proxy(url):
+    match = _PROXY_PATH.search(urllib.parse.urlsplit(url).path)
+    if not match:
+        return url
+    return f"{local_proxy_base()}/proxy/{match.group(1)}"
 
 
 class RelayError(Exception):
@@ -45,193 +51,244 @@ class RelayError(Exception):
         self.status = status
 
 
-def http_fetch(url, headers, timeout):
-    """(status, body, final_url). Network failures raise."""
-    request = urllib.request.Request(url, headers=dict(headers))
-    try:
-        with urllib.request.urlopen(request, timeout=timeout) as response:
-            return response.status, response.read(MAX_BODY), response.geturl()
-    except urllib.error.HTTPError as exc:
-        body = b""
-        try:
-            body = exc.read(MAX_BODY)
-        except Exception:
-            pass
-        return exc.code, body, url
+class _SingleFlight:
+    def __init__(self):
+        self._lock = threading.Lock()
+        self._inflight = {}
+
+    def do(self, key, fn):
+        with self._lock:
+            existing = self._inflight.get(key)
+            if existing is None:
+                event = threading.Event()
+                holder = {}
+                self._inflight[key] = (event, holder)
+                leader = True
+            else:
+                event, holder = existing
+                leader = False
+        if leader:
+            try:
+                holder["value"] = fn()
+            except Exception as exc:
+                holder["error"] = exc
+            finally:
+                with self._lock:
+                    self._inflight.pop(key, None)
+                event.set()
+        else:
+            event.wait(UPSTREAM_TIMEOUT + 10)
+        if "error" in holder:
+            raise holder["error"]
+        if "value" not in holder:
+            raise RelayError(HTTPStatus.BAD_GATEWAY, "upstream fetch timed out")
+        return holder["value"]
 
 
 class Relay:
-    def __init__(self, fetch=http_fetch, clock=time.monotonic, variant_height=720):
-        self._fetch = fetch
+    def __init__(self, fetch=None, clock=time.monotonic, variant_height=720):
+        self._fetch = fetch or self._http_get
         self._clock = clock
         self.variant_height = variant_height
         self.port = 0
         self.stats = collections.Counter()
-        self._hosts = {}  # host -> [consecutive direct failures, proxy-first until]
-        # Short tokens: ffmpeg chokes on the huge base64 JSON URLs
-        self._tokens = {}  # token -> (upstream, kind, created)
-        self._lock = threading.Lock()
+        self._tokens = {}
+        self._token_keys = {}
+        self._manifest_cache = {}
+        self._segment_cache = collections.OrderedDict()
+        self._flight = _SingleFlight()
+        self._lock = threading.RLock()
+        self._revalidating = set()
         self._server = None
 
-    # ------------------------------------------------------------------
+    def _http_get(self, url, timeout):
+        request = urllib.request.Request(url, headers={"User-Agent": "multiview-relay/1"})
+        try:
+            with urllib.request.urlopen(request, timeout=timeout) as response:
+                return response.status, response.read(), response.headers.get("Content-Type", "")
+        except urllib.error.HTTPError as exc:
+            body = b""
+            try:
+                body = exc.read()
+            except Exception:
+                pass
+            return exc.code, body, ""
 
-    def url_for(self, upstream, kind):
-        """Local URL for an upstream. kind: "feed" (top level), "m", "s"."""
-        token = secrets.token_urlsafe(18)
+    def url_for(self, upstream_url):
+        """Stable local URL for an absolute vendored-proxy URL."""
         with self._lock:
-            self._tokens[token] = (upstream, kind, self._clock())
+            token = self._token_keys.get(upstream_url)
+            if token is None or token not in self._tokens:
+                token = secrets.token_urlsafe(18)
+                self._token_keys[upstream_url] = token
+            self._tokens[token] = (upstream_url, self._clock())
             if len(self._tokens) > 4000:
                 self._prune_tokens()
-        if kind in ("feed", "m"):
-            ext = ".m3u8"
-        else:
-            path = urllib.parse.urlsplit(upstream.url).path.lower()
-            ext = next((e for e in _MEDIA_EXTENSIONS if path.endswith(e)), ".ts")
+        path = urllib.parse.urlsplit(upstream_url).path.lower()
+        ext = ".m3u8" if ".m3u8" in path else ".ts"
         return f"http://127.0.0.1:{self.port}/r/{token}{ext}"
 
-    def resolve_token(self, token):
+    def warm(self, urls):
+        """Hit the proxy (via cache) for each feed URL before ffmpeg starts.
+
+        Returns {url: True/False}. A failed warm must not be passed to ffmpeg —
+        one dead input kills the whole mosaic.
+        """
+        results = {url: False for url in urls}
+
+        def one(url):
+            try:
+                self.handle(self.url_for(url).split("/r/", 1)[1].rsplit(".", 1)[0])
+                results[url] = True
+                self._count("warm_ok")
+            except Exception as exc:
+                self._count("warm_failed")
+                print(f"[relay] warm failed {url[:80]}: {exc}", flush=True)
+
+        threads = [threading.Thread(target=one, args=(u,), daemon=True) for u in urls]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join(timeout=UPSTREAM_TIMEOUT + 15)
+        return results
+
+    def handle(self, token):
         with self._lock:
             entry = self._tokens.get(token)
         if entry is None:
-            return None, None
-        return entry[0], entry[1]
-
-    def handle(self, token):
-        """(content type, body) for a token from url_for()."""
-        upstream, kind = self.resolve_token(token)
-        if upstream is None:
             raise RelayError(HTTPStatus.NOT_FOUND, "bad or expired relay token")
-        if kind in ("feed", "m"):
-            return "application/vnd.apple.mpegurl", self.manifest(upstream, kind == "feed").encode("utf-8")
-        return "video/mp2t", self.segment(upstream)
+        upstream_url = entry[0]
+        # /proxy/<base64> paths do not end in .m3u8 — sniff after fetch.
+        body = self._fetch_cached(upstream_url)
+        if body.lstrip().startswith(b"#EXTM3U"):
+            return "application/vnd.apple.mpegurl", body
+        return "video/mp2t", body
 
-    def _load(self, upstream):
-        """Fetch a playlist. Returns (text, final_url, route)."""
-        attempts = []
-        if upstream.direct_ok or not upstream.proxy_url:
-            attempts.append(("direct", upstream.url, manifest_headers(upstream.referer, upstream.headers),
-                             MANIFEST_TIMEOUT))
-        if upstream.proxy_url:
-            attempts.append(("proxy", upstream.proxy_url, {}, PROXY_MANIFEST_TIMEOUT))
-        errors = []
-        for route, url, headers, timeout in attempts:
-            try:
-                status, body, final_url = self._fetch(url, headers, timeout)
-            except Exception as exc:
-                errors.append(f"{route}: {exc or exc.__class__.__name__}")
-                continue
-            text = body.decode("utf-8", "replace").lstrip("\ufeff")
-            if not 200 <= status < 300 or "#EXTM3U" not in text[:1024]:
-                hint = f"HTTP {status}" if status >= 300 else "not a playlist"
-                if body and "#EXTM3U" not in text[:1024]:
-                    hint += f" ({body[:80]!r})"
-                errors.append(f"{route}: {hint}")
-                continue
-            return text, final_url or url, route
-        raise RelayError(HTTPStatus.BAD_GATEWAY, "; ".join(errors) or "no way to fetch manifest")
+    def fetch(self, upstream_url):
+        """Fetch by absolute vendored-proxy URL (same cache as /r/<token>)."""
+        return self.handle(self.url_for(upstream_url).split("/r/", 1)[1].rsplit(".", 1)[0])
 
-    def _child_upstream(self, parent, absolute_url):
-        if proxy_base(absolute_url):
-            return parse_feed_url(absolute_url)
-        fallback = ""
-        base = proxy_base(parent.proxy_url) if parent.proxy_url else ""
-        if base:
-            fallback = f"{base}/proxy/" + encode_proxy_payload(
-                absolute_url, parent.referer, parent.headers, parent.embed, parent.direct_ok)
-        return Upstream(url=absolute_url, referer=parent.referer, headers=dict(parent.headers),
-                        embed=parent.embed, direct_ok=parent.direct_ok, proxy_url=fallback)
+    def relative_playlist(self, body):
+        """Rewrite loopback relay URLs so a Roku on the LAN can follow them."""
+        if not body.lstrip().startswith(b"#EXTM3U"):
+            return body
+        text = body.decode("utf-8", "replace")
+        text = text.replace(f"http://127.0.0.1:{self.port}/r/", "r/")
+        return text.encode("utf-8")
 
-    def manifest(self, upstream, top_level=False):
+    def _fetch_cached(self, upstream_url):
+        """Manifest or segment, with the right cache, based on response body."""
+        now = self._clock()
+        with self._lock:
+            cached_m = self._manifest_cache.get(upstream_url)
+            cached_s = self._segment_cache.get(upstream_url)
+
+        if cached_m is not None:
+            fresh_until, stale_until, text = cached_m
+            if fresh_until > now:
+                self._count("manifest_cache")
+                return text.encode("utf-8")
+            if stale_until > now:
+                # Don't block ffmpeg on Chromium — refresh in the background.
+                self._count("manifest_stale")
+                self._revalidate_later(upstream_url)
+                return text.encode("utf-8")
+
+        if cached_s is not None and cached_s[0] > now:
+            with self._lock:
+                self._segment_cache.move_to_end(upstream_url)
+            self._count("segment_cache")
+            return cached_s[1]
+
         try:
-            text, final_url, route = self._load(upstream)
+            return self._flight.do(("u", upstream_url), lambda: self._load_upstream(upstream_url))
         except RelayError:
-            self._count("manifest_failed")
+            if cached_m is not None and cached_m[1] > now:
+                self._count("manifest_stale")
+                return cached_m[2].encode("utf-8")
+            self._count("fetch_failed")
             raise
-        context = upstream
-        resolved = False
-        if top_level and "#EXT-X-STREAM-INF" in text:
-            # Hand ffmpeg a media playlist, not a master: separate AUDIO groups
-            # and multi-variant masters confuse a plain -map 0:v:0 ingest
-            variant = choose_variant(parse_master(text, final_url), self.variant_height)
-            if variant is None:
-                self._count("manifest_failed")
-                raise RelayError(HTTPStatus.BAD_GATEWAY, "master playlist has no variants")
-            media = self._child_upstream(upstream, variant["url"])
-            try:
-                text, final_url, route = self._load(media)
-            except RelayError:
-                self._count("manifest_failed")
-                raise
-            context = media
-            resolved = True
-            self._count("manifest_resolved")
-        self._count(f"manifest_{route}")
-        rewritten = rewrite_manifest(
-            text, final_url, context,
-            lambda target, is_manifest: self.url_for(target, "m" if is_manifest else "s"),
-        )
-        segments = sum(1 for line in rewritten.splitlines() if line.strip() and not line.strip().startswith("#"))
-        if segments == 0:
-            self._count("manifest_failed")
-            raise RelayError(HTTPStatus.BAD_GATEWAY, f"playlist from {route} has no segments after rewrite")
-        note = " (resolved master)" if resolved else ""
-        print(f"[relay] {upstream.url}: {segments} segments via {route}{note}", flush=True)
-        return rewritten
 
-    def segment(self, upstream):
-        host = urllib.parse.urlsplit(upstream.url).netloc
-        direct = ("direct", upstream.url, segment_headers(upstream.referer, upstream.headers))
-        attempts = [direct]
-        if upstream.proxy_url:
-            proxy = ("proxy", upstream.proxy_url, {})
-            attempts = [proxy, direct] if self._proxy_first(host) else [direct, proxy]
-        errors = []
-        for route, url, headers in attempts:
-            try:
-                status, body, _ = self._fetch(url, headers, SEGMENT_TIMEOUT)
-                if not 200 <= status < 300:
-                    ok, reason = False, f"HTTP {status}"
-                elif not body:
-                    ok, reason = False, "empty body"
-                elif not _looks_like_media(body):
-                    # Soft blocks often return 200 with HTML/JSON that is not a
-                    # segment; fall through to the proxy instead of handing
-                    # garbage to ffmpeg (that shows up as demux Invalid argument)
-                    ok, reason = False, f"not media ({len(body)} bytes, head={body[:24]!r})"
-                    if route == "direct":
-                        print(f"[relay] segment direct rejected for {host}: {reason}", flush=True)
-                else:
-                    ok, reason = True, ""
-            except Exception as exc:
-                ok, reason = False, str(exc) or exc.__class__.__name__
-            if route == "direct":
-                self._direct_result(host, ok)
-            if ok:
-                self._count(f"segment_{route}")
-                return unwrap_goat(body)
-            errors.append(f"{route}: {reason}")
-        self._count("segment_failed")
-        raise RelayError(HTTPStatus.BAD_GATEWAY, "; ".join(errors))
-
-    # ------------------------------------------------------------------
-
-    def _proxy_first(self, host):
+    def _revalidate_later(self, upstream_url):
         with self._lock:
-            entry = self._hosts.get(host)
-            return bool(entry) and entry[1] > self._clock()
-
-    def _direct_result(self, host, ok):
-        with self._lock:
-            entry = self._hosts.setdefault(host, [0, 0.0])
-            if ok:
-                entry[0] = 0
-                entry[1] = 0.0
+            if upstream_url in self._revalidating:
                 return
-            entry[0] += 1
-            if entry[0] >= DIRECT_FAILURES_BEFORE_PROXY_FIRST and entry[1] <= self._clock():
-                entry[1] = self._clock() + PROXY_FIRST_SECONDS
-                print(f"[relay] {host}: direct fetches failing, using the proxy first for "
-                      f"{PROXY_FIRST_SECONDS}s", flush=True)
+            self._revalidating.add(upstream_url)
+
+        def run():
+            try:
+                self._flight.do(("u", upstream_url), lambda: self._load_upstream(upstream_url))
+                self._count("manifest_revalidate")
+            except Exception:
+                self._count("manifest_revalidate_failed")
+            finally:
+                with self._lock:
+                    self._revalidating.discard(upstream_url)
+
+        threading.Thread(target=run, name="relay-revalidate", daemon=True).start()
+
+    def _load_upstream(self, upstream_url):
+        with self._lock:
+            again_m = self._manifest_cache.get(upstream_url)
+            if again_m is not None and again_m[0] > self._clock():
+                return again_m[2].encode("utf-8")
+            again_s = self._segment_cache.get(upstream_url)
+            if again_s is not None and again_s[0] > self._clock():
+                return again_s[1]
+        status, body, _ = self._fetch(upstream_url, UPSTREAM_TIMEOUT)
+        if not 200 <= status < 300 or not body:
+            raise RelayError(HTTPStatus.BAD_GATEWAY, f"proxy HTTP {status}")
+        if body.lstrip().startswith(b"#EXTM3U"):
+            text = self._rewrite_playlist(body.decode("utf-8", "replace"))
+            stamp = self._clock()
+            with self._lock:
+                self._manifest_cache[upstream_url] = (
+                    stamp + MANIFEST_TTL, stamp + MANIFEST_STALE_TTL, text)
+            self._count("manifest_proxy")
+            self._prefetch_from_playlist(text)
+            return text.encode("utf-8")
+        with self._lock:
+            self._segment_cache[upstream_url] = (self._clock() + SEGMENT_TTL, body)
+            self._segment_cache.move_to_end(upstream_url)
+            while len(self._segment_cache) > SEGMENT_CACHE_MAX:
+                self._segment_cache.popitem(last=False)
+        self._count("segment_proxy")
+        return body
+
+    def _prefetch_from_playlist(self, text):
+        targets = []
+        for line in text.splitlines():
+            line = line.strip()
+            if line.startswith("http://127.0.0.1:") and "/r/" in line:
+                targets.append(line)
+        for local_url in targets[-PREFETCH_SEGMENTS:]:
+            token = local_url.split("/r/", 1)[1].rsplit(".", 1)[0]
+            with self._lock:
+                entry = self._tokens.get(token)
+            if entry is None:
+                continue
+            upstream = entry[0]
+            with self._lock:
+                cached = self._segment_cache.get(upstream)
+                if cached is not None and cached[0] > self._clock():
+                    continue
+            threading.Thread(
+                target=self._prefetch_one, args=(upstream,),
+                name="relay-prefetch", daemon=True,
+            ).start()
+
+    def _prefetch_one(self, upstream_url):
+        try:
+            self._flight.do(("u", upstream_url), lambda: self._load_upstream(upstream_url))
+            self._count("segment_prefetch")
+        except Exception:
+            pass
+
+    def _rewrite_playlist(self, text):
+        """Point every vendored-proxy URL in the playlist back through this cache."""
+        def repl(match):
+            return self.url_for(match.group(0))
+        return _PROXY_URL.sub(repl, text)
 
     def _count(self, key):
         with self._lock:
@@ -239,13 +296,23 @@ class Relay:
 
     def _prune_tokens(self):
         cutoff = self._clock() - TOKEN_TTL
-        self._tokens = {k: v for k, v in self._tokens.items() if v[2] >= cutoff}
+        alive = {k: v for k, v in self._tokens.items() if v[1] >= cutoff}
+        self._tokens = alive
+        self._token_keys = {k: t for k, t in self._token_keys.items() if t in alive}
 
     def snapshot(self):
         with self._lock:
-            return dict(self.stats)
+            stats = dict(self.stats)
+        stats["proxy"] = local_proxy_base()
+        stats["proxy_up"] = self.proxy_up()
+        return stats
 
-    # ------------------------------------------------------------------
+    def proxy_up(self):
+        try:
+            urllib.request.urlopen(f"{local_proxy_base()}/", timeout=2)
+            return True
+        except Exception:
+            return False
 
     def serve(self, host="127.0.0.1", port=0):
         self._server = ThreadingHTTPServer((host, port), _make_handler(self))
@@ -261,33 +328,8 @@ class Relay:
             self._server = None
 
 
-def _looks_like_html(body):
-    head = body[:64].lstrip().lower()
-    return head.startswith((b"<!doctype", b"<html"))
-
-
-def _looks_like_media(body):
-    """True for MPEG-TS, fMP4, GOAT-wrapped TS, or a 16-byte AES key."""
-    if not body or _looks_like_html(body):
-        return False
-    head = body.lstrip()
-    if head[:1] in (b"{", b"[") or head.lower().startswith((b"<", b"error", b"forbidden", b"denied")):
-        return False
-    payload = unwrap_goat(body)
-    if len(payload) == 16:
-        return True  # AES-128 key
-    if payload and payload[0] == 0x47:
-        return True  # MPEG-TS sync (full packets are 188 bytes; short is still TS)
-    if b"ftyp" in payload[:64]:
-        return True  # fMP4 / CMAF
-    return False
-
-
 def _make_handler(relay):
     class Handler(BaseHTTPRequestHandler):
-        # HTTP/1.0: ffmpeg opens many short-lived playlist/segment connections and
-        # aborts them on a bad feed; keep-alive just turns those into ConnectionReset
-        # noise on the next readline
         protocol_version = "HTTP/1.0"
 
         def log_message(self, fmt, *args):
@@ -304,13 +346,14 @@ def _make_handler(relay):
             if not path.startswith("/r/"):
                 return self._send(HTTPStatus.NOT_FOUND, "text/plain", b"not found")
             token = path[3:].rsplit(".", 1)[0]
-            upstream, kind = relay.resolve_token(token)
-            label = upstream.url if upstream is not None else token[:24]
             try:
                 content_type, body = relay.handle(token)
             except RelayError as exc:
-                print(f"[relay] {kind or '?'} {label}: {exc}", flush=True)
+                print(f"[relay] {token[:16]}: {exc}", flush=True)
                 return self._send(exc.status, "text/plain", str(exc).encode("utf-8"))
+            # Manifests mis-detected as segments come back as text
+            if body.lstrip()[:7] == b"#EXTM3U":
+                content_type = "application/vnd.apple.mpegurl"
             return self._send(HTTPStatus.OK, content_type, body)
 
         def _send(self, status, content_type, body):
@@ -329,11 +372,8 @@ def _make_handler(relay):
 
 
 def source_for(spec, relay):
-    """What an ingest ffmpeg should open for a stream spec."""
     url = spec["url"]
     if relay is None or not url.startswith(("http://", "https://")):
         return url
-    upstream = parse_feed_url(url)
-    if spec.get("headers"):
-        upstream.headers = dict(upstream.headers, **spec["headers"])
-    return relay.url_for(upstream, "feed")
+    upstream = rewrite_to_local_proxy(url)
+    return relay.url_for(upstream)
