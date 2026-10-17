@@ -172,7 +172,7 @@ def make_handler(manager):
             if not isinstance(streams, list) or not all(isinstance(s, dict) and s.get("url") for s in streams):
                 return self._json(HTTPStatus.BAD_REQUEST, {"error": "streams must be a list of {url, title}"})
             try:
-                session = manager.create(streams, body.get("layout") or "grid")
+                session = manager.create(streams, body.get("layout") or "pip")
             except ValueError as exc:
                 return self._json(HTTPStatus.BAD_REQUEST, {"error": str(exc)})
             return self._json(HTTPStatus.CREATED, session.snapshot())

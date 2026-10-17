@@ -40,7 +40,7 @@ sub init()
     m.shownOnce = false
     m.focusAfterSwitch = invalid
     m.switchMessage = ""
-    m.requestedLayout = "grid"
+    m.requestedLayout = "pip"
     m.pendingOrder = invalid
     m.switchGen = -1
     m.pendingPromote = invalid
@@ -60,7 +60,7 @@ sub onContentSet()
     content = m.top.content
     if content = invalid or content.streams = invalid then return
     m.streams = content.streams
-    m.requestedLayout = "grid"
+    m.requestedLayout = "pip"
     if content.layout <> invalid and content.layout <> "" then m.requestedLayout = content.layout
     createSession()
 end sub

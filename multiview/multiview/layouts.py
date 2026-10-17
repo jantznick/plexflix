@@ -8,7 +8,9 @@ Every dimension is even because the 4:2:0 encode can't split a chroma sample.
 CANVAS_W = 1920
 CANVAS_H = 1080
 
-LAYOUTS = ("grid", "spotlight", "pip")
+# Active cycle for now. spotlight (highlight) is parked — keep _spotlight and
+# re-add "spotlight" here when we want it back in the * rotator.
+LAYOUTS = ("pip", "grid")
 MIN_TILES = 2
 MAX_TILES = 4
 
@@ -16,12 +18,12 @@ MAX_TILES = 4
 def tiles_for(layout, count):
     if count < MIN_TILES or count > MAX_TILES:
         raise ValueError(f"multiview takes {MIN_TILES}-{MAX_TILES} streams, got {count}")
-    if layout == "grid":
-        return _grid(count)
-    if layout == "spotlight":
-        return _spotlight(count)
     if layout == "pip":
         return _pip(count)
+    if layout == "grid":
+        return _grid(count)
+    # if layout == "spotlight":
+    #     return _spotlight(count)
     raise ValueError(f"unknown layout {layout!r}")
 
 
