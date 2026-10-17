@@ -153,7 +153,9 @@ sub onListEscapeOptions()
 end sub
 
 sub onCloseRequested()
-    if m.top.close = true then m.top.closed = true
+    if m.top.close <> true then return
+    if m.focusTimer <> invalid then m.focusTimer.control = "stop"
+    m.top.closed = true
 end sub
 
 sub onRefocus()
