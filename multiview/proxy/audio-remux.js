@@ -123,18 +123,24 @@ export async function ensureRemuxSession(b64Payload) {
     fs.rmSync(dir, { recursive: true, force: true });
     fs.mkdirSync(dir, { recursive: true });
 
-    const inputUrl = `${LOOPBACK}/proxy/${b64Payload}`;
+    // .m3u8 suffix (stripped by the proxy) so the HLS demuxer treats input as
+    // a playlist; loopback segment rewrites append .ts for the same reason.
+    const inputUrl = `${LOOPBACK}/proxy/${b64Payload}.m3u8`;
     const playlistPath = path.join(dir, 'index.m3u8');
     const segmentPattern = path.join(dir, 'seg%05d.ts');
 
     const args = [
         '-hide_banner',
-        '-loglevel', 'error',
+        '-loglevel', 'warning',
         '-nostdin',
+        '-protocol_whitelist', 'file,http,https,tcp,tls,crypto',
         '-fflags', '+genpts+discardcorrupt',
         '-reconnect', '1',
         '-reconnect_streamed', '1',
         '-reconnect_delay_max', '5',
+        '-rw_timeout', '15000000',
+        '-f', 'hls',
+        '-allowed_extensions', 'ALL',
         '-i', inputUrl,
         '-map', '0:v:0',
         '-map', '0:a:0?',
@@ -162,7 +168,7 @@ export async function ensureRemuxSession(b64Payload) {
     proc.stderr?.on('data', (chunk) => {
         const line = chunk.toString('utf8').trim();
         if (line) {
-            log(`ffmpeg[${id}]: ${line.slice(0, 300)}`);
+            log(`ffmpeg[${id}]: ${line.slice(0, 500)}`);
         }
     });
 
