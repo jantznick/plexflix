@@ -543,35 +543,39 @@ sub onScoresLoaded()
 end sub
 
 sub onScoresTimer()
+    if m.inputActive <> true then return
     if m.feedLoading = true then return
     if not scoresEnabled() then return
     loadScores()
 end sub
 
+' MainScene parks this screen while detail / multiview / video owns the remote.
+' Parked = not focusable, no score ticks, no guide row rebuilds.
 sub onInputActive()
     m.inputActive = (m.top.inputActive <> false)
     if m.guideList <> invalid then m.guideList.focusable = m.inputActive
     m.top.focusable = m.inputActive
     if m.inputActive then
+        if m.scoresEnabled = true and m.scoresTimer <> invalid then m.scoresTimer.control = "start"
         flushDirtyGuideRows()
-    else if m.zone = "menu" then
-        m.menu.visible = false
-        m.zone = m.menuReturnZone
+    else
+        if m.scoresTimer <> invalid then m.scoresTimer.control = "stop"
+        if m.zone = "menu" then
+            m.menu.visible = false
+            m.zone = m.menuReturnZone
+        end if
     end if
 end sub
 
-function guideIsActive() as Boolean
-    if m.inputActive <> true then return false
-    if m.zone = "menu" then return false
-    if m.top = invalid then return false
-    return m.top.isInFocusChain()
+' Safe to mutate the MarkupList (replaceChild) only while we own the remote.
+function guideOwnsRemote() as Boolean
+    return m.inputActive = true and m.zone <> "menu"
 end function
 
-' When the guide is on screen it always has a lit row.
 sub restoreGuideFocus()
+    if not guideOwnsRemote() then return
     if m.zone <> "list" then return
     if m.events.count() = 0 then return
-    if not guideIsActive() then return
     m.guideList.focusable = true
     m.guideList.setFocus(true)
     if m.currentIndex >= 0 and m.currentIndex < m.events.count() then
@@ -579,7 +583,6 @@ sub restoreGuideFocus()
     end if
 end sub
 
-' Rebuild every visible row from current event/multiview state.
 sub rebuildGuideRows()
     root = m.guideList.content
     if root = invalid then return
@@ -594,17 +597,14 @@ end sub
 
 sub flushDirtyGuideRows()
     if m.guideRowsDirty <> true then return
-    if not guideIsActive() then return
+    if not guideOwnsRemote() then return
     m.guideRowsDirty = false
     rebuildGuideRows()
     restoreGuideFocus()
 end sub
 
-' Rebuild visible guide rows so col2 picks up fresh score lines
 sub refreshScoreRows()
-    ' replaceChild on a parked guide (game page on top) can clear focus with
-    ' nothing focused — defer until this screen owns the remote again.
-    if not guideIsActive() then
+    if not guideOwnsRemote() then
         m.guideRowsDirty = true
         return
     end if
@@ -691,7 +691,7 @@ end sub
 ' Rows are swapped rather than edited: a list item only redraws when it is
 ' handed a new content node
 sub refreshMultiviewRows()
-    if not guideIsActive() then
+    if not guideOwnsRemote() then
         m.guideRowsDirty = true
         return
     end if
@@ -991,18 +991,12 @@ function onKeyEvent(key as String, press as Boolean) as Boolean
         end if
         if key = "OK" then
             ' LabelList often won't re-fire itemSelected for the same index.
-            ' Drive actions from itemFocused so Watch Multiview always works.
             idx = 0
             if m.menuList <> invalid and m.menuList.itemFocused <> invalid then
                 idx = m.menuList.itemFocused
             end if
             activateMenuActionAt(idx)
             return true
-        end if
-        ' Something stole focus (score row rebuild, etc.) — put it back so
-        ' arrows keep moving the menu instead of the guide under the overlay.
-        if m.menuList <> invalid and not m.menuList.isInFocusChain() then
-            m.menuList.setFocus(true)
         end if
         return false
     end if
@@ -1012,10 +1006,10 @@ function onKeyEvent(key as String, press as Boolean) as Boolean
         return true
     end if
     if m.zone = "list" then
-        ' No lit row → put focus back. Never treat that OK as "open game".
+        ' After a score-row rebuild the list can drop focus while we still own
+        ' the remote — restore a lit row; never treat that OK as open-game.
         if m.guideList = invalid or not m.guideList.isInFocusChain() then
             if key = "OK" or key = "up" or key = "down" or key = "rewind" or key = "fastforward" then
-                flushDirtyGuideRows()
                 restoreGuideFocus()
                 return true
             end if

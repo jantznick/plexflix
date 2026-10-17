@@ -33,8 +33,6 @@
         <Timer id="rotateTimer" duration="0.35" repeat="false" />
         <!-- Brief gap after mosaic pause so the LAN proxy/decoder are free -->
         <Timer id="promoteTimer" duration="0.4" repeat="false" />
-        <!-- Reclaim focus if the Video node or buried Sports guide steals it -->
-        <Timer id="focusTimer" duration="0.25" repeat="true" />
 
         <Rectangle width="1920" height="1080" color="0x000000" />
 

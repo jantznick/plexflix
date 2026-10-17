@@ -14,25 +14,6 @@ sub init()
     m.streamList.observeField("itemSelected", "onStreamSelected")
     m.streamList.observeField("escapeBack", "onListEscapeBack")
     m.streamList.observeField("escapeOptions", "onListEscapeOptions")
-    ' If anything clears list focus while this page is active, pin it back.
-    m.top.observeField("focusedChild", "onDetailFocusedChild")
-    m.focusTimer = m.top.findNode("focusTimer")
-    m.focusTimer.observeField("fire", "onFocusTick")
-    m.focusTimer.control = "start"
-end sub
-
-sub onDetailFocusedChild()
-    if not m.top.isInFocusChain() then return
-    if m.streams.count() = 0 then return
-    if m.streamList <> invalid and m.streamList.isInFocusChain() then return
-    focusStreamList()
-end sub
-
-sub onFocusTick()
-    if not m.top.isInFocusChain() then return
-    if m.streams.count() = 0 then return
-    if m.streamList <> invalid and m.streamList.isInFocusChain() then return
-    focusStreamList()
 end sub
 
 sub onContentSet()
@@ -92,10 +73,7 @@ sub onContentSet()
         setStreamCols(child, StrI(i + 1).Trim(), label, quality, "")
     end for
     m.streamList.content = root
-    if m.streams.count() > 0 then
-        m.streamList.jumpToItem = 0
-        m.streamList.setFocus(true)
-    end if
+    focusStreamList(0)
 end sub
 
 sub setStreamCols(node as Object, c0 as String, c1 as String, c2 as String, c3 as String)
@@ -153,18 +131,12 @@ sub onListEscapeOptions()
 end sub
 
 sub onCloseRequested()
-    if m.top.close <> true then return
-    if m.focusTimer <> invalid then m.focusTimer.control = "stop"
-    m.top.closed = true
+    if m.top.close = true then m.top.closed = true
 end sub
 
 sub onRefocus()
     if m.top.refocus <> true then return
-    if m.streams.count() = 0 then
-        m.top.setFocus(true)
-        return
-    end if
-    focusStreamList()
+    focusStreamList(-1)
 end sub
 
 sub onStreamError()
@@ -206,25 +178,24 @@ sub onMultiviewNote()
     if note = "" then return
     m.summaryLabel.color = "0xC8C8D0"
     m.summaryLabel.text = note
-    focusStreamList()
+    focusStreamList(-1)
 end sub
 
-' This page always keeps a stream row focused while it is on screen.
-sub focusStreamList()
-    if m.streams.count() = 0 then return
-    if m.streamList = invalid then return
+' jumpTo = 0 on first paint, -1 to keep the current row
+sub focusStreamList(jumpTo as Integer)
+    if m.streams.count() = 0 then
+        m.top.setFocus(true)
+        return
+    end if
     m.streamList.focusable = true
+    if jumpTo >= 0 then m.streamList.jumpToItem = jumpTo
     m.streamList.setFocus(true)
 end sub
 
 sub toggleFocusedStream()
-    if m.streamList = invalid or not m.streamList.isInFocusChain() then
-        focusStreamList()
-        return
-    end if
     idx = m.streamList.itemFocused
     if idx = invalid or idx < 0 or idx >= m.streams.count() then
-        focusStreamList()
+        focusStreamList(0)
         return
     end if
     stream = m.streams[idx]
@@ -240,8 +211,7 @@ sub toggleFocusedStream()
         streamFormat: format,
         hdPosterUrl: asString(m.eventItem.hdPosterUrl)
     }
-    ' Keep the lit row here — the guide underneath must not take focus.
-    focusStreamList()
+    focusStreamList(-1)
 end sub
 
 function onKeyEvent(key as String, press as Boolean) as Boolean
@@ -251,12 +221,10 @@ function onKeyEvent(key as String, press as Boolean) as Boolean
         return true
     end if
     if key = "OK" then
-        if m.streamList = invalid or not m.streamList.isInFocusChain() then
-            focusStreamList()
-            return true
-        end if
         idx = 0
-        if m.streamList.itemFocused <> invalid then idx = m.streamList.itemFocused
+        if m.streamList <> invalid and m.streamList.itemFocused <> invalid then
+            idx = m.streamList.itemFocused
+        end if
         playStreamAt(idx)
         return true
     end if
@@ -266,12 +234,6 @@ function onKeyEvent(key as String, press as Boolean) as Boolean
             return true
         else if key = "play" then
             m.top.multiviewLaunch = true
-            return true
-        end if
-    end if
-    if m.streamList <> invalid and not m.streamList.isInFocusChain() then
-        if key = "up" or key = "down" or key = "rewind" or key = "fastforward" then
-            focusStreamList()
             return true
         end if
     end if

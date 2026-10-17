@@ -51,7 +51,8 @@ sub updateNavRail()
     syncSportsInput()
 end sub
 
-' Buried Live Sports must not accept focus or OK while an overlay owns the remote.
+' One owner: while detail / multiview / video is up, park the guide so it
+' cannot take focus, rebuild rows, or emit selectedItem under the overlay.
 sub syncSportsInput()
     if m.sportsScreen = invalid then return
     blocked = (m.multiviewScreen <> invalid or m.sportsDetailScreen <> invalid or m.videoScreen <> invalid)
