@@ -740,18 +740,52 @@ sub loadChildren(item as Object, mode as String)
             showPosterUrl: "",
             grandparentTitle: ""
         }
+        ' Prefer season-stashed show identity (set when merging TMDB season rows)
+        if item.DoesExist("showRatingKey") then payload.showRatingKey = asString(item.showRatingKey)
+        if item.DoesExist("showTitle") then payload.showTitle = asString(item.showTitle)
+        if item.DoesExist("showYear") then payload.showYear = asString(item.showYear)
+        if item.DoesExist("showPosterUrl") then payload.showPosterUrl = asString(item.showPosterUrl)
+        if item.DoesExist("showTmdbId") and asString(item.showTmdbId) <> "" then
+            payload.showTmdbId = asString(item.showTmdbId)
+        else if item.DoesExist("tmdbId") and asString(item.tmdbId) <> "" then
+            payload.showTmdbId = asString(item.tmdbId)
+        end if
         if show <> invalid then
-            payload.showRatingKey = asString(show.ratingKey)
-            payload.showTitle = asString(show.title)
-            payload.showYear = asString(show.year)
-            payload.grandparentTitle = asString(show.title)
-            payload.showPosterUrl = asString(show.hdPosterUrl)
-            if payload.showPosterUrl = "" then payload.showPosterUrl = asString(show.hdShowPosterUrl)
-            if m.showTmdbId = "" and show.DoesExist("tmdbId") then
+            if payload.showRatingKey = "" then payload.showRatingKey = asString(show.ratingKey)
+            if payload.showTitle = "" then payload.showTitle = asString(show.title)
+            if payload.showYear = "" then payload.showYear = asString(show.year)
+            if payload.grandparentTitle = "" then payload.grandparentTitle = asString(show.title)
+            if payload.showPosterUrl = "" then
+                payload.showPosterUrl = asString(show.hdPosterUrl)
+                if payload.showPosterUrl = "" then payload.showPosterUrl = asString(show.hdShowPosterUrl)
+            end if
+            if payload.showTmdbId = "" and m.showTmdbId <> "" then payload.showTmdbId = m.showTmdbId
+            if payload.showTmdbId = "" and show.DoesExist("tmdbId") then
                 payload.showTmdbId = asString(show.tmdbId)
             end if
         end if
         m.task.action = "seasonEpisodes"
+        m.task.item = payload
+    else if mode = "seasons" then
+        show = item
+        payload = item
+        if show <> invalid then
+            payload = {
+                ratingKey: asString(show.ratingKey),
+                title: asString(show.title),
+                year: asString(show.year),
+                hdPosterUrl: asString(show.hdPosterUrl),
+                hdShowPosterUrl: asString(show.hdShowPosterUrl),
+                tmdbId: m.showTmdbId,
+                showTmdbId: m.showTmdbId,
+                mediaType: "show"
+            }
+            if payload.tmdbId = "" and show.DoesExist("tmdbId") then
+                payload.tmdbId = asString(show.tmdbId)
+                payload.showTmdbId = payload.tmdbId
+            end if
+        end if
+        m.task.action = "showSeasons"
         m.task.item = payload
     else
         m.task.action = "children"
@@ -781,6 +815,11 @@ sub onChildrenLoaded()
     if items = invalid then items = []
 
     if m.loadMode = "seasons" then
+        if response.DoesExist("showTmdbId") and asString(response.showTmdbId) <> "" then
+            m.showTmdbId = asString(response.showTmdbId)
+            content = m.top.content
+            if content <> invalid then content.tmdbId = m.showTmdbId
+        end if
         m.seasons = items
         m.seasonQueue = 0
         m.seasonContent = createObject("roSGNode", "ContentNode")
@@ -788,7 +827,13 @@ sub onChildrenLoaded()
         for each season in items
             row = m.seasonContent.createChild("ContentNode")
             title = asString(season.title)
-            if title = "" then title = "Season"
+            if title = "" then
+                if asString(season.index) <> "" then
+                    title = "Season " + asString(season.index)
+                else
+                    title = "Season"
+                end if
+            end if
             row.title = title
         end for
         m.seasonRows.content = m.seasonContent
@@ -813,7 +858,14 @@ sub prioritizeFocusSeason()
     if m.focusSeasonKey = "" or m.seasons = invalid then return
     target = -1
     for i = 0 to m.seasons.count() - 1
-        if asString(m.seasons[i].ratingKey) = m.focusSeasonKey then
+        season = m.seasons[i]
+        if season = invalid then
+            ' skip
+        else if asString(season.ratingKey) <> "" and asString(season.ratingKey) = m.focusSeasonKey then
+            target = i
+            exit for
+        else if asString(season.index) <> "" and asString(season.index) = m.focusSeasonKey then
+            ' Fallback: focusSeasonKey sometimes carries the season number
             target = i
             exit for
         end if
@@ -838,7 +890,13 @@ sub prioritizeFocusSeason()
     for each season in m.seasons
         row = m.seasonContent.createChild("ContentNode")
         title = asString(season.title)
-        if title = "" then title = "Season"
+        if title = "" then
+            if asString(season.index) <> "" then
+                title = "Season " + asString(season.index)
+            else
+                title = "Season"
+            end if
+        end if
         row.title = title
     end for
     m.seasonRows.content = m.seasonContent
@@ -904,7 +962,9 @@ sub maybeFocusEpisode(seasonIndex as Integer)
 
     season = m.seasons[seasonIndex]
     if m.focusSeasonKey <> "" and season <> invalid then
-        if asString(season.ratingKey) <> m.focusSeasonKey then return
+        seasonKey = asString(season.ratingKey)
+        seasonNum = asString(season.index)
+        if seasonKey <> m.focusSeasonKey and seasonNum <> m.focusSeasonKey then return
     end if
 
     row = m.seasonContent.getChild(seasonIndex)
