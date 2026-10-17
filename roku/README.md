@@ -2,6 +2,8 @@
 
 Netflix-style browse + play layer over your local Plex Media Server.
 
+**How this channel fits with roku-feed, the HLS proxy, multiview, scores, and grab:** see [`docs/repos-and-services.md`](../docs/repos-and-services.md).
+
 This is intentionally a **design/UX shell** on top of existing Plex data. Credentials are hardcoded for local testing.
 
 **New to Roku / coming from React or Node?** Start with [LEARNING.md](./LEARNING.md) — a guided tour of SceneGraph vs BrightScript and a file-by-file learning path through this channel.
